@@ -1,0 +1,37 @@
+{
+  "_说明": "闭环实验系统集中配置。改参数只改这里，不改代码。每次实验会把实际生效的配置快照保存到 experiments/ 目录，保证可复现。",
+
+  "experiment": {
+    "baseline_seconds": 120,
+    "duration_seconds": 600,
+    "tag": "closedloop",
+    "device_address": null
+  },
+
+  "controller": {
+    "target_band": "alpha",
+    "reward_threshold_db": 1.0,
+    "vol_max": 0.35,
+    "vol_idle": 0.05,
+    "vol_smooth_step": 0.05,
+    "reward_detect_ratio": 0.7,
+    "beat_default": 10.0,
+    "beat_drowsy": 12.0,
+    "beat_tense": 8.0,
+    "beat_min": 6.0,
+    "beat_max": 14.0,
+    "beat_step": 0.5,
+    "tb_high": 4.0,
+    "tb_low": 1.5,
+    "maintain_band_db": -0.5
+  },
+
+  "audio": {
+    "carrier_hz": 220.0
+  },
+
+  "device": {
+    "sampling_rate": 256,
+    "decision_interval_seconds": 2.0
+  }
+}
