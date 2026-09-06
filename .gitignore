@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+止观AI-Skills/止观AI-Skills/venv/
+
+# 大型媒体文件
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# 大型文档
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+
+# 数据文件
+*.npz
+*.npy
+*.bin
+
+# 模型文件
+*.pth
+*.pt
+*.onnx
+*.h5
+
+# 日志与临时文件
+*.log
+*.tmp
+*.temp
+_*.py
+_*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 项目特定
+Zen-EEG/
+experiments/
+output/
+*.html
+*.json
+*.bat
+*.ps1
+
+# 保留重要文件
+!README.md
+!*.py
+!requirements.txt
+!config*.json
