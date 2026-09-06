@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>止观 · VR 视觉反馈</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#050a10;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#cfe3ee}
+  #hud{position:fixed;left:16px;top:14px;z-index:10;font-size:13px;line-height:1.7;
+       background:rgba(6,14,22,.55);padding:10px 14px;border-radius:10px;backdrop-filter:blur(6px);max-width:46vw}
+  #hud b{color:#7fd8ff}
+  #bar{position:fixed;left:16px;bottom:14px;z-index:10;display:flex;gap:8px;flex-wrap:wrap}
+  button{background:#123246;color:#bfe6f7;border:1px solid #2b5a74;border-radius:8px;
+         padding:8px 14px;font-size:13px;cursor:pointer}
+  button:hover{background:#1a4560}
+  button.on{background:#0f6a52;border-color:#2ea98a;color:#e6fff6}
+  #msg{position:fixed;right:16px;top:14px;z-index:10;font-size:12px;color:#8fb4c6;text-align:right;max-width:40vw}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+        background:#050a10;z-index:20;font-size:15px;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div id="load">止观 · 正在建立反馈回路 …</div>
+<script>
+/* 诊断钩子：模块加载/初始化失败时把原因写进页面，便于无头环境定位 */
+window.__vrErr = '';
+addEventListener('error', e => { window.__vrErr = (e.message||'') + ' @' + (e.filename||'') + ':' + (e.lineno||''); });
+addEventListener('unhandledrejection', e => { window.__vrErr = 'rejection: ' + (e.reason && e.reason.message || e.reason); });
+</script>
+<div id="hud"></div>
+<div id="msg"></div>
+<div id="bar">
+  <button id="btnVR">进入 VR</button>
+  <button id="btnModel">载入禅修场景模型</button>
+  <button id="btnTheme" class="on">自动配色</button>
+</div>
+<script type="importmap">
+{"imports":{
+  "three":"/vr_assets/three.module.js",
+  "three/addons/":"/vr_assets/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+
+/* ── 状态 ─────────────────────────────────────────────── */
+const S = {
+  connected:false, source:null, elapsed:0, state:'', phase:'',
+  bands:{}, vitals:{},
+  a:0.3, th:0.3, hr:0,              // 平滑后的视觉参数 0..1 / bpm
+  autoTheme:true, model:null, modelList:[]
+};
+const $ = id => document.getElementById(id);
+const hud = $('hud'), msg = $('msg');
+let msgT = 0;
+function say(t){ msg.textContent = t; msgT = Date.now(); }
+function saySticky(t){ msg.textContent = t; msgT = Infinity; }  // 错误等需常驻的提示
+
+/* ── 渲染器 / 场景 ────────────────────────────────────── */
+let renderer;
+try{
+  renderer = new THREE.WebGLRenderer({antialias:true});
+}catch(err){
+  document.getElementById('load').innerHTML =
+    '本环境无法初始化 WebGL 3D 渲染：<br>' + (err && err.message ? err.message : err) +
+    '<br><span style="font-size:12px;color:#8fb4c6">请在 Pico 浏览器或带 GPU 的桌面浏览器打开本页</span>';
+  document.getElementById('load').style.color = '#ff9d9d';
+  throw err;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0a1622, 0.028);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 300);
+camera.position.set(0,1.6,3.2);
+
+scene.add(new THREE.HemisphereLight(0x9fc6e8, 0x10202c, 0.55));
+const sun = new THREE.DirectionalLight(0xffd9a8, 0.9);
+sun.position.set(4,6,2); scene.add(sun);
+
+/* 天穹渐变 */
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(120,32,20),
+  new THREE.ShaderMaterial({side:THREE.BackSide, uniforms:{
+    uTop:{value:new THREE.Color(0x0b1d33)}, uBot:{value:new THREE.Color(0x37233a)}, uGlow:{value:0.3}},
+    vertexShader:`varying vec3 vP; void main(){vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec3 vP; uniform vec3 uTop,uBot; uniform float uGlow;
+      void main(){float h=normalize(vP).y*.5+.5;
+        vec3 c=mix(uBot,uTop,smoothstep(.05,.75,h));
+        c+=vec3(.9,.55,.3)*pow(max(0.,1.-abs(h-.16)*4.),3.)*uGlow*.6;
+        gl_FragColor=vec4(c,1.);}`
+  }));
+scene.add(sky);
+
+/* 水面：脑电驱动涟漪与辉光 */
+const waterU = {uT:{value:0}, uA:{value:.3}, uTh:{value:.3}, uCol:{value:new THREE.Color(0x2f8fb8)}};
+const water = new THREE.Mesh(new THREE.CircleGeometry(40,96),
+  new THREE.ShaderMaterial({uniforms:waterU,
+    vertexShader:`varying vec2 vUv; varying vec3 vP;
+      uniform float uT,uA,uTh;
+      void main(){vUv=uv; vec3 p=position;
+        float r=length(p.xy);
+        p.z += sin(r*1.6-uT*1.2)*(.05+.16*uA) + sin(p.x*.8+uT*.7)*.03*uTh;
+        vP=p; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+    fragmentShader:`varying vec2 vUv; varying vec3 vP; uniform float uT,uA,uTh; uniform vec3 uCol;
+      void main(){float r=length(vUv-.5)*2.;
+        float ring=.5+.5*sin(r*22.-uT*1.4);
+        vec3 c=mix(uCol*.25,uCol,(.25+.75*uA)*ring*smoothstep(1.,.15,r));
+        c+=uCol*pow(max(0.,1.-r*1.15),3.)*(.35+.9*uA);
+        c+=vec3(.6,.8,1.)*uTh*.06*sin(vUv.x*60.+uT);
+        gl_FragColor=vec4(c,1.);}`
+  }));
+water.rotation.x = -Math.PI/2; scene.add(water);
+
+/* 心息之珠：随心率/呼吸脉动 */
+const orb = new THREE.Mesh(new THREE.SphereGeometry(.28,48,32),
+  new THREE.MeshStandardMaterial({color:0x8fd8ff, emissive:0x2a7fa8,
+    emissiveIntensity:1.2, roughness:.25, metalness:.1}));
+orb.position.set(0,1.5,-1.6); scene.add(orb);
+
+/* 念珠粒子：Theta 驱动漂移 */
+const PN = 900;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PN*3), pSeed = new Float32Array(PN);
+for(let i=0;i<PN;i++){
+  const r = 2+Math.random()*14, a = Math.random()*Math.PI*2;
+  pPos[i*3]=Math.cos(a)*r; pPos[i*3+1]=.2+Math.random()*5; pPos[i*3+2]=Math.sin(a)*r;
+  pSeed[i]=Math.random();
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+pGeo.setAttribute('seed', new THREE.BufferAttribute(pSeed,1));
+const pMat = new THREE.PointsMaterial({color:0xbfe8ff,size:.06,transparent:true,
+  opacity:.7,blending:THREE.AdditiveBlending,depthWrite:false});
+scene.add(new THREE.Points(pGeo,pMat));
+
+/* ── 状态 → 配色 ──────────────────────────────────────── */
+const THEMES = {
+  calm:   {col:0x3fae8c, top:0x0a2430, bot:0x24343a},
+  focused:{col:0x3f8fae, top:0x0b1d33, bot:0x2a2f44},
+  drowsy: {col:0x7a6fae, top:0x141026, bot:0x2e2438},
+  active: {col:0xae7a4f, top:0x241408, bot:0x3a2a1e},
+  default:{col:0x2f8fb8, top:0x0b1d33, bot:0x37233a},
+};
+function themeFor(state){
+  const s=(state||'').toString();
+  if(s.includes('静')||s.includes('calm')) return THEMES.calm;
+  if(s.includes('专注')||s.includes('focus')) return THEMES.focused;
+  if(s.includes('昏')||s.includes('睡')||s.includes('drow')) return THEMES.drowsy;
+  if(s.includes('动')||s.includes('散')||s.includes('active')) return THEMES.active;
+  return THEMES.default;
+}
+let curCol = new THREE.Color(THEMES.default.col);
+
+/* ── 数据接入：WebSocket ─────────────────────────────── */
+/* https 页面自动走 wss（WebXR 要求安全上下文，Pico 进 VR 必经 HTTPS） */
+const wsURL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/vr`;
+let ws, retry = 0;
+function connect(){
+  ws = new WebSocket(wsURL);
+  ws.onopen  = ()=>{ S.connected = true; retry = 0; $('load').style.display='none'; say('已连接控制台'); };
+  ws.onclose = ()=>{ S.connected = false; say('连接断开，3 秒后重试…');
+                     setTimeout(connect, 3000); };
+  ws.onmessage = e => { let d; try{ d = JSON.parse(e.data); }catch{ return; }
+    if(d.type==='vr_connected'||d.type==='pong') return;
+    if(d.type==='tick'){
+      S.source = d.source; S.elapsed = d.elapsed||0;
+      S.state = d.state||S.state; S.phase = d.phase||'';
+      if(d.bands) S.bands = d.bands;
+      if(d.vitals) S.vitals = d.vitals;
+      // alpha dB → 0..1（经验区间 5~20 dB），theta 同理 0~15 dB
+      const a  = clamp01(((S.bands.alpha ?? d.alpha ?? 8) - 5)/15);
+      const th = clamp01(((S.bands.theta ?? d.theta ?? 6) - 2)/13);
+      S.a  += (a  - S.a )*.25;
+      S.th += (th - S.th)*.25;
+      S.hr = S.vitals.hr || 0;
+    } else if(d.type==='start'||d.type==='baseline_locked'){
+      say(d.type==='start' ? `实验开始：${d.tag||''}` : '基线已锁定');
+    } else if(d.type==='end'){ say('会话结束'); }
+    else if(d.type==='error'){ say('错误：'+(d.text||'')); }
+  };
+}
+function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+connect();
+
+/* ── 3D 模型载入（本机素材） ─────────────────────────── */
+async function loadModel(){
+  try{
+    if(!S.modelList.length){
+      const r = await fetch('/api/vr/models'); S.modelList = (await r.json()).models||[];
+    }
+    if(!S.modelList.length){ saySticky('本机暂无 3D 模型素材'); return; }
+    // 选体积最小的一个先试（首屏快），后续可在控制台扩展选择
+    S.modelList.sort((x,y)=>x.size_mb-y.size_mb);
+    const pick = S.modelList[0];
+    say(`载入模型 ${pick.name}（${pick.size_mb}MB）…`);
+    let lastPct = -1;
+    const onProg = ev => {
+      if(ev.lengthComputable){
+        const pct = Math.round(ev.loaded/ev.total*100);
+        if(pct - lastPct >= 10 || pct === 100){
+          lastPct = pct;
+          say(`下载模型中 ${pct}%（${(ev.loaded/1e6).toFixed(1)}/${pick.size_mb}MB）…`);
+        }
+      } else {
+        say(`下载模型中 ${(ev.loaded/1e6).toFixed(1)}MB…`);
+      }
+    };
+    const g = await new GLTFLoader().loadAsync(
+      `/api/vr/model?name=${encodeURIComponent(pick.name)}`, onProg);
+    if(S.model) scene.remove(S.model);
+    S.model = g.scene;
+    // 归一化到 3 米高、置于水面之上
+    const box = new THREE.Box3().setFromObject(S.model);
+    const size = box.getSize(new THREE.Vector3());
+    const k = 3/Math.max(size.y, 1e-6);
+    S.model.scale.setScalar(k);
+    const c = box.getCenter(new THREE.Vector3()).multiplyScalar(k);
+    S.model.position.set(-c.x, -box.min.y*k, -c.z - 6);
+    scene.add(S.model);
+    say('模型已载入');
+  }catch(err){ saySticky('模型载入失败：'+(err && err.message ? err.message : err)); }
+}
+$('btnModel').onclick = loadModel;
+
+/* ── VR 进入 ─────────────────────────────────────────── */
+$('btnVR').onclick = async ()=>{
+  if(!navigator.xr){ say('当前浏览器不支持 WebXR（请用 Pico 浏览器打开本页）'); return; }
+  try{
+    const session = await navigator.xr.requestSession('immersive-vr',
+      {optionalFeatures:['local-floor']});
+    renderer.xr.setSession(session);
+    $('btnVR').classList.add('on'); $('btnVR').textContent = '已在 VR 中';
+    hud.style.display = 'none'; $('bar').style.display='none';
+    session.addEventListener('end', ()=>{
+      $('btnVR').classList.remove('on'); $('btnVR').textContent='进入 VR';
+      hud.style.display=''; $('bar').style.display='';
+    });
+  }catch(err){ say('进入 VR 失败：'+err.message); }
+};
+$('btnTheme').onclick = ()=>{ S.autoTheme = !S.autoTheme;
+  $('btnTheme').classList.toggle('on', S.autoTheme); };
+
+/* ── 主循环 ──────────────────────────────────────────── */
+const clock = new THREE.Clock();
+let breath = 0;
+renderer.setAnimationLoop(()=>{
+  const dt = clock.getDelta(), t = clock.elapsedTime;
+  waterU.uT.value = t; waterU.uA.value = S.a; waterU.uTh.value = S.th;
+
+  if(S.autoTheme){
+    const th = themeFor(S.state);
+    curCol.lerp(new THREE.Color(th.col), .04);
+    sky.material.uniforms.uTop.value.lerp(new THREE.Color(th.top), .04);
+    sky.material.uniforms.uBot.value.lerp(new THREE.Color(th.bot), .04);
+  }
+  waterU.uCol.value.copy(curCol);
+  sky.material.uniforms.uGlow.value = .2 + .8*S.a;
+  scene.fog.density = .020 + .030*S.th;
+  pMat.opacity = .35 + .55*S.a;
+  pMat.color.copy(curCol).lerp(new THREE.Color(0xffffff), .35);
+
+  // 心息之珠：心率缺失时退回 6 次/分的禅修呼吸节律
+  const rate = S.hr>40 ? S.hr/60 : 0.1;
+  breath += dt*rate*Math.PI*2;
+  const pulse = .85 + .25*Math.sin(breath);
+  orb.scale.setScalar(pulse*(0.8+0.5*S.a));
+  orb.material.emissive.copy(curCol);
+  orb.material.emissiveIntensity = .6 + 1.8*S.a;
+
+  // 粒子缓慢上升漂移（Theta 越快越"散"）
+  const pos = pGeo.attributes.position;
+  for(let i=0;i<PN;i++){
+    let y = pos.getY(i) + dt*(.08 + .5*S.th*pSeedAt(i));
+    if(y>5.5) y = .2;
+    pos.setY(i,y);
+  }
+  pos.needsUpdate = true;
+
+  // 桌面模式镜头轻微呼吸
+  if(!renderer.xr.isPresenting){
+    camera.position.y = 1.6 + .05*Math.sin(breath*.5);
+    camera.lookAt(0,1.4,-1.6);
+  }
+
+  // HUD（桌面）
+  if(!renderer.xr.isPresenting){
+    hud.innerHTML =
+      `<b>状态</b> ${S.state||'—'} ${S.phase?('· '+S.phase):''}<br>`+
+      `<b>Alpha</b> ${fmt(S.bands.alpha)} dB　<b>Theta</b> ${fmt(S.bands.theta)} dB<br>`+
+      `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'—'}　<b>时长</b> ${S.elapsed|0}s<br>`+
+      `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`;
+  }
+  if(msgT && Date.now()-msgT>5000){ msg.textContent=''; msgT=0; }
+  renderer.render(scene,camera);
+  if(firstFrame){ firstFrame=false; $('load').style.display='none'; }
+});
+let firstFrame = true;
+function pSeedAt(i){ return pSeed[i]; }
+function fmt(v){ return (v==null||isNaN(v))?'—':(+v).toFixed(1); }
+
+addEventListener('resize',()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+<script>
+/* 看门狗：8 秒仍停在加载层则展示失败原因 */
+setTimeout(function(){
+  var l = document.getElementById('load');
+  if(l && l.style.display !== 'none'){
+    l.textContent = '加载异常：' + (window.__vrErr || '3D 引擎未能初始化');
+    l.style.color = '#ff9d9d';
+  }
+}, 8000);
+</script>
+</body>
+</html>

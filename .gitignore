@@ -78,8 +78,17 @@ output/
 *.bat
 *.ps1
 
+# 安全红线：证书与私钥绝不上传公开仓库
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+vr_assets/tls/
+
 # 保留重要文件
 !README.md
 !*.py
 !requirements.txt
 !config*.json
+!vr_feedback.html
