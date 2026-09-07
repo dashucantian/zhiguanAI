@@ -28,3 +28,24 @@ OpenBCI 是唯一满足"现货＋软硬件全开源＋许可允许复刻再分�
 
 - 方案稿：01_项目管理\止观AI多模态反馈系统落地方案讨论稿.md §三
 - 对话来源：2026-09-05 硬件全系对比调研
+
+---
+
+## English Summary
+
+**Decision:** OpenBCI is the only hardware option satisfying all four criteria: in stock, fully open-source hardware and software, license permits reproduction and redistribution, and native BrainFlow/LSL/Unity support. Approximately $625 per set plus electrodes. It also serves as the reference blueprint for future self-developed hardware.
+
+**Evidence (verifiable facts):**
+- Hardware open source: CERN-OHL license, BOM/PCB/CAD fully public
+- Software open source: firmware GPLv3, GUI MIT
+- Complete ecosystem: native BrainFlow, native LSL, mature Unity integration
+- In stock: Ganglion $625, Cyton $1,249, Cyton+Daisy $2,499
+- License permits reproduction and redistribution under reciprocity clauses
+
+**Rejected Alternatives:**
+- BrainBit: EULA prohibits redistribution (see Decision 002)
+- NeuraDock: as of 2026-09-06 its Crowd Supply page shows "Coming Soon"; open-source resources (Python SDK, CAD) are marked "plan to provide" and not yet publicly verifiable
+- Muse: closed-source SDK—fine for personal use, unusable as a self-development blueprint
+
+**Reusable Lesson:**
+"Open source" is not one dimension—check three: hardware, software, and license. OpenBCI is open on all three, which makes it the only reproducible option.

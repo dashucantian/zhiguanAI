@@ -27,3 +27,23 @@
 
 - 方案稿：01_项目管理\止观AI人机协作贯通方案讨论稿V2.md §二
 - 对话来源：2026-09-06 法师提出"秘书 Agent"设想
+
+---
+
+## English Summary
+
+**Decision:** No self-built multi-agent orchestration frameworks (AutoGen, CrewAI, LangGraph, etc.). An off-the-shelf kanban (Feishu/Lark Base) plus a periodically-summarizing AI assistant is enough for task coordination.
+
+**Evidence (verifiable facts):**
+- A single-decision-maker + AI-execution project must keep complexity at a minimum
+- Multi-agent orchestration frameworks take weeks to learn and debug; debugging cost far exceeds benefit
+- Some frameworks have questionable compatibility on machines without NVIDIA GPUs
+- The acceptance bottleneck is human: VR wearing experience, meditation feedback pacing, and EEG noise thresholds can only be judged by the master—no matter how much Agents produce, each output needs manual verification
+- The real bottleneck of a solo project is decision-making, not production capacity
+
+**Rejected Alternatives:**
+- Building a "chief supervisor Agent": using an aircraft carrier to fish—debugging cost too high
+- Multi-agent parallel orchestration: severe context loss, coordination cost exceeds benefit
+
+**Reusable Lesson:**
+A "secretary Agent" is not one all-powerful Agent—it is three capabilities: state visibility (kanban), proactive reminders (scheduled tasks), and dispatching execution (AI assistant + parallel sub-agents). All three are achievable with off-the-shelf tools; no self-built orchestration framework is needed.

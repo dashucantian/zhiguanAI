@@ -41,3 +41,17 @@ WebXR 规范规定：`navigator.xr`（进入 VR 的能力）**只在"安全上�
 - 工作日志 005（2026-09-06）§2.6 第三轮排障
 - 判语 008：VR 首落地走 WebXR
 - 相关文件：`local_tls.py`、`console_server.py`、`vr_feedback.html`
+
+---
+
+## English Summary
+
+**Symptom (user's words):** Round 1: "The URL won't open on Pico, shows offline." Round 2 (after fixing the port issue): page renders in flat mode, but tapping Enter VR says "browser not supported"—identical to what the PC browser shows.
+
+**Root cause (four overlapping traps):** The WebXR spec exposes `navigator.xr` only in **secure contexts** (HTTPS or localhost). On PC the page was served via localhost (a secure context, so VR worked); on the headset it was plain HTTP over LAN—not a secure context, so the browser hides XR entirely. The "unsupported browser" message is misleading: the browser fully supports WebXR; the transport protocol is the gate.
+
+**Solution:** Dual-port HTTPS. The console now serves 8777 (HTTP, local) plus 8778 (HTTPS with idempotently generated self-signed certs via `local_tls.py`); the page auto-adapts ws/wss to `location.protocol`. Headset opens `https://<PC-LAN-IP>:8778/vr`, accepts the cert warning once, and enters immersive VR. Verified working on Pico 4 Ultra.
+
+**Reusable order:** "Cannot enter VR / navigator.xr missing" → (1) confirm you're talking to the new server (see Pitfall 002: port hijacking makes fixes appear ineffective), (2) check HTTPS (most common root cause), (3) check same-LAN subnet, (4) only then blame browser/engine.
+
+**Lesson:** Works-on-localhost ≠ works-on-LAN ≠ works-in-headset-browser—three different runtime environments, with headsets adding a secure-context gate. HTTPS is not nice-to-have; it is WebXR's admission ticket.

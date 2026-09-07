@@ -91,3 +91,26 @@ git push 超时/连接被重置，**先分清是"远程没建"还是"网络不�
 - 看板 ZG-036（N8 GitHub 开源仓建立）
 - 坑 005（PowerShell 引号吞噬——生成密钥时同样踩到）
 - 相关文件：`~/.ssh/config`、`~/.ssh/id_ed25519`、`.git/config`（remote origin）
+
+---
+
+## English Summary
+
+**Symptom:** `https://github.com/<user>/<repo>` returns 404; `git push` hangs or fails with `Connection was reset` / `Could not connect to github.com:443`.
+
+**Root cause (two stacked issues):**
+1. The remote repo had never actually been created—`git remote add` only writes local config; it does not create anything on GitHub.
+2. GitHub's HTTPS port 443 is intermittently blocked on this network (China), while domestic sites' 443 work fine. DNS resolves, git credentials are ready—purely a transport-path problem.
+
+**Diagnosis table:** github.com:443 ❌ | github.com:22 ✅ | ssh.github.com:443 ✅ | baidu.com:443 ✅ (control group). Without the control group you'd wrongly conclude "my internet is broken."
+
+**Solution:** switch remote to SSH, routed over port 443 for durability:
+1. `ssh-keygen -t ed25519` (via a bash script file—PowerShell eats `-N ""`, see Pitfall 005)
+2. `~/.ssh/config`: `Host github.com → HostName ssh.github.com, Port 443, User git`
+3. User adds the public key at github.com/settings/ssh/new (only the human can do this)
+4. `git remote set-url origin git@github.com:<user>/<repo>.git`
+5. `GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new" git push -u origin master`
+
+**Reusable order:** push fails → `git ls-remote origin` first: "repository not found" → create the empty remote repo (uncheck README/.gitignore/license to avoid conflicts); connection reset → port-test GitHub 443/22 and ssh.github.com:443 with a domestic-site control; SSH reachable → switch protocol. Don't reinstall git or touch credentials—those were never the problem.
+
+**Lessons:** (1) `git remote add` ≠ repo created. (2) From China, SSH-over-443 is more durable than HTTPS or bare port 22. (3) Always network-diagnose with a control group. (4) Set `GIT_TERMINAL_PROMPT=0` so auth hangs surface as errors, not infinite hangs.

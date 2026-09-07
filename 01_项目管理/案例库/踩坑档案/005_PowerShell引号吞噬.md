@@ -61,3 +61,20 @@ PowerShell 5.1 在将参数传递给外部命令（如 Node.js 编写的 lark-cl
 
 - 工作日志 005（2026-09-06）§2.6 第四轮排障
 - 相关文件：`console_server.py`（飞书 API 调用部分）
+
+---
+
+## English Summary
+
+**Symptom:** Passing inline JSON to an external CLI via PowerShell 5.1 silently corrupts it—double quotes disappear, the tool receives `<invalid_json>` or splits the argument at every space.
+
+**Root cause:** PowerShell 5.1's native-command argument parsing strips/reinterprets quotes and backticks. Not a bug in the CLI—it's a shell limitation.
+
+**Solution pattern:**
+1. Write JSON to a temp file (UTF-8), pass via the tool's file/stdin interface (`@file` syntax)
+2. For unavoidable inline JSON: escape quotes as `\"`, generate backticks via `chr(96)`, avoid spaces (compact JSON, space-free format strings)
+3. Delete temp files afterwards
+
+**Reusable order:** external CLI rejects your JSON → validate the JSON itself (`ConvertFrom-Json`) → if valid, suspect PowerShell quoting → switch to file passing → verify file contents.
+
+**Lesson:** On Windows, pass complex JSON via files, not inline strings. The pattern `Out-File → @filepath → Remove-Item` applies to any CLI (lark-cli here, ssh-keygen's `-N ""` later hit the same wall).

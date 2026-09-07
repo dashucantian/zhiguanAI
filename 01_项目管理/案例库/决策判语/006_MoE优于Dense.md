@@ -27,3 +27,23 @@
 
 - 方案稿：01_项目管理\止观AI多模态反馈系统落地方案讨论稿.md §七
 - 对话来源：2026-09-05 本机算力核实
+
+---
+
+## English Summary
+
+**Decision:** On this machine (AMD Ryzen AI MAX+ 395, 64GB unified memory, no NVIDIA discrete GPU), MoE-architecture models (e.g. Qwen3-30B-A3B) infer significantly faster than Dense-architecture models (e.g. Qwen3.8-27B).
+
+**Evidence (verifiable facts):**
+- The machine's bottleneck is memory bandwidth (~215–256 GB/s), not memory capacity
+- On bandwidth-limited machines, inference speed is determined by the **activated parameter count per generated token**, not total parameter count
+- Qwen3-30B-A3B (Q4 ~18.6GB): ~100 tok/s short context, ~50 tok/s at 20K context (Strix Halo-class measurements)
+- Qwen3.8-27B (Dense): ~11–24 tok/s measured locally
+- A 2–6x speed difference—an experience-level gap
+
+**Rejected Alternatives:**
+- Keep using Qwen3.8-27B (Dense): slow, noticeably laggy in guided-meditation scenarios
+- Buy an NVIDIA discrete GPU: unnecessary on a unified-memory machine
+
+**Reusable Lesson:**
+When choosing models, look at architecture, not just parameter count. On bandwidth-limited hardware, MoE's activated-parameter advantage far outweighs Dense's total-parameter advantage.

@@ -27,3 +27,23 @@
 
 - 方案稿：01_项目管理\止观AI多模态反馈系统落地方案讨论稿.md §八
 - 对话来源：2026-09-05/09-06 VR 攻坚与 HTTPS 排障
+
+---
+
+## English Summary
+
+**Decision:** Unity is not installed on this machine, so we take the zero-install WebXR route. three.js has been localized into vr_assets/ (works offline), and browser testing confirmed canvas rendering succeeds.
+
+**Evidence (verifiable facts):**
+- Unity is not installed locally; waiting for installation and learning would take weeks
+- The WebXR spec mandates that navigator.xr is only exposed in secure contexts (HTTPS or localhost)
+- Over a LAN HTTP address, browsers hide XR capabilities entirely—localhost testing masks this, headsets expose it
+- Solution: dual ports—8777 HTTP (local console) + 8778 HTTPS (required for headset VR entry), with idempotent self-signed certificate generation
+- The page's ws/wss protocol auto-adapts to location.protocol
+
+**Rejected Alternatives:**
+- Waiting for the Unity pipeline: too slow, conflicts with "get it running as fast as possible"
+- Pure HTTP: WebXR unavailable, headset cannot enter VR
+
+**Reusable Lesson:**
+Working on localhost ≠ working on LAN ≠ working in a headset browser. These are three different runtime environments, and the headset browser adds a secure-context requirement on top. Anything involving XR must be verified on real hardware—simulation and local tests cannot substitute.

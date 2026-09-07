@@ -26,3 +26,22 @@ SDK 开源 ≠ 应用可发布。选硬件必须看 EULA，不能只看 SDK 许�
 
 - 方案稿：01_项目管理\止观AI多模态反馈系统落地方案讨论稿.md §三
 - 对话来源：2026-09-05 硬件全系对比调研
+
+---
+
+## English Summary
+
+**Decision:** BrainBit will not be used as the primary device, nor as a reference for self-development.
+
+**Evidence (verifiable facts):**
+- EULA explicitly prohibits commercial use, redistribution, and third-party use
+- Dry electrodes are protected by patents
+- Although the SDK is MIT-licensed, only the API library is open—this does not mean applications can be published
+- All four Complete Kits on the product page are sold out
+
+**Rejected Alternatives:**
+- BrainBit Headband ($499): EULA terms do not meet the project's "open-source public welfare + reproducible" requirements
+- BrainBit Flex8 ($1,200): Same issue
+
+**Reusable Lesson:**
+SDK open-source ≠ application can be published. When selecting hardware, you must check the EULA, not just the SDK license.
