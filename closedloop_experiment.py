@@ -46,10 +46,18 @@ CONFIG_DEFAULT_PATH = os.path.join(SCRIPT_DIR, "experiment_config.json")
 
 
 class MinimalApp:
-    """最小界面适配器：满足蓝牙接收器回调，不创建窗口。"""
+    """最小界面适配器：满足接收器回调，不创建窗口。
 
-    def __init__(self):
-        self.buffer = DataBuffer()
+    device="neuradock" 时按 NeuraDock 7 通道/250Hz 构造缓冲（V1.4 多设备）；
+    缺省与旧行为一致（Muse 4 通道/256Hz）。"""
+
+    def __init__(self, device="muse"):
+        if device == "neuradock":
+            from neuradock_receiver import ND_CHANNELS, ND_SFREQ
+            self.buffer = DataBuffer(channels=ND_CHANNELS, sfreq=ND_SFREQ,
+                                     device="neuradock")
+        else:
+            self.buffer = DataBuffer()
 
     def after(self, _ms, func):
         try:
@@ -212,6 +220,8 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
         mode = "模拟"
     elif adapter == "bled112":
         mode = f"真机（BLED112 {serial_port or '自动'}）"
+    elif adapter == "neuradock":
+        mode = f"NeuraDock TCP（{serial_port or '127.0.0.1:9600'}）"
     else:
         mode = "真机蓝牙"
     started = datetime.now()
@@ -230,7 +240,7 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
     emit({"type": "start", "tag": exp["tag"], "mode": mode,
           "baseline_seconds": exp["baseline_seconds"],
           "duration_seconds": exp["duration_seconds"]})
-    app = MinimalApp()
+    app = MinimalApp(device="neuradock" if adapter == "neuradock" else "muse")
     buf = app.buffer
     if simulate:
         receiver = SimulateFeeder(app)
@@ -245,6 +255,11 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 return {"ok": False, "error": "未检测到 BLED112 适配器"}
             emit({"type": "message", "text": f"🔌 检测到 BLED112 适配器：{port}"})
             receiver = BleBgapiReceiver(app, address=address, serial_port=port)
+        elif adapter == "neuradock":
+            from neuradock_receiver import TcpReceiver
+            host, _, nd_port = (serial_port or "127.0.0.1:9600").partition(":")
+            receiver = TcpReceiver(app, host=host or "127.0.0.1",
+                                   port=int(nd_port or 9600))
         else:
             from ble_receiver import BleDirectReceiver
             receiver = BleDirectReceiver(app, address=address)
@@ -390,7 +405,7 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 # 实时脑电波形（每通道最近 5 秒）+ 全频段能量，与监测采集页一致
                 wave = {}
                 with buf.lock:
-                    for ch in CHANNELS:
+                    for ch in buf.channels:
                         seg = list(buf.eeg[ch])[-1280:]
                         wave[ch] = [round(v, 2) for v in seg]
 
@@ -418,12 +433,12 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
         receiver.stop()
         print("■ 数据源已停止")
 
-    total = len(buf.eeg_all[CHANNELS[0]])
+    total = len(buf.eeg_all[buf.channels[0]])
     dur = buf.duration_seconds()
     eff = total / dur if dur > 0 else 0
     print(f"\n── 数据质量摘要 ──")
     print(f"总样本数: {total} | 时长: {dur:.1f} 秒 | "
-          f"有效采样率: {eff:.1f} Hz（目标 256）")
+          f"有效采样率: {eff:.1f} Hz（目标 {buf.sfreq:.0f}）")
 
     report_path = None
     data_path = None

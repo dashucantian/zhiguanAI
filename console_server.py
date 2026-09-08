@@ -188,11 +188,19 @@ app = FastAPI(title="止观AI 统一控制台")
 
 
 class HeadlessApp:
-    """最小界面适配器：满足蓝牙接收器回调接口，不创建任何窗口。"""
+    """最小界面适配器：满足蓝牙接收器回调接口，不创建任何窗口。
 
-    def __init__(self):
+    device="neuradock" 时按 NeuraDock 7 通道/250Hz 布局构造缓冲；
+    其余（含缺省）保持 Muse 4 通道/256Hz 旧行为不变。"""
+
+    def __init__(self, device="muse"):
         from muse_local_server import DataBuffer
-        self.buffer = DataBuffer()
+        if device == "neuradock":
+            from neuradock_receiver import ND_CHANNELS, ND_SFREQ
+            self.buffer = DataBuffer(channels=ND_CHANNELS, sfreq=ND_SFREQ,
+                                     device="neuradock")
+        else:
+            self.buffer = DataBuffer()
 
     def after(self, _ms, func):
         try:
@@ -207,6 +215,94 @@ class HeadlessApp:
     @property
     def bottom_label(self):
         return self._Lbl()
+
+
+class ReplaySource:
+    """离线回放数据源（B3／ZG-010）：把已入库 npz 按线上节奏回灌 buffer。
+
+    为什么需要它：B1/B2 的映射参数调校若每次都靠佩戴真机，则每轮都要戴头环、
+    调接触、等连接（实测 20~37 秒），且脑状态不可复现。本源使映射迭代
+    不依赖头环在场，且每轮输入完全相同、结果可比。
+
+    与 MonitorSimulator 同接口形态（running/last_error/packet_count/
+    battery_percent/start/stop/is_connected），且走**同一个**
+    app.buffer.add_eeg() 入口，故下游 compute_band_power → tick →
+    VRSession → /ws/vr → vr_feedback.html 全链路与真机完全一致。
+
+    数据边界：只读 npz；回放会话不得入库（调用方须传 save=False）。
+    """
+
+    BATCH_SAMPLES = 12          # 与 MonitorSimulator 一致：每批 12 样本 ×5 列
+
+    def __init__(self, app, npz_path, speed=1.0):
+        self.app = app
+        self.npz_path = npz_path
+        self.speed = max(0.1, float(speed))   # >1 加速回放，便于快速看映射效果
+        self.running = False
+        self.last_error = None
+        self.packet_count = 0
+        self.battery_percent = None
+        self._thread = None
+        self._eeg = None
+        self.n_total = 0
+
+    def load(self):
+        """载入 npz；失败时把原因写入 last_error，由调用方走 error+end 事件。"""
+        import numpy as np
+        # 用 os.path 而非 pathlib.Path：本文件通篇用 os.path，未导入 Path
+        if not os.path.exists(self.npz_path):
+            self.last_error = f"回放文件不存在: {self.npz_path}"
+            return False
+        try:
+            d = np.load(self.npz_path, allow_pickle=True)
+            eeg = np.asarray(d["eeg"], dtype=np.float64)
+        except Exception as ex:                        # noqa: BLE001
+            self.last_error = f"回放文件读取失败: {type(ex).__name__}: {ex}"
+            return False
+        if eeg.ndim != 2 or eeg.shape[1] < 4:
+            self.last_error = f"回放数据形状异常: {eeg.shape}（期望 (samples, 4)）"
+            return False
+        self._eeg = eeg[:, :4]
+        self.n_total = int(self._eeg.shape[0])
+        return True
+
+    def start(self):
+        if self._eeg is None and not self.load():
+            return False
+        self.running = True
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return True
+
+    def stop(self):
+        self.running = False
+        if self._thread:
+            self._thread.join(timeout=3)
+
+    def is_connected(self):
+        return self.running
+
+    def _run(self):
+        import numpy as np
+        from muse_local_server import CHANNELS, SFREQ
+        n_ch = len(CHANNELS)
+        dt = self.BATCH_SAMPLES / SFREQ / self.speed
+        i = 0
+        n = self.n_total
+        while self.running and i < n:
+            end = min(i + self.BATCH_SAMPLES, n)
+            chunk = self._eeg[i:end, :]
+            batch = []
+            for row in chunk:
+                for c in range(n_ch):
+                    batch.append(float(row[c]) if c < row.shape[0] else 0.0)
+                batch.append(0.0)          # 第 5 列占位，与既有 add_eeg 约定一致
+            self.app.buffer.add_eeg(batch)
+            self.packet_count += 1
+            i = end
+            time.sleep(dt)
+        # 回放放完即视为正常结束（不报 last_error，避免触发保存/告警路径）
+        self.running = False
 
 
 class MonitorSimulator:
@@ -319,7 +415,7 @@ class MonitorSession:
         }
 
     def start(self, simulate=True, address=None, session_info=None,
-              adapter="bleak", serial_port=None):
+              adapter="bleak", serial_port=None, replay_npz=None):
         if self.is_running():
             raise RuntimeError("已有监测会话正在运行")
         self.stop_event.clear()
@@ -328,16 +424,22 @@ class MonitorSession:
         self.saved = None
         self.status = "connecting"
         self.started_at = datetime.now()
-        if simulate:
+        # 回放优先于模拟：给定 npz 即走 ReplaySource（B3／ZG-010）
+        if replay_npz:
+            self.mode = f"离线回放（{os.path.basename(replay_npz)}）"
+        elif simulate:
             self.mode = "模拟"
         elif adapter == "bled112":
             self.mode = f"真机（BLED112 {serial_port or '自动'}）"
+        elif adapter == "neuradock":
+            self.mode = f"NeuraDock TCP（{serial_port or '127.0.0.1:9600'}）"
         else:
             self.mode = "真机蓝牙"
         self.session_info = dict(session_info or {})
         self.thread = threading.Thread(
             target=self._worker,
-            args=(simulate, address, adapter, serial_port), daemon=True)
+            args=(simulate, address, adapter, serial_port, replay_npz),
+            daemon=True)
         self.thread.start()
 
     def request_stop(self, save=True):
@@ -360,6 +462,17 @@ class MonitorSession:
         self.events.put(ev)
 
     def _do_save(self, tag=""):
+        # 数据边界硬约束：B3 离线回放的数据来自已入库 npz，回放会话
+        # 一律不得再落盘、不得生成入库命令，否则同一份数据会重复入库。
+        if self.session_info.get("session_type") == "replay":
+            self.saved = {
+                "npz": None, "report": None, "ingest_cmd": None,
+                "again": False, "blocked": True,
+                "reason": "离线回放会话禁止保存与入库（数据源已是入库 npz）",
+            }
+            self._emit({"type": "message",
+                        "text": "📼 回放会话已跳过保存（禁止入库，数据源本身已是入库 npz）"})
+            return self.saved
         buf = self.app.buffer
         if buf._saved_data_path is not None:
             # 幂等：本会话已保存过
@@ -405,11 +518,27 @@ class MonitorSession:
             post_state=info.get("post_state", ""),
             contact_quality=info.get("contact_quality", ""))
 
-    def _worker(self, simulate, address, adapter="bleak", serial_port=None):
-        from muse_local_server import CHANNELS
+    def _worker(self, simulate, address, adapter="bleak", serial_port=None,
+                replay_npz=None):
         try:
-            self.app = HeadlessApp()
-            if simulate:
+            self.app = HeadlessApp(
+                device="neuradock" if adapter == "neuradock" else "muse")
+            if replay_npz:
+                # B3／ZG-010：离线回放源。走与真机同一个 buffer.add_eeg 入口，
+                # 故下游 compute_band_power → tick → VRSession → /ws/vr 全链路一致。
+                self.receiver = ReplaySource(self.app, replay_npz)
+                if not self.receiver.load():
+                    err = self.receiver.last_error
+                    self._emit({"type": "error", "text": err})
+                    self._emit({"type": "end", "ok": False, "error": err})
+                    self.status = "idle"
+                    return
+                self.receiver.start()
+                self.status = "recording"
+                self._emit({"type": "message",
+                            "text": f"📼 离线回放已启动（{self.receiver.n_total} 样本，"
+                                    f"约 {self.receiver.n_total / 256.0:.0f} 秒）"})
+            elif simulate:
                 self.receiver = MonitorSimulator(self.app)
                 self.receiver.start()
                 self.status = "recording"
@@ -430,6 +559,13 @@ class MonitorSession:
                                 "text": f"🔌 检测到 BLED112 适配器：{port}"})
                     self.receiver = BleBgapiReceiver(
                         self.app, address=address, serial_port=port)
+                elif adapter == "neuradock":
+                    from neuradock_receiver import TcpReceiver
+                    host, _, nd_port = (serial_port or
+                                        "127.0.0.1:9600").partition(":")
+                    self.receiver = TcpReceiver(
+                        self.app, host=host or "127.0.0.1",
+                        port=int(nd_port or 9600))
                 else:
                     from ble_receiver import BleDirectReceiver
                     self.receiver = BleDirectReceiver(self.app, address=address)
@@ -462,7 +598,7 @@ class MonitorSession:
                     return
                 self.status = "recording"
                 self._emit({"type": "message",
-                            "text": "✅ 已连接头环，数据流传输中"})
+                            "text": "✅ 已连接，数据流传输中"})
 
             # ── 实时推流主循环 ──
             n_ticks = 0
@@ -476,10 +612,10 @@ class MonitorSession:
                         pass
                 bp, state = buf.get_latest_bp()
                 vitals = buf.get_vitals()
-                # 最近 5 秒波形（每通道 1280 点）
+                # 最近 5 秒波形（每通道 1280 点；通道布局随设备，V1.4）
                 wave = {}
                 with buf.lock:
-                    for ch in CHANNELS:
+                    for ch in buf.channels:
                         seg = list(buf.eeg[ch])[-1280:]
                         wave[ch] = [round(v, 2) for v in seg]
                 battery = (self.receiver.battery_percent
@@ -583,6 +719,8 @@ class ExperimentSession:
             self.mode = "模拟"
         elif adapter == "bled112":
             self.mode = f"真机（BLED112 {serial_port or '自动'}）"
+        elif adapter == "neuradock":
+            self.mode = f"NeuraDock TCP（{serial_port or '127.0.0.1:9600'}）"
         else:
             self.mode = "真机蓝牙"
         self.tag = cfg["experiment"]["tag"]
@@ -828,8 +966,9 @@ def get_template():
 class MonitorStartPayload(BaseModel):
     simulate: bool = True
     address: Optional[str] = None
-    adapter: Optional[str] = "bleak"  # bleak=内置蓝牙 | bled112=外置适配器
-    serial_port: Optional[str] = None  # bled112 的串口号，留空自动检测
+    adapter: Optional[str] = "bleak"  # bleak=内置蓝牙 | bled112=外置适配器 | neuradock=TCP 数据服务
+    serial_port: Optional[str] = None  # bled112 串口号；neuradock 时为 "host:port"（默认 127.0.0.1:9600）
+    replay_npz: Optional[str] = None   # B3／ZG-010：离线回放的 npz 文件名
     participant: Optional[str] = None
     session_type: Optional[str] = None
     pre_state: Optional[str] = None
@@ -837,20 +976,47 @@ class MonitorStartPayload(BaseModel):
     note: Optional[str] = None
 
 
+def _resolve_replay_path(name: str) -> str:
+    """把回放文件名解析为 report 目录内的绝对路径。
+
+    复用既有的 REPORT_DIR（= muse2-repo/muse2-master/report，即 save_bin 的
+    真实落盘目录）与 _safe_join（越界防护），不另造一套路径逻辑。
+    只允许 .npz。
+    """
+    if not name.lower().endswith(".npz"):
+        raise HTTPException(status_code=400, detail="回放文件必须为 .npz")
+    real = _safe_join(REPORT_DIR, os.path.basename(name))
+    if not os.path.exists(real):
+        raise HTTPException(status_code=404,
+                            detail=f"回放文件不存在: {os.path.basename(name)}")
+    return real
+
+
 @app.post("/api/monitor/start")
 def monitor_start(payload: MonitorStartPayload):
     _assert_no_other_session(MONITOR)
+    replay_path = None
+    if payload.replay_npz:
+        replay_path = _resolve_replay_path(payload.replay_npz)
     session_info = {"participant": payload.participant or "",
                     "session_type": payload.session_type or "",
                     "pre_state": payload.pre_state or "",
                     "contact_quality": payload.contact_quality or "",
                     "note": payload.note or ""}
+    if replay_path:
+        # 数据边界：回放会话一律标记为回放，禁止入库 Zen-EEG。
+        session_info["session_type"] = "replay"
+        session_info["note"] = ((session_info["note"] + " | ") if session_info["note"] else "") \
+            + "B3离线回放，禁止入库"
     MONITOR.start(simulate=payload.simulate, address=payload.address,
                   session_info=session_info,
                   adapter=payload.adapter or "bleak",
-                  serial_port=payload.serial_port)
-    mode = ("模拟" if payload.simulate
+                  serial_port=payload.serial_port,
+                  replay_npz=replay_path)
+    mode = (f"离线回放（{os.path.basename(replay_path)}）" if replay_path
+            else "模拟" if payload.simulate
             else f"真机（BLED112）" if payload.adapter == "bled112"
+            else "NeuraDock TCP" if payload.adapter == "neuradock"
             else "真机蓝牙")
     return {"ok": True, "mode": mode}
 

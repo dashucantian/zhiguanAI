@@ -264,12 +264,27 @@ def _optics_channel_names(n_ch: int) -> list:
 
 
 class DataBuffer:
-    """Thread-safe ring buffer for EEG, PPG, and IMU data."""
+    """Thread-safe ring buffer for EEG, PPG, and IMU data.
 
-    def __init__(self):
+    V1.4（2026-09-08）多设备支持：通道布局与采样率改为实例属性。
+    不传参数时与旧行为完全一致（Muse 4 通道 / 256Hz）；NeuraDock 等
+    7 通道设备以 channels=[...], sfreq=250 构造。下游消费者一律按
+    buffer.channels / buffer.sfreq / buffer.n_ch 取布局。
+    add_eeg 平铺约定：每样本 n_ch+1 列，末列为保留占位
+    （Muse 旧布局 4+1=5 列不变；NeuraDock 为 7+1=8 列，与设备协议保留列一致）。
+    """
+
+    def __init__(self, channels=None, sfreq=None, device="muse"):
         self.lock = threading.Lock()
-        self.eeg = {ch: deque(maxlen=DISP_SAMPLES) for ch in CHANNELS}
-        self.eeg_all = {ch: [] for ch in CHANNELS}  # Unlimited for .bin saving
+        self.channels = list(channels) if channels else list(CHANNELS)
+        self.sfreq = float(sfreq) if sfreq else SFREQ
+        self.device = device
+        self.n_ch = len(self.channels)
+        self._disp_samples = int(self.sfreq * DISP_WINDOW_SEC)
+        self._bp_epoch_samples = int(self.sfreq * BP_EPOCH_SEC)
+        self._bp_min_samples = int(self.sfreq * 8)
+        self.eeg = {ch: deque(maxlen=self._disp_samples) for ch in self.channels}
+        self.eeg_all = {ch: [] for ch in self.channels}  # Unlimited for .bin saving
         self.optics = {name: deque(maxlen=PPG_ANALYSIS_SAMPLES) for name in OPTICS_CHANNELS_8}
         self.optics_n_ch = 0
         self.optics_baseline = {}
@@ -307,21 +322,25 @@ class DataBuffer:
             t = self.timestamps[-1] + 1e-6
         self.timestamps.append(t)
 
-    def add_eeg(self, samples: list):
-        """samples: flat list of ns*5 floats (ns samples × 5 channels)"""
+    def add_eeg(self, samples: list, t_rel=None):
+        """samples: flat list of ns*(n_ch+1) floats（每样本 n_ch 通道值 + 1 保留列）
+        t_rel: 可选，本批首样本的相对秒（设备时钟）。TCP 设备积压突发到达时，
+        用设备时间戳才能保持 250Hz 均匀网格；缺省沿用到达时刻（BLE 旧行为）。"""
+        stride = self.n_ch + 1
         with self.lock:
             if not self.session_start:
                 self.session_start = time.time()
 
-            ns = len(samples) // 5
-            t_arr = time.time() - self.session_start
+            ns = len(samples) // stride
+            t_base = float(t_rel) if t_rel is not None \
+                else time.time() - self.session_start
             for s in range(ns):
-                offset = s * 5
-                for i, ch in enumerate(CHANNELS):
+                offset = s * stride
+                for i, ch in enumerate(self.channels):
                     val = samples[offset + i] if offset + i < len(samples) else 0.0
                     self.eeg[ch].append(val)
                     self.eeg_all[ch].append(val)
-                self._append_ts(self.session_start + t_arr + s / SFREQ)
+                self._append_ts(self.session_start + t_base + s / self.sfreq)
 
     def process_raw_packet(self, data: bytes, decoder):
         """Ingest one Muse BLE payload via MuseRealtimeDecoder (same as cloud)."""
@@ -333,8 +352,8 @@ class DataBuffer:
                 t_arr = time.time() - self.session_start
                 ns = max((len(v) for v in decoded.eeg.values()), default=0)
                 for k in range(ns):
-                    self._append_ts(self.session_start + t_arr + k / SFREQ)
-                for ch in CHANNELS:
+                    self._append_ts(self.session_start + t_arr + k / self.sfreq)
+                for ch in self.channels:
                     if ch in decoded.eeg:
                         for v in decoded.eeg[ch]:
                             self.eeg[ch].append(float(v))
@@ -430,7 +449,7 @@ class DataBuffer:
     def get_eeg_arrays(self):
         with self.lock:
             result = {}
-            for ch in CHANNELS:
+            for ch in self.channels:
                 arr = list(self.eeg[ch])
                 result[ch] = np.array(arr) if arr else np.zeros(0)
             return result
@@ -541,8 +560,8 @@ class DataBuffer:
     def bp_ready_fraction(self):
         """0..1 progress toward first band-power estimate."""
         with self.lock:
-            min_len = min((len(self.eeg_all[ch]) for ch in CHANNELS), default=0)
-        return min(1.0, min_len / max(BP_EPOCH_SAMPLES, 1))
+            min_len = min((len(self.eeg_all[ch]) for ch in self.channels), default=0)
+        return min(1.0, min_len / max(self._bp_epoch_samples, 1))
 
     def save_bin(self, extra_meta=None):
         """Save EEG data as .npz and generate HTML report. Returns (data_path, report_path) or None.
@@ -556,18 +575,18 @@ class DataBuffer:
         """
         if self._saved_data_path is not None:
             return self._saved_data_path, self._saved_report_path
-        if not self.eeg_all[CHANNELS[0]]:
+        if not self.eeg_all[self.channels[0]]:
             return None
 
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         timestamp = datetime.now().isoformat()
 
-        # Build numpy array: (n_samples, 4)
-        n = min(len(self.eeg_all[ch]) for ch in CHANNELS)
+        # Build numpy array: (n_samples, n_ch)
+        n = min(len(self.eeg_all[ch]) for ch in self.channels)
         if n == 0:
             return None
-        eeg_arr = np.zeros((n, N_CHANNELS))
-        for i, ch in enumerate(CHANNELS):
+        eeg_arr = np.zeros((n, self.n_ch))
+        for i, ch in enumerate(self.channels):
             eeg_arr[:n, i] = self.eeg_all[ch][:n]
 
         # Save raw data
@@ -577,12 +596,13 @@ class DataBuffer:
         if ts_arr.size < n or ts_arr.size == 0:
             # Fallback: synthesize epoch timestamps from session_start at nominal rate
             start_epoch = self.session_start if self.session_start else time.time()
-            ts_arr = start_epoch + np.arange(n) / SFREQ
+            ts_arr = start_epoch + np.arange(n) / self.sfreq
         duration_val = float(ts_arr[-1] - ts_arr[0]) if ts_arr.size > 1 else self.duration_seconds()
         meta = {
             "timestamp": timestamp,
-            "sfreq": SFREQ,
-            "channels": CHANNELS,
+            "sfreq": self.sfreq,
+            "channels": self.channels,
+            "device": self.device,
             "samples": n,
             "duration": duration_val,
         }
@@ -595,7 +615,7 @@ class DataBuffer:
         report_ok = None
         if _ensure_imports():
             try:
-                result = _generate_report_from_array(eeg_arr, SFREQ, ts, report_path)
+                result = _generate_report_from_array(eeg_arr, self.sfreq, ts, report_path)
                 if not result:
                     print(f"Report generation returned no output for {report_path}")
                 else:
@@ -627,7 +647,7 @@ class DataBuffer:
         the operator notices even when the screen is turned away.
         """
         try:
-            has_data = bool(self.eeg_all.get(CHANNELS[0]))
+            has_data = bool(self.eeg_all.get(self.channels[0]))
         except Exception:
             has_data = False
         if not has_data:
@@ -659,25 +679,25 @@ class DataBuffer:
             return
 
         with self.lock:
-            min_len = min(len(self.eeg_all[ch]) for ch in CHANNELS)
-            epoch_samples = min(min_len, BP_EPOCH_SAMPLES)
-            if epoch_samples < BP_MIN_SAMPLES:
+            min_len = min(len(self.eeg_all[ch]) for ch in self.channels)
+            epoch_samples = min(min_len, self._bp_epoch_samples)
+            if epoch_samples < self._bp_min_samples:
                 return
             if time.time() - self.last_bp_time < 2.0:
                 return
 
             self.last_bp_time = time.time()
 
-            data = np.zeros((epoch_samples, N_CHANNELS))
-            for i, ch in enumerate(CHANNELS):
+            data = np.zeros((epoch_samples, self.n_ch))
+            for i, ch in enumerate(self.channels):
                 chunk = self.eeg_all[ch][-epoch_samples:]
                 data[:len(chunk), i] = chunk
 
         try:
-            bp = report_generator.compute_band_power_chunk(data, SFREQ)
+            bp = report_generator.compute_band_power_chunk(data, self.sfreq)
             if not bp:
                 return
-            if not all(bp["db"][b].shape[0] == N_CHANNELS for b in report_generator.BANDS):
+            if not all(bp["db"][b].shape[0] == self.n_ch for b in report_generator.BANDS):
                 return
 
             means = {band: float(np.mean(bp["db"][band])) for band in report_generator.BANDS}
