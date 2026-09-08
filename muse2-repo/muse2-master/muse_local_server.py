@@ -776,9 +776,12 @@ class DataBuffer:
             # 0–45Hz 通道平均 PSD 曲线，供前端频谱图渲染；失败静默降级。
             try:
                 from scipy.signal import welch as _welch
+                # welch(axis=0)：输入 (n_times, n_ch) → 输出 (n_freqs, n_ch)。
+                # 通道平均须沿 axis=1（保留频率轴），此前误用 axis=0 压掉频率轴，
+                # 致后续布尔掩码索引形状不符抛错、被静默吞、latest_psd 永远 None。
                 _f, _p = _welch(data, self.sfreq, nperseg=self._psd_nperseg,
                                 axis=0)
-                _p = _p.mean(axis=0)
+                _p = _p.mean(axis=1)          # (n_freqs,)：7 通道平均
                 _m = _f <= 45.0
                 _f, _p = _f[_m], _p[_m]
                 _db = 10.0 * np.log10(np.maximum(_p, 1e-12))

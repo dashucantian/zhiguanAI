@@ -66,6 +66,19 @@ def main():
                 timeout=14.0)
             if ev2 is None:
                 fails.append("bands 未产出（compute_band_power 7通道/250Hz 路径未通）")
+            else:
+                # 借鉴四件套之 FFT 曲线数据源：tick 应携带 psd={freqs,db}
+                psd = ev2.get("psd")
+                if not psd or not psd.get("freqs") or not psd.get("db"):
+                    fails.append("tick.psd 缺失（前端 FFT 频谱曲线无数据源）")
+                elif len(psd["freqs"]) != len(psd["db"]):
+                    fails.append("psd.freqs 与 psd.db 长度不一致")
+                else:
+                    # mock 为 10Hz 正弦：PSD 峰值应落在 alpha 带附近（8–13Hz）
+                    fmax = psd["freqs"][max(range(len(psd["db"])),
+                                            key=lambda i: psd["db"][i])]
+                    if not 7.0 <= fmax <= 13.0:
+                        fails.append(f"PSD 峰值频率异常：{fmax:.1f}Hz（期望 ~10Hz）")
         MONITOR.request_stop(save=True)
         ev3, _ = wait_events(MONITOR, lambda e: e.get("type") in ("end", "saved"),
                              timeout=15.0)
