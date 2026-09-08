@@ -349,6 +349,8 @@ class MonitorSimulator:
                 batch.append(0.0)
                 t += dt
             self.app.buffer.add_eeg(batch)
+            self.packet_count += 1   # 与 BleDirectReceiver/ReplaySource 对齐：
+            # 每喂一批递增，前端"数据稳定性条"据此判断数据流是否在推进
             time.sleep(12.0 / SFREQ)
 
 

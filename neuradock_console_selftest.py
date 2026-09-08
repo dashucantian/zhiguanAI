@@ -136,6 +136,10 @@ def main():
             fails.append(f"模拟会话无 tick: {[e.get('type') for e in seen4]}")
         elif sorted(ev4["wave"].keys()) != sorted(["TP9", "AF7", "AF8", "TP10"]):
             fails.append(f"模拟会话通道错误: {sorted(ev4['wave'].keys())}")
+        # 回归防线：模拟器须递增 packet_count（前端"数据稳定性条"据此判断
+        # 数据流是否推进；此前模拟器漏维护致恒为 0、稳定条误报"数据流静默"）
+        elif not ev4.get("packets"):
+            fails.append("模拟会话 packets 未递增（前端稳定条会误报静默）")
         MONITOR.request_stop(save=False)
         wait_events(MONITOR, lambda e: e.get("type") == "end", timeout=10.0)
 
