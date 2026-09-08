@@ -183,8 +183,7 @@
   <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">服务连接中…</span></span>
 </header>
 <nav>
-  <button class="tab-btn active" data-tab="monitor">监测采集</button>
-  <button class="tab-btn" data-tab="live">闭环实验</button>
+  <button class="tab-btn active" data-tab="monitor">采集工作台</button>
   <button class="tab-btn" data-tab="config">配置管理</button>
   <button class="tab-btn" data-tab="history">历史数据</button>
   <button class="tab-btn" data-tab="govern">数据治理</button>
@@ -295,14 +294,24 @@
 
   <div class="card">
     <h2>实时监测仪表
+      <span class="clipbox">幅程 ±<select id="clipSel">
+        <option value="50">50</option><option value="100">100</option>
+        <option value="150" selected>150</option><option value="300">300</option>
+      </select> μV</span>
       <button class="toggle-btn" id="monWaveToggle">🌊 隐藏波形</button>
     </h2>
+    <div id="qBanner" class="qbanner"></div>
     <div class="lab-grid">
       <div class="lab-main">
         <div id="monWaveWrap"><canvas id="monWave" height="290"></canvas></div>
         <canvas id="monBands" height="175"></canvas>
+        <canvas id="monPsd" height="175"></canvas>
         <canvas id="monPpg" height="115"></canvas>
         <canvas id="monMotion" height="125"></canvas>
+        <div class="stablebar">数据稳定性
+          <span class="sbar"><i id="stStable"></i></span>
+          <span id="stText" style="color:var(--dim)">等待…</span>
+        </div>
       </div>
       <aside class="lab-panel">
         <h3>脑电通道信号</h3>
@@ -326,7 +335,7 @@
         <div class="lp-row"><span>光学通道数</span><span id="monOptCh">-</span></div>
         <h3>采集状态</h3>
         <div class="lp-row"><span>已采集</span><span id="monElapsed">-</span></div>
-        <div class="lp-row"><span>蓝牙包</span><span id="monPackets">-</span></div>
+        <div class="lp-row"><span>数据包</span><span id="monPackets">-</span></div>
         <div class="lp-row"><span>电量</span><span id="monBattery">-</span></div>
         <div class="lp-row"><span>头部运动</span><span id="monMotionVal">-</span></div>
       </aside>
@@ -372,82 +381,11 @@
     </div>
     <div class="outbox" id="monIngestOut" style="display:none;"></div>
   </div>
-</section>
 
-<!-- ═══ 闭环实验 ═══ -->
-<section id="tab-live" class="tab">
+  <!-- 闭环反馈引擎（仅"闭环反馈"模式显示；数据源同上方仪表卡） -->
+  <div id="wsEngine" style="display:none;">
   <div class="card">
-    <h2>启动实验</h2>
-    <div class="row">
-      <div class="field">
-        <label>数据源</label>
-        <select id="inMode">
-          <option value="simulate" selected>模拟模式（无需头环）</option>
-          <option value="device">真机蓝牙（电脑内置适配器）</option>
-          <option value="bled112">真机蓝牙（BLED112 外置适配器）</option>
-          <option value="neuradock">NeuraDock（TCP 数据服务）</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>头环地址（真机）</label>
-        <input id="inAddress" placeholder="留空自动扫描">
-      </div>
-      <div class="field" id="inPortField" style="display:none">
-        <label>BLED112 串口（留空自动检测）</label>
-        <input id="inPort" placeholder="如 COM3">
-      </div>
-      <div class="field" id="inNdField" style="display:none">
-        <label>NeuraDock 数据服务地址</label>
-        <input id="inNd" value="127.0.0.1:9600" placeholder="IP:端口">
-      </div>
-      <div class="field">
-        <label>配置文件</label>
-        <select id="inConfigFile"></select>
-      </div>
-      <div class="field">
-        <label>基线秒数（留空用配置，≥30）</label>
-        <input id="inBaseline" type="number" min="30" placeholder="默认">
-      </div>
-      <div class="field">
-        <label>总时长秒（留空用配置，≥基线+30）</label>
-        <input id="inDuration" type="number" min="60" placeholder="默认">
-      </div>
-      <div class="field">
-        <label>标签</label>
-        <input id="inTag" placeholder="默认">
-      </div>
-    </div>
-    <div class="row">
-      <div class="field">
-        <label>测试者（本机默认可选）</label>
-        <select id="inParticipant"></select>
-      </div>
-      <div class="field">
-        <label>事前自评（身心状态）</label>
-        <input id="inPreState" placeholder="如：平静、刚静坐后…">
-      </div>
-      <div class="field">
-        <label>接触质量初评</label>
-        <select id="inContact">
-          <option value="good">良好</option>
-          <option value="medium">一般</option>
-          <option value="bad">差（需调整电极）</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>备注</label>
-        <input id="inNote" placeholder="环境、事件等">
-      </div>
-    </div>
-    <div class="toolbar">
-      <button class="btn" id="btnStart">▶ 开始实验</button>
-      <button class="btn danger" id="btnStop" disabled>■ 停止</button>
-      <span class="msg" id="liveMsg"></span>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>实时状态</h2>
+    <h2>闭环反馈引擎</h2>
     <div class="metrics">
       <div class="metric"><div class="v" id="mAlpha">-</div><div class="k">Alpha (dB)</div></div>
       <div class="metric"><div class="v" id="mBaseline">-</div><div class="k">基线 (dB)</div></div>
@@ -459,23 +397,6 @@
     </div>
     <canvas id="chart" height="260"></canvas>
     <div class="hint">青色 = Alpha 能量（dB），金色 = 基线，红色 = 指令音量（右轴），竖虚线 = 基线期结束</div>
-  </div>
-
-  <div class="card">
-    <h2>实时脑电信号
-      <button class="toggle-btn" id="liveWaveToggle">🌊 隐藏波形</button>
-    </h2>
-    <div id="liveWaveWrap">
-      <canvas id="liveWave" height="320"></canvas>
-      <div class="hint">实时脑电波形（5 秒窗口，通道随当前设备布局），随决策周期刷新（约每 2 秒）</div>
-    </div>
-    <div style="margin-top:14px;">
-      <div class="bandbar"><span class="name">δ 德尔塔</span><div class="bar"><i id="lvBarDelta"></i></div><span class="val" id="lvValDelta">-</span></div>
-      <div class="bandbar"><span class="name">θ 西塔</span><div class="bar"><i id="lvBarTheta" style="background:var(--gold)"></i></div><span class="val" id="lvValTheta">-</span></div>
-      <div class="bandbar"><span class="name">α 阿尔法</span><div class="bar"><i id="lvBarAlpha"></i></div><span class="val" id="lvValAlpha">-</span></div>
-      <div class="bandbar"><span class="name">β 贝塔</span><div class="bar"><i id="lvBarBeta" style="background:var(--warn)"></i></div><span class="val" id="lvValBeta">-</span></div>
-      <div class="bandbar"><span class="name">γ 伽马</span><div class="bar"><i id="lvBarGamma" style="background:#a37eba"></i></div><span class="val" id="lvValGamma">-</span></div>
-    </div>
   </div>
 
   <div class="card" id="expSummaryCard" style="display:none;">
@@ -501,6 +422,7 @@
       </table>
     </div>
   </div>
+  </div><!-- /wsEngine -->
 </section>
 
 <!-- ═══ 配置管理 ═══ -->
@@ -719,6 +641,7 @@ let monEs = null, monRunning = false, monLastError = "";
 // ── 仪器级图表底座（复用旧版监测仪视觉语言：坐标轴/图例/等宽读数）──
 const LAB_FONT = "Consolas, 'Courier New', monospace";
 const monBands = $("monBands"), monBandsCtx = monBands.getContext("2d");
+const monPsd = $("monPsd"), monPsdCtx = monPsd.getContext("2d");
 const monPpg = $("monPpg"), monPpgCtx = monPpg.getContext("2d");
 const monMotion = $("monMotion"), monMotionCtx = monMotion.getContext("2d");
 let monLastTick = null;   // 缓存最近一帧，窗口缩放后可重绘
@@ -730,18 +653,21 @@ function sizeCanvas(cv, cssH) {
 }
 function resizeMonWave() {
   sizeCanvas(monWave, 290); sizeCanvas(monBands, 175);
+  sizeCanvas(monPsd, 175);
   sizeCanvas(monPpg, 115); sizeCanvas(monMotion, 125);
 }
 window.addEventListener("resize", () => {
-  resizeMonWave(); resizeChart(); resizeLiveWave();
+  resizeMonWave(); resizeChart();
   redrawMonitor();
 });
 function redrawMonitor() {
   if (monLastTick) {
     drawMonWave(monLastTick.wave); drawBandsChart(monLastTick.bands);
+    drawPsd(monLastTick.psd);
     drawPpgChart(monLastTick.ppg); drawMotionChart(monLastTick.motion_xyz);
   } else {
-    drawMonIdle(); drawBandsChart(null); drawPpgChart(null); drawMotionChart(null);
+    drawMonIdle(); drawBandsChart(null); drawPsd(null);
+    drawPpgChart(null); drawMotionChart(null);
   }
 }
 
@@ -815,11 +741,15 @@ function idleOverlay(c2d, f, text) {
 }
 
 // 多通道脑电波形（通道随设备布局）：叠加显示 + μV 纵轴 + 秒横轴 + 图例（旧版样式）
+let MON_CLIP = 150;   // 借鉴 NeuraDock：显示幅程可调（±50/100/150/300μV）
 function drawWaveCanvas(cv, c2d, wave) {
   const f = chartFrame(c2d, cv, { title: "脑电波形（5 秒窗口）", ylab: "μV" });
-  const CLIP = 150;
-  yTicks(c2d, f, [-150, -100, -50, 0, 50, 100, 150].map(v => ({
-    v, py: f.P.y + (1 - (v + CLIP) / (2 * CLIP)) * f.P.h })), v => String(v));
+  const CLIP = MON_CLIP;
+  // 纵轴刻度随幅程生成（-CLIP…+CLIP 共 7 档）
+  const step = CLIP / 3;
+  yTicks(c2d, f, [-3, -2, -1, 0, 1, 2, 3].map(k => ({
+    v: k * step, py: f.P.y + (1 - (k * step + CLIP) / (2 * CLIP)) * f.P.h })),
+    v => String(Math.round(v)));
   xTicks(c2d, f, [0, 1, 2, 3, 4, 5].map(s => ({ t: s / 5, s: String(s) })));
   const chs = waveChannels(wave);
   legend(c2d, f, chs.map((ch, i) => ({ label: ch, color: MON_COLORS[i] })));
@@ -874,6 +804,52 @@ function drawBandsChart(bands) {
     c2d.fillStyle = "#9ab"; c2d.font = `${10 * f.dpr}px ${LAB_FONT}`;
     c2d.fillText(label, cx, f.P.y + f.P.h + 14 * f.dpr);
   });
+}
+
+// 借鉴 NeuraDock 实时 FFT：0–45Hz 通道平均 PSD 曲线（dB 对数轴）。
+// 数据源为后端 compute_band_power 顺手导出的 tick.psd={freqs,db}。
+function drawPsd(psd) {
+  const c2d = monPsdCtx;
+  const f = chartFrame(c2d, monPsd, { title: "实时频谱（0–45Hz，通道平均）", ylab: "dB" });
+  const FMAX = 45;
+  xTicks(c2d, f, [0, 10, 20, 30, 40].map(hz => ({
+    t: hz / FMAX, s: String(hz) })));
+  if (!psd || !psd.freqs || psd.freqs.length < 2) {
+    idleOverlay(c2d, f, "等待频谱数据…"); return;
+  }
+  // dB 纵轴：取数据范围并取整到 10 的倍数，至少 40dB 跨度
+  let lo = Math.min(...psd.db), hi = Math.max(...psd.db);
+  if (!isFinite(lo) || !isFinite(hi)) { idleOverlay(c2d, f, "等待频谱数据…"); return; }
+  const span = Math.max(40, hi - lo);
+  const mid = (hi + lo) / 2;
+  lo = mid - span / 2; hi = mid + span / 2;
+  const Y = v => f.P.y + (1 - (v - lo) / (hi - lo || 1)) * f.P.h;
+  yTicks(c2d, f, [0, 1, 2, 3, 4].map(k => ({
+    v: lo + (hi - lo) * k / 4, py: Y(lo + (hi - lo) * k / 4) })),
+    v => v.toFixed(0));
+  // 频段着色背景带（δ/θ/α/β），呼应频段柱
+  const bands = [[0.5, 4, "#8a8a8a"], [4, 8, "#f5e663"],
+                 [8, 13, "#4ecdc4"], [13, 30, "#ff6b6b"]];
+  bands.forEach(([a, b, col]) => {
+    c2d.fillStyle = col; c2d.globalAlpha = 0.06;
+    const x1 = f.P.x + a / FMAX * f.P.w, x2 = f.P.x + Math.min(b, FMAX) / FMAX * f.P.w;
+    c2d.fillRect(x1, f.P.y, x2 - x1, f.P.h);
+    c2d.globalAlpha = 1;
+  });
+  // 50Hz 工频参考竖线（若在范围内）
+  c2d.save(); c2d.beginPath();
+  c2d.rect(f.P.x, f.P.y, f.P.w, f.P.h); c2d.clip();
+  const X = hz => f.P.x + hz / FMAX * f.P.w;
+  c2d.strokeStyle = "#4ecdc4"; c2d.lineWidth = 1.5 * f.dpr;
+  c2d.beginPath();
+  for (let i = 0; i < psd.freqs.length; i++) {
+    const hz = psd.freqs[i];
+    if (hz > FMAX) break;
+    const x = X(hz), y = Y(psd.db[i]);
+    if (i) c2d.lineTo(x, y); else c2d.moveTo(x, y);
+  }
+  c2d.stroke();
+  c2d.restore();
 }
 
 // 脉搏波（5 秒）
@@ -994,7 +970,81 @@ function updateLabPanel(wave, bands, vit, ev) {
   $("monElapsed").textContent = Math.round(ev.elapsed) + "s";
   $("monPackets").textContent = ev.packets != null ? ev.packets : "-";
   $("monBattery").textContent = unitOr(ev.battery, 0, "%");
-  $("monMotion").textContent = numOr(vit.motion, 1);
+  $("monMotionVal").textContent = numOr(vit.motion, 1);
+}
+
+// ── 借鉴 NeuraDock：质量门控横幅（"先质量、后数字"）──
+// 信号质量差时显式警告并提示指标暂不可信；无数据时隐藏。
+function updateQualityBanner(ev) {
+  const el = $("qBanner");
+  if (!el) return;
+  const wave = ev && ev.wave;
+  const chs = waveChannels(wave);
+  const withData = chs.filter(ch => wave && wave[ch] && wave[ch].length);
+  if (!withData.length) { el.className = "qbanner"; el.textContent = ""; return; }
+  const bad = withData.filter(ch => channelQuality(wave[ch]) === "bad");
+  const ratio = bad.length / withData.length;
+  if (ratio >= 0.5) {
+    el.className = "qbanner err";
+    el.textContent = `⚠ 信号质量差（${bad.length}/${withData.length} 通道异常：${bad.join("、")}）——频段与状态指标暂不可信，请检查电极接触`;
+  } else if (bad.length > 0) {
+    el.className = "qbanner warn";
+    el.textContent = `⚠ 部分通道质量欠佳（${bad.join("、")}），其余通道指标可用`;
+  } else {
+    el.className = "qbanner"; el.textContent = "";
+  }
+}
+
+// ── 借鉴 NeuraDock：数据稳定性条（最近一帧是否在持续进包）──
+let _prevPackets = null;
+function updateStabilityBar(ev) {
+  const bar = $("stStable"), txt = $("stText");
+  if (!bar || !txt) return;
+  const connected = ev && ev.connected;
+  const packets = (ev && ev.packets != null) ? ev.packets : null;
+  let cls = "err", width = "0%", label = "未连接";
+  if (connected && packets != null) {
+    const growing = _prevPackets == null || packets > _prevPackets;
+    _prevPackets = packets;
+    if (growing) { cls = ""; width = "100%"; label = "稳定"; }
+    else { cls = "warn"; width = "55%"; label = "数据流静默"; }
+  } else {
+    _prevPackets = null;
+  }
+  bar.style.width = width;
+  bar.className = cls;
+  txt.textContent = label;
+}
+
+// ── 借鉴 NeuraDock status-pill：VR 投显状态胶囊（信息整合、载体分离）──
+function updateVrPill() {
+  const pill = $("vrPill");
+  if (!pill) return;
+  api("/api/vr/status").then(r => {
+    const n = r.clients || 0;
+    pill.lastChild.textContent = n > 0 ? `VR ● 在线 ×${n}` : "VR ○ 未连接";
+    pill.className = "pill " + (n > 0 ? "is-live" : "is-off");
+    pill.title = n > 0
+      ? `${n} 个 VR 客户端在线，点击打开本机 VR 场景`
+      : "无 VR 客户端在线；点击打开本机 VR 场景（Pico 请用 https://<本机IP>:8778/vr）";
+  }).catch(() => {
+    pill.lastChild.textContent = "VR —";
+    pill.className = "pill is-off";
+  });
+}
+
+// ── 新组件绑定：幅程选择 + VR 胶囊点击 ──
+function bindNeuraDockExtras() {
+  const clip = $("clipSel");
+  if (clip) clip.onchange = () => {
+    MON_CLIP = +clip.value || 150;
+    if (monLastTick) drawMonWave(monLastTick.wave); else drawMonIdle();
+  };
+  const pill = $("vrPill");
+  if (pill) pill.onclick = () => {
+    // 本机经 HTTP 打开即可（WebXR 需 HTTPS 时由 Pico 走 8778）
+    window.open((location.protocol === "https:" ? "/vr" : "/vr"), "_blank");
+  };
 }
 
 let monWaveVisible = true;
@@ -1005,8 +1055,11 @@ function handleMonitorEvent(ev) {
     updateLabPanel(ev.wave, ev.bands, ev.vitals || {}, ev);
     if (monWaveVisible) drawMonWave(ev.wave);
     drawBandsChart(ev.bands);
+    drawPsd(ev.psd);
     drawPpgChart(ev.ppg);
     drawMotionChart(ev.motion_xyz);
+    updateQualityBanner(ev);
+    updateStabilityBar(ev);
   } else if (ev.type === "message") {
     monMsg(ev.text);
   } else if (ev.type === "saved") {
@@ -1049,15 +1102,21 @@ $("monMode").onchange = () => {
   $("monPortField").style.display = v === "bled112" ? "" : "none";
   $("monNdField").style.display = v === "neuradock" ? "" : "none";
 };
-$("inMode").onchange = () => {
-  const v = $("inMode").value;
-  $("inPortField").style.display = v === "bled112" ? "" : "none";
-  $("inNdField").style.display = v === "neuradock" ? "" : "none";
-};
+// ── 会话模式切换：纯监测 / 闭环反馈（统一采集台，2026-09-08）──
+function applyWsMode() {
+  const loop = $("wsMode").value === "loop";
+  $("expParamsRow").style.display = loop ? "" : "none";
+  $("wsEngine").style.display = loop ? "" : "none";
+  $("monStart").textContent = loop ? "▶ 开始实验" : "▶ 开始采集";
+  $("monStop").textContent = loop ? "■ 停止实验" : "■ 停止并保存";
+  $("monSave").style.display = loop ? "none" : "";   // 闭环无"不断连保存"
+}
+$("wsMode").onchange = applyWsMode;
 
 $("monStart").onclick = async () => {
+  const wsMode = $("wsMode").value;
   const mode = $("monMode").value;
-  const payload = {
+  const common = {
     simulate: mode === "simulate",
     adapter: mode === "bled112" ? "bled112"
       : mode === "neuradock" ? "neuradock" : "bleak",
@@ -1072,14 +1131,41 @@ $("monStart").onclick = async () => {
     contact_quality: $("monContact").value,
     note: $("monNote").value.trim() || null,
   };
-  if (!payload.simulate && !payload.participant) {
+  if (!common.simulate && !common.participant) {
     return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
   }
+  if (wsMode === "loop") {
+    // ── 闭环反馈模式 ──
+    const b = $("inBaseline").value ? +$("inBaseline").value : null;
+    const d = $("inDuration").value ? +$("inDuration").value : null;
+    if (b != null && b < 30) return monMsg("基线秒数不能小于 30（配置校验要求）", "err");
+    if (d != null && d < 60) return monMsg("总时长不能小于 60 秒（配置校验要求）", "err");
+    if (b != null && d != null && d <= b) return monMsg("总时长必须大于基线秒数", "err");
+    const payload = Object.assign({}, common, {
+      config_path: $("inConfigFile").value || null,
+      baseline: b, duration: d,
+      tag: $("inTag").value.trim() || null });
+    try {
+      $("monStart").disabled = true;
+      await api("/api/experiment/start", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload) });
+      $("monStop").disabled = false;
+      $("expSummaryCard").style.display = "none";
+      connectStream();
+      monMsg("实验已启动，等待数据…", "ok");
+    } catch (e) {
+      $("monStart").disabled = false;
+      monMsg("启动失败：" + e.message, "err");
+    }
+    return;
+  }
+  // ── 纯监测模式 ──
   try {
     $("monStart").disabled = true;
     await api("/api/monitor/start", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload) });
+      body: JSON.stringify(common) });
     monRunning = true;
     $("monStop").disabled = false;
     $("monSave").disabled = false;
@@ -1093,6 +1179,16 @@ $("monStart").onclick = async () => {
 };
 
 $("monStop").onclick = async () => {
+  if ($("wsMode").value === "loop") {
+    try {
+      await api("/api/experiment/stop", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          post_state: $("monPostState").value.trim() || null }) });
+      monMsg("已发送停止指令…");
+    } catch (e) { monMsg(e.message, "err"); }
+    return;
+  }
   try {
     await api("/api/monitor/stop", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -1339,11 +1435,6 @@ $("monWaveToggle").onclick = () => {
     if (monLastTick) drawMonWave(monLastTick.wave); else drawMonIdle();
   }
 };
-$("liveWaveToggle").onclick = () => {
-  liveWaveVisible = !liveWaveVisible;
-  $("liveWaveWrap").style.display = liveWaveVisible ? "" : "none";
-  $("liveWaveToggle").textContent = liveWaveVisible ? "🌊 隐藏波形" : "🌊 显示波形";
-};
 
 // ── 管理档案入口（监测页） ──
 $("monManageProfiles").onclick = () => {
@@ -1354,12 +1445,12 @@ $("monManageProfiles").onclick = () => {
   loadGovern();
 };
 
-// ═══ 闭环实验 ═══
+// ═══ 闭环反馈引擎（并入采集台，2026-09-08）═══
+// 波形/频段/频谱复用采集台仪表函数（monWave/monBands/monPsd/updateLabPanel）；
+// 引擎专属仅：chart 曲线 + 决策日志 logBody + 奖励指标 mAlpha/mVol/mBeat/mReward。
 const chart = $("chart"), ctx = chart.getContext("2d");
-const liveWave = $("liveWave"), liveCtx = liveWave.getContext("2d");
 let pts = [], baselineDb = null, baselineEndAt = null, es = null;
 let nRewardTicks = 0, nLoopTicks = 0, volMaxRef = 0.35, expLastError = "";
-let liveWaveVisible = true;
 
 function showExpSummary(ev) {
   const card = $("expSummaryCard");
@@ -1377,11 +1468,6 @@ function resizeChart() {
   chart.width = chart.clientWidth * (window.devicePixelRatio || 1);
   chart.height = 260 * (window.devicePixelRatio || 1);
   drawChart();
-}
-
-function resizeLiveWave() {
-  liveWave.width = liveWave.clientWidth * (window.devicePixelRatio || 1);
-  liveWave.height = 320 * (window.devicePixelRatio || 1);
 }
 
 function drawChart() {
@@ -1458,13 +1544,11 @@ function handleEvent(ev) {
     pts = []; baselineDb = null; baselineEndAt = null;
     nRewardTicks = 0; nLoopTicks = 0;
     $("logBody").innerHTML = "";
-    drawWaveIdle(liveWave, liveCtx, "等待实验数据…");
-    for (const k of ["Delta", "Theta", "Alpha", "Beta", "Gamma"]) {
-      setBandBar("lvBar" + k, null);
-      $("lvVal" + k).textContent = "-";
-    }
+    monLastTick = null;
+    drawMonIdle(); drawBandsChart(null); drawPsd(null);
+    $("expSummaryCard").style.display = "none";
     setPhase("基线期", "baseline");
-    liveMsg(`实验「${ev.tag}」已开始（${ev.mode}），基线 ${ev.baseline_seconds}s / 总 ${ev.duration_seconds}s`);
+    monMsg(`实验「${ev.tag}」已开始（${ev.mode}），基线 ${ev.baseline_seconds}s / 总 ${ev.duration_seconds}s`, "ok");
   } else if (ev.type === "tick") {
     pts.push({ t: ev.elapsed, alpha: ev.alpha, vol: ev.vol, beat: ev.beat });
     if (pts.length > 600) pts.shift();
@@ -1473,48 +1557,50 @@ function handleEvent(ev) {
       nLoopTicks++;
       if (ev.note && ev.note.indexOf("奖励") >= 0) nRewardTicks++;
     }
+    // 引擎专属指标（wsEngine 面板）
     $("mAlpha").textContent = numOr(ev.alpha, 1);
     $("mBaseline").textContent = numOr(baselineDb, 1);
     $("mVol").textContent = numOr(ev.vol, 2);
     $("mBeat").textContent = numOr(ev.beat, 1);
-    $("mState").textContent = (ev.state || "-").split(" ")[0];
-    $("mElapsed").textContent = ev.elapsed + "s";
     $("mReward").textContent = nLoopTicks
       ? (100 * nRewardTicks / nLoopTicks).toFixed(0) + "%" : "-";
     if (ev.vol > 0.06 && ev.phase === "闭环") setPhase("闭环·奖励态", "reward");
     else if (ev.phase === "闭环") setPhase("闭环期", "loop");
-    // 实时脑电波形 + 频段能量（与监测采集页同款显示）
-    if (ev.wave && liveWaveVisible) drawWaveCanvas(liveWave, liveCtx, ev.wave);
-    if (ev.bands) {
-      for (const [key, barId, valId] of [
-        ["delta", "lvBarDelta", "lvValDelta"],
-        ["theta", "lvBarTheta", "lvValTheta"],
-        ["alpha", "lvBarAlpha", "lvValAlpha"],
-        ["beta", "lvBarBeta", "lvValBeta"],
-        ["gamma", "lvBarGamma", "lvValGamma"]]) {
-        const v = ev.bands[key];
-        $(valId).textContent = unitOr(v, 1, "dB");
-        setBandBar(barId, v);
-      }
-    }
+    // 复用采集台仪表渲染（波形/频段/通道读数/频谱），与监测模式同款显示
+    monLastTick = ev;
+    updateLabPanel(ev.wave, ev.bands, ev.vitals || {}, ev);
+    if (monWaveVisible) drawMonWave(ev.wave);
+    drawBandsChart(ev.bands);
+    drawPsd(ev.psd);
     appendLog(ev);
     drawChart();
   } else if (ev.type === "baseline_locked") {
     baselineDb = ev.baseline_db;
-    liveMsg(`基线已锁定：Alpha = ${numOr(ev.baseline_db, 1)} dB，闭环控制启动`, "ok");
+    monMsg(`基线已锁定：Alpha = ${numOr(ev.baseline_db, 1)} dB，闭环控制启动`, "ok");
+  } else if (ev.type === "saved") {
+    // 闭环数据统一走采集台入库卡（后端 end 前已插入 saved 事件）
+    const again = ev.again ? "（本会话此前已保存，返回同一路径）" : "";
+    $("monSavedCard").style.display = "";
+    $("monSavedInfo").textContent =
+      `✅ 数据：${ev.npz}  报告：${ev.report || "（生成失败）"}${again}`;
+    $("monIngestCmd").value = ev.ingest_cmd;
+    monSaved = ev;
+    showQcBox(ev.qc);
+    refreshSidOptions();
   } else if (ev.type === "message") {
-    liveMsg(ev.text);
+    monMsg(ev.text);
   } else if (ev.type === "error") {
     expLastError = ev.text;
-    liveMsg("错误：" + ev.text, "err");
+    monMsg("错误：" + ev.text, "err");
   } else if (ev.type === "end") {
     setPhase("已结束", "");
-    $("btnStart").disabled = false; $("btnStop").disabled = true;
+    $("monStart").disabled = false; $("monStop").disabled = true;
+    $("monSave").disabled = true;
     if (ev.error || expLastError) {
-      liveMsg("实验提前终止：" + (ev.error || expLastError), "err");
+      monMsg("实验提前终止：" + (ev.error || expLastError), "err");
       expLastError = "";
     } else {
-      liveMsg(`实验结束：决策 ${ev.n_decisions ?? "-"} 次，奖励态占比 ` +
+      monMsg(`实验结束：决策 ${ev.n_decisions ?? "-"} 次，奖励态占比 ` +
               `${(ev.reward_pct ?? 0).toFixed(0)}%` + (ev.stopped ? "（手动停止）" : ""), "ok");
       showExpSummary(ev);
     }
@@ -1534,82 +1620,24 @@ function appendLog(ev) {
   while (body.children.length > 200) body.removeChild(body.lastChild);
 }
 
-function liveMsg(text, cls) {
-  const el = $("liveMsg");
-  el.textContent = text;
-  el.className = "msg" + (cls ? " " + cls : "");
-}
-
-$("btnStart").onclick = async () => {
-  const b = $("inBaseline").value ? +$("inBaseline").value : null;
-  const d = $("inDuration").value ? +$("inDuration").value : null;
-  if (b != null && b < 30) return liveMsg("基线秒数不能小于 30（配置校验要求）", "err");
-  if (d != null && d < 60) return liveMsg("总时长不能小于 60 秒（配置校验要求）", "err");
-  if (b != null && d != null && d <= b) return liveMsg("总时长必须大于基线秒数", "err");
-  const mode = $("inMode").value;
-  const payload = {
-    simulate: mode === "simulate",
-    adapter: mode === "bled112" ? "bled112"
-      : mode === "neuradock" ? "neuradock" : "bleak",
-    serial_port: mode === "bled112"
-      ? ($("inPort").value.trim() || null)
-      : mode === "neuradock"
-        ? ($("inNd").value.trim() || "127.0.0.1:9600") : null,
-    address: $("inAddress").value.trim() || null,
-    config_path: $("inConfigFile").value || null,
-    baseline: b,
-    duration: d,
-    tag: $("inTag").value.trim() || null,
-    participant: $("inParticipant").value || null,
-    pre_state: $("inPreState").value.trim() || null,
-    contact_quality: $("inContact").value,
-    note: $("inNote").value.trim() || null,
-  };
-  try {
-    $("btnStart").disabled = true;
-    await api("/api/experiment/start", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload) });
-    $("btnStop").disabled = false;
-    connectStream();
-    liveMsg("实验已启动，等待数据…", "ok");
-  } catch (e) {
-    $("btnStart").disabled = false;
-    liveMsg("启动失败：" + e.message, "err");
-  }
-};
-
-$("btnStop").onclick = async () => {
-  try {
-    await api("/api/experiment/stop", { method: "POST" });
-    liveMsg("已发送停止指令…");
-  } catch (e) { liveMsg(e.message, "err"); }
-};
-
-// ── 状态轮询（监测与实验合并） ──
+// ── 状态轮询（统一采集台：监测与闭环共用一套按钮）──
 async function pollStatus() {
   try {
     const [s, m] = await Promise.all([
       api("/api/experiment/status"), api("/api/monitor/status")]);
     if (m.running) {
-      $("statusText").textContent =
-        `监测中 · ${m.mode} · ${m.started_at}`;
-      $("statusDot").className = "dot busy";
-      $("monStart").disabled = true;
-      $("monStop").disabled = false;
-      $("monSave").disabled = false;
+      $("statusText").textContent = `监测中 · ${m.mode} · ${m.started_at}`;
     } else if (s.running) {
-      $("statusText").textContent =
-        `实验运行中 · ${s.mode} · ${s.started_at}`;
-      $("statusDot").className = "dot busy";
-      $("btnStart").disabled = true; $("btnStop").disabled = false;
+      $("statusText").textContent = `实验运行中 · ${s.mode} · ${s.started_at}`;
     } else {
       $("statusText").textContent = "服务就绪";
-      $("statusDot").className = "dot";
-      $("btnStart").disabled = false; $("btnStop").disabled = true;
-      $("monStart").disabled = false;
-      $("monStop").disabled = true; $("monSave").disabled = true;
     }
+    const busy = m.running || s.running;
+    $("statusDot").className = busy ? "dot busy" : "dot";
+    $("monStart").disabled = busy;
+    $("monStop").disabled = !busy;
+    $("monSave").disabled = !m.running;   // "不断连保存"仅监测模式有意义
+    updateVrPill();                        // 顺带刷新 VR 投显胶囊
   } catch (e) { $("statusText").textContent = "服务不可用"; }
 }
 setInterval(pollStatus, 3000);
@@ -1767,12 +1795,12 @@ $("histSceneFilter").onchange = renderReports;
   $("preDate").value = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; }
 loadConfigList();
 loadProfiles();
+applyWsMode();          // 初始化会话模式（纯监测）的显示状态
+bindNeuraDockExtras();  // 幅程/VR胶囊/质量横幅等新组件
 pollStatus();
 resizeMonWave();
 resizeChart();
-resizeLiveWave();
 redrawMonitor();
-drawWaveIdle(liveWave, liveCtx, "等待实验数据…");
 connectStream();
 connectMonitorStream();
 </script>

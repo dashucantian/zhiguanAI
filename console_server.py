@@ -638,6 +638,7 @@ class MonitorSession:
                     "packets": self.receiver.packet_count,
                     "battery": battery,
                     "bands": bp, "state": state,
+                    "psd": buf.latest_psd,   # 借鉴 NeuraDock：0–45Hz 频谱曲线
                     "vitals": {k: vitals.get(k) for k in
                                ("hr", "rmssd", "sdnn", "pnn50", "motion",
                                 "spo2", "tsi", "d_hbo2", "d_hbr",
@@ -727,8 +728,39 @@ class ExperimentSession:
         self.session_info = dict(session_info or {})
 
         def worker():
+            def _emit_saved_card(ev):
+                """end 事件携带 data_path/report_path：在其转发前插入 saved，
+                统一喂采集台入库卡（SSE 收 end 即关流，saved 必须在 end 之前）。"""
+                data_path = ev.get("data_path")
+                report_path = ev.get("report_path")
+                if not (data_path and os.path.exists(data_path)):
+                    return
+                try:
+                    qc = qc_assess(data_path, report_path)
+                    info = self.session_info
+                    self.events.put({
+                        "type": "saved",
+                        "npz": data_path, "report": report_path,
+                        "ingest_cmd": make_ingest_command(
+                            data_path, report_path, scene="closedloop",
+                            participant=info.get("participant") or "<P001>",
+                            session_type=info.get("session_type")
+                            or "<baseline|training|test|custom>",
+                            quarantine=qc["recommend"] == "quarantine",
+                            note=info.get("note", ""),
+                            pre_state=info.get("pre_state", ""),
+                            post_state=info.get("post_state", ""),
+                            contact_quality=info.get("contact_quality", "")),
+                        "again": False, "qc": qc,
+                    })
+                except Exception as ex:
+                    self.events.put({"type": "message",
+                                     "text": f"入库卡片生成失败：{ex}"})
+
             try:
                 def _exp_relay(ev):
+                    if ev.get("type") == "end":
+                        _emit_saved_card(ev)
                     self.events.put(ev)
                     VR.push_from_experiment(ev)
                 result = run_closed_loop(
@@ -1087,6 +1119,7 @@ class StartPayload(BaseModel):
     duration: Optional[int] = None
     tag: Optional[str] = None
     participant: Optional[str] = None
+    session_type: Optional[str] = None   # 采集台统一表单：与会话登记共用
     pre_state: Optional[str] = None
     contact_quality: Optional[str] = None
     post_state: Optional[str] = None
@@ -1106,6 +1139,7 @@ def start_experiment(payload: StartPayload):
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))
     session_info = {"participant": payload.participant or "",
+                    "session_type": payload.session_type or "",
                     "pre_state": payload.pre_state or "",
                     "contact_quality": payload.contact_quality or "",
                     "post_state": payload.post_state or "",
@@ -1116,12 +1150,16 @@ def start_experiment(payload: StartPayload):
                   session_info=session_info)
     mode = ("模拟" if payload.simulate
             else "真机（BLED112）" if payload.adapter == "bled112"
+            else "NeuraDock TCP" if payload.adapter == "neuradock"
             else "真机蓝牙")
     return {"ok": True, "tag": cfg["experiment"]["tag"], "mode": mode}
 
 
 @app.post("/api/experiment/stop")
-def stop_experiment():
+def stop_experiment(payload: Optional[dict] = None):
+    # 统一入库卡需要事后自评：停止体可选 {"post_state": "..."}
+    if payload and payload.get("post_state"):
+        SESSION.session_info["post_state"] = str(payload["post_state"])
     if not SESSION.stop():
         raise HTTPException(status_code=409, detail="当前没有正在运行的实验")
     return {"ok": True, "message": "已发送停止指令，实验将在当前决策周期后结束"}
