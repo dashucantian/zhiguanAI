@@ -92,3 +92,4 @@ vr_assets/tls/
 !requirements.txt
 !config*.json
 !vr_feedback.html
+!console.html

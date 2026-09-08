@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>止观AI 统一控制台 · V0905-1</title>
+<style>
+  :root {
+    --bg: #0f0f11; --panel: #1a1a2e; --panel2: #16213e;
+    --border: #2a2a3e; --text: #ccc; --dim: #888;
+    --accent: #4ecdc4; --warn: #ff6b6b; --ok: #66bb6a; --gold: #ffe66d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text);
+         font-family: system-ui, "Microsoft YaHei", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px;
+           padding: 14px 24px; background: var(--panel);
+           border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 18px; color: #fff; }
+  header .status { font-size: 13px; color: var(--dim); margin-left: auto; }
+  header .status .dot { display: inline-block; width: 9px; height: 9px;
+    border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  header .status .dot.busy { background: var(--gold); }
+  nav { display: flex; gap: 4px; padding: 10px 24px 0; }
+  nav button { background: none; border: none; color: var(--dim);
+    font-size: 14px; padding: 8px 18px; cursor: pointer;
+    border-bottom: 2px solid transparent; }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  main { padding: 20px 24px; max-width: 1280px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+  .card { background: var(--panel); border: 1px solid var(--border);
+          border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; color: #ddd; margin-bottom: 12px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 4px; min-width: 160px; }
+  .field label { font-size: 12px; color: var(--dim); }
+  .field input, .field select { background: #0d0d18; color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px;
+    font-size: 13px; }
+  .field input:focus { outline: none; border-color: var(--accent); }
+  button.btn { background: var(--accent); color: #06202c; border: none;
+    border-radius: 5px; padding: 9px 22px; font-size: 14px; font-weight: bold;
+    cursor: pointer; }
+  button.btn:hover { filter: brightness(1.1); }
+  button.btn:disabled { background: #444; color: #888; cursor: not-allowed; }
+  button.btn.danger { background: var(--warn); color: #fff; }
+  button.btn.ghost { background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); }
+  .metrics { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+  .metric { background: var(--panel2); border-radius: 6px; padding: 10px 18px;
+            min-width: 120px; }
+  .metric .v { font-size: 22px; font-weight: bold; color: var(--accent); }
+  .metric .k { font-size: 11px; color: var(--dim); margin-top: 2px; }
+  canvas { width: 100%; background: #12121f; border: 1px solid var(--border);
+           border-radius: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: var(--panel2); color: #fff; padding: 6px 8px; text-align: left; }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  td.num, th.num { text-align: right; }
+  .logbox { max-height: 220px; overflow-y: auto; font-size: 12px;
+            font-family: Consolas, monospace; }
+  .msg { color: var(--dim); font-size: 13px; margin: 8px 0; }
+  .msg.ok { color: var(--ok); }
+  .msg.err { color: var(--warn); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .phase-tag { display: inline-block; padding: 2px 10px; border-radius: 10px;
+    font-size: 12px; background: #333; }
+  .phase-tag.baseline { background: #4a3f10; color: var(--gold); }
+  .phase-tag.loop { background: #14453e; color: var(--accent); }
+  .phase-tag.reward { background: #144527; color: var(--ok); }
+  .phase-tag.monitor { background: #0f3a52; color: #4fc3f7; }
+  textarea { width: 100%; background: #0d0d18; color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 10px;
+    font-family: Consolas, monospace; font-size: 12px; min-height: 320px; }
+  textarea.short { min-height: 60px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+  .hint { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+  .bandbar { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .bandbar .name { width: 90px; font-size: 12px; color: var(--dim); }
+  .bandbar .bar { flex: 1; height: 12px; background: #0d0d18;
+    border-radius: 3px; overflow: hidden; }
+  .bandbar .bar i { display: block; height: 100%; width: 0;
+    background: var(--accent); transition: width .3s; }
+  .bandbar .val { width: 70px; text-align: right; font-size: 12px;
+    font-family: Consolas, monospace; }
+  /* ── 2026-09-03 体验与治理升级新增样式 ── */
+  .chrow { display: flex; gap: 8px; margin-top: 12px; }
+  .chblock { flex: 1; background: var(--panel2); border-radius: 6px;
+    padding: 8px 10px; text-align: center; border: 1px solid var(--border); }
+  .chblock .chname { font-size: 11px; color: var(--dim); }
+  .chblock .chdot { display: inline-block; width: 10px; height: 10px;
+    border-radius: 50%; background: #555; margin-right: 6px;
+    vertical-align: middle; }
+  .chblock.good .chdot { background: var(--ok); }
+  .chblock.bad .chdot { background: var(--warn); }
+  .chblock.good { border-color: #2e5e34; }
+  .chblock.bad { border-color: #7a3030; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 10px;
+    font-size: 12px; }
+  .badge.ok { background: #144527; color: var(--ok); }
+  .badge.warn { background: #4a3f10; color: var(--gold); }
+  .badge.err { background: #4a1f1f; color: var(--warn); }
+  .badge.dim { background: #333; color: var(--dim); }
+  .badge.scene-mon { background: #0f3a52; color: #4fc3f7; }
+  .badge.scene-loop { background: #14453e; color: var(--accent); }
+  .qcbox { background: #12121f; border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 14px; margin: 10px 0; font-size: 13px; }
+  .qcbox .reason { color: var(--warn); font-size: 12px; margin-top: 3px; }
+  .toggle-btn { background: transparent; color: var(--dim);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 4px 12px; font-size: 12px; cursor: pointer; float: right; }
+  .toggle-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .card h2 .toggle-btn { margin-top: -2px; }
+  textarea.cmdbox { min-height: 54px; }
+  .outbox { background: #0d0d18; border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; font-size: 12px;
+    font-family: Consolas, monospace; white-space: pre-wrap;
+    max-height: 160px; overflow-y: auto; margin-top: 8px; color: var(--dim); }
+  .stat { font-size: 12px; color: var(--dim); }
+  .stat b { color: var(--text); font-weight: normal; }
+  /* ── 仪器级监测布局（复用旧版监测仪视觉语言）── */
+  .lab-grid { display: grid; grid-template-columns: 1fr 300px; gap: 18px; }
+  @media (max-width: 1100px) { .lab-grid { grid-template-columns: 1fr; } }
+  .lab-main canvas { width: 100%; display: block; background: #0d0d18;
+    border: 1px solid var(--border); border-radius: 4px; margin-bottom: 10px; }
+  .lab-panel { background: #0d0d18; border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; font-size: 13px; }
+  .lab-panel h3 { color: var(--accent); font-size: 13px; letter-spacing: 1px;
+    margin: 14px 0 6px; font-weight: 600; }
+  .lab-panel h3:first-child { margin-top: 0; }
+  .lp-rows .lp-row { display: flex; justify-content: space-between;
+    padding: 2px 0; font-family: Consolas, monospace; }
+  .lp-row { display: flex; justify-content: space-between; padding: 2px 0;
+    font-family: Consolas, monospace; }
+  .lp-row .chdot { display: inline-block; width: 9px; height: 9px;
+    border-radius: 2px; margin-right: 7px; background: #444; }
+  .lp-row .chdot.good { background: #43d675; }
+  .lp-row .chdot.bad { background: var(--warn); }
+  .lp-state { color: var(--accent); font-size: 20px; font-weight: 700;
+    font-family: Consolas, monospace; letter-spacing: 1px; }
+  .lp-sub { color: #556; font-size: 11px; margin-top: 2px; }
+  .lp-hrrow { display: flex; justify-content: space-between; align-items: baseline; }
+  .lp-hrrow b { color: var(--warn); font-size: 22px;
+    font-family: Consolas, monospace; font-weight: 700; }
+  /* ── 2026-09-08 采集台合并 + NeuraDock 借鉴组件 ── */
+  .pill { display: inline-block; padding: 3px 12px; border-radius: 12px;
+    font-size: 12px; border: 1px solid var(--border); color: var(--dim);
+    vertical-align: middle; margin-left: 10px; cursor: pointer; }
+  .pill .pdot { display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; background: #555; margin-right: 6px; }
+  .pill.is-live { color: var(--ok); border-color: #2e5e34; }
+  .pill.is-live .pdot { background: var(--ok); }
+  .pill.is-off { color: var(--dim); }
+  .qbanner { margin-top: 10px; padding: 8px 14px; border-radius: 6px;
+    font-size: 13px; display: none; }
+  .qbanner.warn { display: block; background: #3a2a10; color: var(--gold);
+    border: 1px solid #6a5010; }
+  .qbanner.err { display: block; background: #3a1414; color: var(--warn);
+    border: 1px solid #6a2020; }
+  .stablebar { display: flex; align-items: center; gap: 10px;
+    margin-top: 10px; font-size: 12px; color: var(--dim); }
+  .stablebar .sbar { flex: 0 0 180px; height: 8px; background: #0d0d18;
+    border-radius: 4px; overflow: hidden; }
+  .stablebar .sbar i { display: block; height: 100%; width: 100%;
+    background: var(--ok); transition: width .6s; }
+  .stablebar i.warn, .stablebar .sbar i.warn { background: var(--gold); }
+  .stablebar i.err, .stablebar .sbar i.err { background: var(--warn); }
+  .clipbox { float: right; font-size: 12px; color: var(--dim);
+    font-weight: normal; margin-right: 14px; }
+  .clipbox select { background: #0d0d18; color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
+    font-size: 12px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 止观AI 统一控制台</h1>
+  <span id="phaseTag" class="phase-tag">待机</span>
+  <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">服务连接中…</span></span>
+</header>
+<nav>
+  <button class="tab-btn active" data-tab="monitor">监测采集</button>
+  <button class="tab-btn" data-tab="live">闭环实验</button>
+  <button class="tab-btn" data-tab="config">配置管理</button>
+  <button class="tab-btn" data-tab="history">历史数据</button>
+  <button class="tab-btn" data-tab="govern">数据治理</button>
+</nav>
+<main>
+
+<!-- ═══ 监测采集 ═══ -->
+<section id="tab-monitor" class="tab active">
+  <div class="card">
+    <h2>会话登记与反馈</h2>
+    <div class="row">
+      <div class="field">
+        <label>测试者（本机默认可选，多人多份）</label>
+        <select id="monParticipant"></select>
+      </div>
+      <div class="field">
+        <label>会话类型</label>
+        <select id="monSessionType">
+          <option value="baseline">baseline 基线</option>
+          <option value="training">training 训练</option>
+          <option value="custom">custom 其他</option>
+          <option value="test">test 链路测试（自动进隔离区）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>事前自评（身心状态）</label>
+        <input id="monPreState" placeholder="如：平静、刚静坐后…">
+      </div>
+      <div class="field">
+        <label>接触质量初评</label>
+        <select id="monContact">
+          <option value="good">良好</option>
+          <option value="medium">一般</option>
+          <option value="bad">差（需调整电极）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>备注</label>
+        <input id="monNote" placeholder="环境、事件等">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost" id="monManageProfiles">👤 管理本机档案</button>
+      <span class="hint" style="margin:0;">登记信息随数据写入 npz 并自动带入入库流程；档案在「数据治理」页签维护。</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>连接与采集
+      <span id="vrPill" class="pill is-off" title="点击在新窗口打开 VR 反馈场景"><span class="pdot"></span>VR —</span>
+    </h2>
+    <div class="row">
+      <div class="field">
+        <label>会话模式</label>
+        <select id="wsMode">
+          <option value="monitor" selected>纯监测（只采集）</option>
+          <option value="loop">闭环反馈（声音奖励）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>数据源</label>
+        <select id="monMode">
+          <option value="simulate" selected>模拟模式（无需头环）</option>
+          <option value="device">真机蓝牙（电脑内置适配器）</option>
+          <option value="bled112">真机蓝牙（BLED112 外置适配器）</option>
+          <option value="neuradock">NeuraDock（TCP 数据服务）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>头环地址（真机）</label>
+        <input id="monAddress" placeholder="留空自动扫描">
+      </div>
+      <div class="field" id="monPortField" style="display:none">
+        <label>BLED112 串口（留空自动检测）</label>
+        <input id="monPort" placeholder="如 COM3">
+      </div>
+      <div class="field" id="monNdField" style="display:none">
+        <label>NeuraDock 数据服务地址</label>
+        <input id="monNd" value="127.0.0.1:9600" placeholder="IP:端口">
+      </div>
+    </div>
+    <div class="row" id="expParamsRow" style="display:none">
+      <div class="field">
+        <label>配置文件</label>
+        <select id="inConfigFile"></select>
+      </div>
+      <div class="field">
+        <label>基线秒数（留空用配置，≥30）</label>
+        <input id="inBaseline" type="number" min="30" placeholder="默认">
+      </div>
+      <div class="field">
+        <label>总时长秒（留空用配置，≥基线+30）</label>
+        <input id="inDuration" type="number" min="60" placeholder="默认">
+      </div>
+      <div class="field">
+        <label>实验标签</label>
+        <input id="inTag" placeholder="默认">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="monStart">▶ 开始采集</button>
+      <button class="btn ghost" id="monSave" disabled>💾 保存（不断连）</button>
+      <button class="btn danger" id="monStop" disabled>■ 停止并保存</button>
+      <span class="msg" id="monMsg"></span>
+    </div>
+    <div class="hint">停止时自动保存会话数据并做质检评估；两种模式数据均写入 npz（scene=monitor/closedloop），统一在此入库。数据格式与 Zen-EEG 数据字典一致。</div>
+  </div>
+
+  <div class="card">
+    <h2>实时监测仪表
+      <button class="toggle-btn" id="monWaveToggle">🌊 隐藏波形</button>
+    </h2>
+    <div class="lab-grid">
+      <div class="lab-main">
+        <div id="monWaveWrap"><canvas id="monWave" height="290"></canvas></div>
+        <canvas id="monBands" height="175"></canvas>
+        <canvas id="monPpg" height="115"></canvas>
+        <canvas id="monMotion" height="125"></canvas>
+      </div>
+      <aside class="lab-panel">
+        <h3>脑电通道信号</h3>
+        <div id="monChReads" class="lp-rows"></div>
+        <h3>最新频段能量</h3>
+        <div id="monBandReads" class="lp-rows"></div>
+        <h3>大脑状态</h3>
+        <div class="lp-state" id="monState">-</div>
+        <div class="lp-sub">频段能量：实时</div>
+        <h3>心率 / 心率变异性</h3>
+        <div class="lp-hrrow"><span>心率</span><b id="monHr">-</b></div>
+        <div class="lp-row"><span>RMSSD</span><span id="monRmssd">-</span></div>
+        <div class="lp-row"><span>SDNN</span><span id="monSdnn">-</span></div>
+        <div class="lp-row"><span>pNN50</span><span id="monPnn50">-</span></div>
+        <h3>血氧监测（实验性）</h3>
+        <div class="lp-sub">未经校准，仅供参考</div>
+        <div class="lp-row"><span>组织氧合 TSI</span><span id="monTsi">-</span></div>
+        <div class="lp-row"><span>ΔHbO₂</span><span id="monDhbo2">-</span></div>
+        <div class="lp-row"><span>ΔHbR</span><span id="monDhbr">-</span></div>
+        <div class="lp-row"><span>血氧估算</span><span id="monSpo2">-</span></div>
+        <div class="lp-row"><span>光学通道数</span><span id="monOptCh">-</span></div>
+        <h3>采集状态</h3>
+        <div class="lp-row"><span>已采集</span><span id="monElapsed">-</span></div>
+        <div class="lp-row"><span>蓝牙包</span><span id="monPackets">-</span></div>
+        <div class="lp-row"><span>电量</span><span id="monBattery">-</span></div>
+        <div class="lp-row"><span>头部运动</span><span id="monMotionVal">-</span></div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="card" id="monSavedCard" style="display:none;">
+    <h2>已保存的会话数据</h2>
+    <div class="msg ok" id="monSavedInfo"></div>
+    <div class="qcbox" id="monQcBox" style="display:none;"></div>
+    <div class="hint">质检闸门：不合格数据默认走 <b>隔离区</b>（03_quality_control/quarantine，不进 02_raw）；也可推翻建议强制正式入库。</div>
+    <div class="row" style="margin-top:8px;">
+      <div class="field">
+        <label>预登记匹配（--sid）</label>
+        <select id="monSidSelect"></select>
+      </div>
+      <div class="field">
+        <label>入库去向（可推翻质检建议）</label>
+        <select id="monIngestChoice">
+          <option value="auto">按质检建议</option>
+          <option value="ingest">正式入库（02_raw）</option>
+          <option value="quarantine">隔离区落盘</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>事后自评（身心状态）</label>
+        <input id="monPostState" placeholder="如：更放松、无不适…">
+      </div>
+      <div class="field">
+        <label>接触质量终评</label>
+        <select id="monContactFinal">
+          <option value="good">良好</option>
+          <option value="medium">一般</option>
+          <option value="bad">差</option>
+        </select>
+      </div>
+    </div>
+    <textarea class="cmdbox" id="monIngestCmd" readonly></textarea>
+    <div class="toolbar">
+      <button class="btn ghost" id="monCopyCmd">📋 复制命令</button>
+      <button class="btn" id="monIngestRun">🚀 一键入库</button>
+      <span class="msg" id="monIngestMsg"></span>
+    </div>
+    <div class="outbox" id="monIngestOut" style="display:none;"></div>
+  </div>
+</section>
+
+<!-- ═══ 闭环实验 ═══ -->
+<section id="tab-live" class="tab">
+  <div class="card">
+    <h2>启动实验</h2>
+    <div class="row">
+      <div class="field">
+        <label>数据源</label>
+        <select id="inMode">
+          <option value="simulate" selected>模拟模式（无需头环）</option>
+          <option value="device">真机蓝牙（电脑内置适配器）</option>
+          <option value="bled112">真机蓝牙（BLED112 外置适配器）</option>
+          <option value="neuradock">NeuraDock（TCP 数据服务）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>头环地址（真机）</label>
+        <input id="inAddress" placeholder="留空自动扫描">
+      </div>
+      <div class="field" id="inPortField" style="display:none">
+        <label>BLED112 串口（留空自动检测）</label>
+        <input id="inPort" placeholder="如 COM3">
+      </div>
+      <div class="field" id="inNdField" style="display:none">
+        <label>NeuraDock 数据服务地址</label>
+        <input id="inNd" value="127.0.0.1:9600" placeholder="IP:端口">
+      </div>
+      <div class="field">
+        <label>配置文件</label>
+        <select id="inConfigFile"></select>
+      </div>
+      <div class="field">
+        <label>基线秒数（留空用配置，≥30）</label>
+        <input id="inBaseline" type="number" min="30" placeholder="默认">
+      </div>
+      <div class="field">
+        <label>总时长秒（留空用配置，≥基线+30）</label>
+        <input id="inDuration" type="number" min="60" placeholder="默认">
+      </div>
+      <div class="field">
+        <label>标签</label>
+        <input id="inTag" placeholder="默认">
+      </div>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>测试者（本机默认可选）</label>
+        <select id="inParticipant"></select>
+      </div>
+      <div class="field">
+        <label>事前自评（身心状态）</label>
+        <input id="inPreState" placeholder="如：平静、刚静坐后…">
+      </div>
+      <div class="field">
+        <label>接触质量初评</label>
+        <select id="inContact">
+          <option value="good">良好</option>
+          <option value="medium">一般</option>
+          <option value="bad">差（需调整电极）</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>备注</label>
+        <input id="inNote" placeholder="环境、事件等">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="btnStart">▶ 开始实验</button>
+      <button class="btn danger" id="btnStop" disabled>■ 停止</button>
+      <span class="msg" id="liveMsg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>实时状态</h2>
+    <div class="metrics">
+      <div class="metric"><div class="v" id="mAlpha">-</div><div class="k">Alpha (dB)</div></div>
+      <div class="metric"><div class="v" id="mBaseline">-</div><div class="k">基线 (dB)</div></div>
+      <div class="metric"><div class="v" id="mVol">-</div><div class="k">指令音量 (0–1)</div></div>
+      <div class="metric"><div class="v" id="mBeat">-</div><div class="k">节拍 (Hz)</div></div>
+      <div class="metric"><div class="v" id="mState">-</div><div class="k">大脑状态</div></div>
+      <div class="metric"><div class="v" id="mElapsed">-</div><div class="k">已进行 (s)</div></div>
+      <div class="metric"><div class="v" id="mReward">-</div><div class="k">奖励态占比 (%)</div></div>
+    </div>
+    <canvas id="chart" height="260"></canvas>
+    <div class="hint">青色 = Alpha 能量（dB），金色 = 基线，红色 = 指令音量（右轴），竖虚线 = 基线期结束</div>
+  </div>
+
+  <div class="card">
+    <h2>实时脑电信号
+      <button class="toggle-btn" id="liveWaveToggle">🌊 隐藏波形</button>
+    </h2>
+    <div id="liveWaveWrap">
+      <canvas id="liveWave" height="320"></canvas>
+      <div class="hint">实时脑电波形（5 秒窗口，通道随当前设备布局），随决策周期刷新（约每 2 秒）</div>
+    </div>
+    <div style="margin-top:14px;">
+      <div class="bandbar"><span class="name">δ 德尔塔</span><div class="bar"><i id="lvBarDelta"></i></div><span class="val" id="lvValDelta">-</span></div>
+      <div class="bandbar"><span class="name">θ 西塔</span><div class="bar"><i id="lvBarTheta" style="background:var(--gold)"></i></div><span class="val" id="lvValTheta">-</span></div>
+      <div class="bandbar"><span class="name">α 阿尔法</span><div class="bar"><i id="lvBarAlpha"></i></div><span class="val" id="lvValAlpha">-</span></div>
+      <div class="bandbar"><span class="name">β 贝塔</span><div class="bar"><i id="lvBarBeta" style="background:var(--warn)"></i></div><span class="val" id="lvValBeta">-</span></div>
+      <div class="bandbar"><span class="name">γ 伽马</span><div class="bar"><i id="lvBarGamma" style="background:#a37eba"></i></div><span class="val" id="lvValGamma">-</span></div>
+    </div>
+  </div>
+
+  <div class="card" id="expSummaryCard" style="display:none;">
+    <h2>实验小结（场景：闭环实验）</h2>
+    <div class="metrics">
+      <div class="metric"><div class="v" id="esTag">-</div><div class="k">实验标签</div></div>
+      <div class="metric"><div class="v" id="esDecisions">-</div><div class="k">决策次数</div></div>
+      <div class="metric"><div class="v" id="esReward">-</div><div class="k">奖励态占比</div></div>
+      <div class="metric"><div class="v" id="esBaseline">-</div><div class="k">基线 Alpha (dB)</div></div>
+      <div class="metric"><div class="v" id="esDuration">-</div><div class="k">总时长</div></div>
+      <div class="metric"><div class="v" id="esSample">-</div><div class="k">有效采样率</div></div>
+    </div>
+    <div class="hint">数据已标记为闭环实验场景（scene=closedloop），入库后与监测采集数据区分。质检评估见「数据治理」页签或报告页。</div>
+  </div>
+
+  <div class="card">
+    <h2>决策日志（最近 200 条）</h2>
+    <div class="logbox">
+      <table>
+        <thead><tr><th>时间</th><th>阶段</th><th class="num">Alpha</th>
+          <th class="num">节拍</th><th class="num">音量</th><th>说明</th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 配置管理 ═══ -->
+<section id="tab-config" class="tab">
+  <div class="card">
+    <h2>配置编辑器</h2>
+    <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
+      <select id="cfgFileSelect"></select>
+      <button class="btn ghost" id="btnCfgLoad">载入</button>
+      <button class="btn ghost" id="btnCfgTemplate">套用模板结构</button>
+    </div>
+    <textarea id="cfgEditor" spellcheck="false"></textarea>
+    <div class="toolbar">
+      <button class="btn ghost" id="btnCfgValidate">校验</button>
+      <button class="btn" id="btnCfgSave">保存配置</button>
+      <span class="msg" id="cfgMsg"></span>
+    </div>
+    <div class="hint">保存前自动备份为 .bak；以 _ 开头的键是注释，会被自动忽略。</div>
+  </div>
+  <div class="card">
+    <h2>生效配置预览（与默认值合并后）</h2>
+    <pre id="cfgMerged" style="font-size:12px;color:var(--dim);overflow-x:auto;"></pre>
+  </div>
+</section>
+
+<!-- ═══ 历史数据 ═══ -->
+<section id="tab-history" class="tab">
+  <div class="card">
+    <h2>脑电分析报告（监测会话与闭环实验共用，含场景与质检）</h2>
+    <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
+      <label class="stat">场景筛选：</label>
+      <select id="histSceneFilter">
+        <option value="all">全部</option>
+        <option value="monitor">监测采集</option>
+        <option value="closedloop">闭环实验</option>
+        <option value="unknown">未标记</option>
+      </select>
+    </div>
+    <table>
+      <thead><tr><th>报告</th><th>场景</th><th>质检建议</th><th>生成时间</th><th>大小</th><th>操作</th></tr></thead>
+      <tbody id="reportBody"></tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h2>实验日志组（特征 / 决策 / 事件 / 配置快照）</h2>
+    <table>
+      <thead><tr><th>时间</th><th>文件</th></tr></thead>
+      <tbody id="expBody"></tbody>
+    </table>
+  </div>
+  <div class="outbox" id="histIngestOut" style="display:none;"></div>
+</section>
+
+<!-- ═══ 数据治理 ═══ -->
+<section id="tab-govern" class="tab">
+  <div class="card">
+    <h2>本机测试者档案（默认可选，多人多份）</h2>
+    <div class="hint" style="margin-top:0;">一次登记后本机默认复用，无需重复登记；可随时新增其他测试者或取消默认。档案存于本机 <b>console_profiles.json</b>，不随数据外传。</div>
+    <table>
+      <thead><tr><th>编号</th><th>称呼（可选）</th><th>说明</th><th>默认</th><th>操作</th></tr></thead>
+      <tbody id="profileBody"></tbody>
+    </table>
+    <div class="row" style="margin-top:10px;">
+      <div class="field">
+        <label>新测试者编号（P001 形式）</label>
+        <input id="newProfileId" placeholder="P002">
+      </div>
+      <div class="field">
+        <label>称呼（可选）</label>
+        <input id="newProfileName" placeholder="如：法师本人">
+      </div>
+      <div class="field">
+        <label>说明（可选）</label>
+        <input id="newProfileNote" placeholder="角色、注意事项等">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn ghost" id="btnAddProfile">➕ 添加测试者</button>
+      <span class="msg" id="profileMsg"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>会话登记表（Zen-EEG 01_registry）</h2>
+    <div class="row">
+      <div class="field">
+        <label>测试者</label>
+        <select id="preParticipant"></select>
+      </div>
+      <div class="field">
+        <label>会话类型</label>
+        <select id="preType">
+          <option value="baseline">baseline 基线</option>
+          <option value="training">training 训练</option>
+          <option value="sleep">sleep 睡眠</option>
+          <option value="custom">custom 其他</option>
+          <option value="test">test 链路测试</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>日期（默认今天）</label>
+        <input id="preDate" type="date">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="btnPreregister">📝 新建预登记</button>
+      <button class="btn ghost" id="btnRefreshRegistry">🔄 刷新</button>
+      <span class="msg" id="preMsg"></span>
+    </div>
+    <table style="margin-top:10px;">
+      <thead><tr><th>会话编号 (Zen-ID)</th><th>测试者</th><th>日期</th><th>类型</th><th class="num">时长(s)</th><th>状态</th></tr></thead>
+      <tbody id="registryBody"></tbody>
+    </table>
+    <div class="hint">状态说明：planned = 已预登记待采集；finished = 已入库；quarantined = 隔离区（不合格/测试数据）。</div>
+  </div>
+
+  <div class="card">
+    <h2>隔离区（03_quality_control/quarantine）</h2>
+    <div class="hint" style="margin-top:0;">不合格数据与链路测试数据不进 02_raw，完整落盘在此并保留可追溯性。</div>
+    <table style="margin-top:8px;">
+      <thead><tr><th>会话编号</th><th>落盘时间</th><th>说明</th></tr></thead>
+      <tbody id="quarantineBody"></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+
+// ── 标签页切换 ──
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    btn.classList.add("active");
+    $("tab-" + btn.dataset.tab).classList.add("active");
+    if (btn.dataset.tab === "history") loadHistory();
+    if (btn.dataset.tab === "config" && !$("cfgEditor").value) loadConfigList();
+    if (btn.dataset.tab === "govern") loadGovern();
+  };
+});
+
+async function api(path, opt) {
+  const res = await fetch(path, opt);
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+// ── 页内确认模态与 toast（2026-09-05 验收整改：替代原生 confirm/alert）──
+function askConfirm(title, bodyText) {
+  return new Promise(resolve => {
+    const mask = document.createElement("div");
+    mask.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);"
+      + "z-index:99;display:flex;align-items:center;justify-content:center;";
+    const box = document.createElement("div");
+    box.style.cssText = "background:var(--panel);border:1px solid var(--border);"
+      + "border-radius:8px;padding:18px 22px;max-width:480px;width:90%;";
+    const h = document.createElement("h2");
+    h.style.cssText = "font-size:15px;color:#ddd;margin-bottom:10px;";
+    h.textContent = title;
+    const bd = document.createElement("div");
+    bd.style.cssText = "font-size:13px;white-space:pre-wrap;color:var(--text);"
+      + "margin-bottom:14px;";
+    bd.textContent = bodyText;
+    const bar = document.createElement("div");
+    bar.className = "toolbar";
+    bar.style.cssText = "margin-top:0;justify-content:flex-end;";
+    const ok = document.createElement("button");
+    ok.className = "btn"; ok.textContent = "确认";
+    const no = document.createElement("button");
+    no.className = "btn ghost"; no.textContent = "取消";
+    bar.appendChild(no); bar.appendChild(ok);
+    const done = v => { mask.remove(); resolve(v); };
+    ok.onclick = () => done(true);
+    no.onclick = () => done(false);
+    mask.onclick = e => { if (e.target === mask) done(false); };
+    box.appendChild(h); box.appendChild(bd); box.appendChild(bar);
+    mask.appendChild(box);
+    document.body.appendChild(mask);
+  });
+}
+function toast(text, cls) {
+  const t = document.createElement("div");
+  t.textContent = text;
+  t.style.cssText = "position:fixed;left:50%;top:64px;transform:translateX(-50%);"
+    + "z-index:99;background:var(--panel2);border:1px solid var(--border);"
+    + "border-radius:6px;padding:10px 18px;font-size:13px;"
+    + "box-shadow:0 4px 18px rgba(0,0,0,.5);";
+  t.style.color = cls === "err" ? "var(--warn)"
+    : cls === "ok" ? "var(--ok)" : "var(--text)";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 4200);
+}
+
+// ═══ 监测采集 ═══
+const monWave = $("monWave"), monCtx = monWave.getContext("2d");
+const MON_CH = ["TP9", "AF7", "AF8", "TP10"];  // 缺省布局；实际以帧数据 wave 键为准（V1.4 多设备）
+const MON_COLORS = ["#4fc3f7", "#81c784", "#ffb74d", "#e57373",
+                    "#ba68c8", "#4db6ac", "#fff176"];
+function waveChannels(wave) {
+  // 按 wave 实际键序返回通道列表；已知设备保持固定电序，未知回退键序
+  const keys = wave ? Object.keys(wave) : [];
+  if (keys.length && keys.every(k => MON_CH.includes(k))) return MON_CH;
+  const ND = ["CP5", "CP6", "PO3", "PO4", "O1", "Oz", "O2"];
+  if (keys.length === 7 && keys.every(k => ND.includes(k))) return ND;
+  return keys.length ? keys : MON_CH;
+}
+let monEs = null, monRunning = false, monLastError = "";
+
+// ── 仪器级图表底座（复用旧版监测仪视觉语言：坐标轴/图例/等宽读数）──
+const LAB_FONT = "Consolas, 'Courier New', monospace";
+const monBands = $("monBands"), monBandsCtx = monBands.getContext("2d");
+const monPpg = $("monPpg"), monPpgCtx = monPpg.getContext("2d");
+const monMotion = $("monMotion"), monMotionCtx = monMotion.getContext("2d");
+let monLastTick = null;   // 缓存最近一帧，窗口缩放后可重绘
+
+function sizeCanvas(cv, cssH) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round((cv.clientWidth || 600) * dpr);
+  cv.height = Math.round(cssH * dpr);
+}
+function resizeMonWave() {
+  sizeCanvas(monWave, 290); sizeCanvas(monBands, 175);
+  sizeCanvas(monPpg, 115); sizeCanvas(monMotion, 125);
+}
+window.addEventListener("resize", () => {
+  resizeMonWave(); resizeChart(); resizeLiveWave();
+  redrawMonitor();
+});
+function redrawMonitor() {
+  if (monLastTick) {
+    drawMonWave(monLastTick.wave); drawBandsChart(monLastTick.bands);
+    drawPpgChart(monLastTick.ppg); drawMotionChart(monLastTick.motion_xyz);
+  } else {
+    drawMonIdle(); drawBandsChart(null); drawPpgChart(null); drawMotionChart(null);
+  }
+}
+
+// 图框：标题 + 纵轴标签 + 带边框绘图区；返回绘图区与比例尺信息
+function chartFrame(c2d, cv, opt) {
+  const W = cv.width, H = cv.height, dpr = window.devicePixelRatio || 1;
+  c2d.clearRect(0, 0, W, H);
+  const pad = { l: 46 * dpr, r: 10 * dpr, t: 26 * dpr, b: 26 * dpr };
+  if (opt.title) {
+    c2d.fillStyle = "#bbb"; c2d.font = `600 ${12 * dpr}px ${LAB_FONT}`;
+    c2d.textAlign = "center";
+    c2d.fillText(opt.title, W / 2, 16 * dpr);
+  }
+  if (opt.ylab) {
+    c2d.save(); c2d.translate(12 * dpr, H / 2); c2d.rotate(-Math.PI / 2);
+    c2d.fillStyle = "#778"; c2d.font = `${10 * dpr}px ${LAB_FONT}`;
+    c2d.textAlign = "center"; c2d.fillText(opt.ylab, 0, 0); c2d.restore();
+  }
+  const P = { x: pad.l, y: pad.t, w: W - pad.l - pad.r, h: H - pad.t - pad.b };
+  c2d.strokeStyle = "#333"; c2d.lineWidth = 1;
+  c2d.strokeRect(P.x, P.y, P.w, P.h);
+  return { W, H, dpr, P };
+}
+function xTicks(c2d, f, labels) {   // labels: [{t: 0..1, s: "文本"}]
+  c2d.font = `${9 * f.dpr}px ${LAB_FONT}`; c2d.textAlign = "center";
+  for (const lb of labels) {
+    const x = f.P.x + lb.t * f.P.w;
+    c2d.strokeStyle = "#1c1c28";
+    c2d.beginPath(); c2d.moveTo(x, f.P.y); c2d.lineTo(x, f.P.y + f.P.h); c2d.stroke();
+    c2d.fillStyle = "#667";
+    c2d.fillText(lb.s, x, f.P.y + f.P.h + 13 * f.dpr);
+  }
+}
+function yTicks(c2d, f, vals, fmt) { // vals: [{v: 数值, py: 像素y}]
+  c2d.font = `${9 * f.dpr}px ${LAB_FONT}`;
+  for (const o of vals) {
+    c2d.strokeStyle = "#1c1c28";
+    c2d.beginPath(); c2d.moveTo(f.P.x, o.py); c2d.lineTo(f.P.x + f.P.w, o.py); c2d.stroke();
+    c2d.fillStyle = "#667"; c2d.textAlign = "right";
+    c2d.fillText(fmt(o.v), f.P.x - 5 * f.dpr, o.py + 3 * f.dpr);
+  }
+}
+function legend(c2d, f, items) {     // 绘图区右上角图例（线段+名称）
+  const dpr = f.dpr; let x = f.P.x + f.P.w - 8 * dpr;
+  c2d.font = `${10 * dpr}px ${LAB_FONT}`; c2d.textAlign = "right";
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i];
+    c2d.fillStyle = "#99a"; c2d.fillText(it.label, x, f.P.y + 13 * dpr);
+    x -= c2d.measureText(it.label).width + 6 * dpr;
+    c2d.strokeStyle = it.color; c2d.lineWidth = 2 * dpr;
+    c2d.beginPath(); c2d.moveTo(x - 16 * dpr, f.P.y + 10 * dpr);
+    c2d.lineTo(x - 2 * dpr, f.P.y + 10 * dpr); c2d.stroke();
+    x -= 22 * dpr;
+  }
+}
+function polyline(c2d, f, data, color, ymap, lw) {
+  if (!data || data.length < 2) return;
+  c2d.strokeStyle = color; c2d.lineWidth = (lw || 1) * f.dpr;
+  c2d.beginPath();
+  for (let i = 0; i < data.length; i++) {
+    const x = f.P.x + i / (data.length - 1) * f.P.w;
+    const y = ymap(data[i]);
+    if (i) c2d.lineTo(x, y); else c2d.moveTo(x, y);
+  }
+  c2d.stroke();
+}
+function idleOverlay(c2d, f, text) {
+  c2d.fillStyle = "#556"; c2d.font = `${12 * f.dpr}px ${LAB_FONT}`;
+  c2d.textAlign = "center";
+  c2d.fillText(text, f.P.x + f.P.w / 2, f.P.y + f.P.h / 2);
+}
+
+// 多通道脑电波形（通道随设备布局）：叠加显示 + μV 纵轴 + 秒横轴 + 图例（旧版样式）
+function drawWaveCanvas(cv, c2d, wave) {
+  const f = chartFrame(c2d, cv, { title: "脑电波形（5 秒窗口）", ylab: "μV" });
+  const CLIP = 150;
+  yTicks(c2d, f, [-150, -100, -50, 0, 50, 100, 150].map(v => ({
+    v, py: f.P.y + (1 - (v + CLIP) / (2 * CLIP)) * f.P.h })), v => String(v));
+  xTicks(c2d, f, [0, 1, 2, 3, 4, 5].map(s => ({ t: s / 5, s: String(s) })));
+  const chs = waveChannels(wave);
+  legend(c2d, f, chs.map((ch, i) => ({ label: ch, color: MON_COLORS[i] })));
+  const has = chs.some(ch => wave && wave[ch] && wave[ch].length);
+  if (!has) { idleOverlay(c2d, f, "等待脑电数据…"); return; }
+  c2d.save();
+  c2d.beginPath(); c2d.rect(f.P.x, f.P.y, f.P.w, f.P.h); c2d.clip();
+  chs.forEach((ch, i) => {
+    polyline(c2d, f, wave && wave[ch], MON_COLORS[i],
+      v => f.P.y + (1 - (Math.max(-CLIP, Math.min(CLIP, v)) + CLIP)
+        / (2 * CLIP)) * f.P.h, 0.9);
+  });
+  c2d.restore();
+}
+
+function drawWaveIdle(cv, c2d, text) {
+  const f = chartFrame(c2d, cv, { title: "脑电波形（5 秒窗口）", ylab: "μV" });
+  idleOverlay(c2d, f, text);
+}
+
+function drawMonWave(wave) { drawWaveCanvas(monWave, monCtx, wave); }
+function drawMonIdle() { drawWaveIdle(monWave, monCtx, "等待监测数据…"); }
+
+// 频段能量：dB 纵轴 + 五色实心柱 + 中文标签（旧版样式）
+const BAND_META = [
+  ["delta", "δ 德尔塔", "#8a8a8a"], ["theta", "θ 西塔", "#f5e663"],
+  ["alpha", "α 阿尔法", "#4ecdc4"], ["beta", "β 贝塔", "#ff6b6b"],
+  ["gamma", "γ 伽马", "#b39ddb"]];
+function drawBandsChart(bands) {
+  const c2d = monBandsCtx;
+  const f = chartFrame(c2d, monBands, { title: "频段能量（分贝）", ylab: "dB" });
+  const hi = 40;
+  yTicks(c2d, f, [0, 10, 20, 30, 40].map(v => ({
+    v, py: f.P.y + (1 - v / hi) * f.P.h })), v => String(v));
+  const slot = f.P.w / BAND_META.length;
+  BAND_META.forEach(([key, label, color], i) => {
+    const v = bands ? bands[key] : null;
+    const cx = f.P.x + slot * (i + 0.5), bw = slot * 0.5;
+    c2d.textAlign = "center";
+    if (typeof v === "number" && isFinite(v)) {
+      const h = Math.max(2 * f.dpr, Math.max(0, Math.min(1, v / hi)) * f.P.h);
+      c2d.fillStyle = color; c2d.globalAlpha = 0.92;
+      c2d.fillRect(cx - bw / 2, f.P.y + f.P.h - h, bw, h);
+      c2d.globalAlpha = 1;
+      c2d.fillStyle = "#cde"; c2d.font = `${10 * f.dpr}px ${LAB_FONT}`;
+      c2d.fillText(v.toFixed(1), cx, f.P.y + f.P.h - h - 4 * f.dpr);
+    } else {
+      c2d.fillStyle = color; c2d.globalAlpha = 0.22;
+      c2d.fillRect(cx - bw / 2, f.P.y + f.P.h - 3 * f.dpr, bw, 3 * f.dpr);
+      c2d.globalAlpha = 1;
+    }
+    c2d.fillStyle = "#9ab"; c2d.font = `${10 * f.dpr}px ${LAB_FONT}`;
+    c2d.fillText(label, cx, f.P.y + f.P.h + 14 * f.dpr);
+  });
+}
+
+// 脉搏波（5 秒）
+function drawPpgChart(ppg) {
+  const c2d = monPpgCtx;
+  const f = chartFrame(c2d, monPpg, { title: "脉搏波（5 秒）", ylab: "a.u." });
+  xTicks(c2d, f, [-5, -4, -3, -2, -1, 0].map(s => ({ t: (s + 5) / 5, s: String(s) })));
+  if (!ppg || ppg.length < 2) {
+    idleOverlay(c2d, f, "等待脉搏波数据（需佩戴头环）…"); return;
+  }
+  let lo = Infinity, hi = -Infinity;
+  for (const v of ppg) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  if (hi - lo < 1e-6) { lo -= 1; hi += 1; }
+  const m = (hi - lo) * 0.15; lo -= m; hi += m;
+  yTicks(c2d, f, [lo, (lo + hi) / 2, hi].map(v => ({
+    v, py: f.P.y + (1 - (v - lo) / (hi - lo)) * f.P.h })), v => v.toFixed(0));
+  c2d.save(); c2d.beginPath();
+  c2d.rect(f.P.x, f.P.y, f.P.w, f.P.h); c2d.clip();
+  polyline(c2d, f, ppg, "#ff6b6b",
+    v => f.P.y + (1 - (v - lo) / (hi - lo)) * f.P.h, 1.2);
+  c2d.restore();
+}
+
+// 头部运动（5 秒，三轴加速度 X/Y/Z）
+function drawMotionChart(mo) {
+  const c2d = monMotionCtx;
+  const f = chartFrame(c2d, monMotion, { title: "头部运动（5 秒）", ylab: "g" });
+  xTicks(c2d, f, [-5, -4, -3, -2, -1, 0].map(s => ({ t: (s + 5) / 5, s: String(s) })));
+  legend(c2d, f, [{ label: "X", color: "#4fc3f7" },
+                  { label: "Y", color: "#81c784" },
+                  { label: "Z", color: "#ffb74d" }]);
+  const axes = mo ? [mo.x, mo.y, mo.z] : [];
+  const has = axes.some(a => a && a.length);
+  if (!has) { idleOverlay(c2d, f, "等待运动数据（需佩戴头环）…"); return; }
+  let lo = Infinity, hi = -Infinity;
+  for (const a of axes) if (a) for (const v of a) {
+    if (v < lo) lo = v; if (v > hi) hi = v;
+  }
+  if (!isFinite(lo)) { lo = -1; hi = 1; }
+  if (hi - lo < 1e-6) { lo -= 0.5; hi += 0.5; }
+  const m = (hi - lo) * 0.12; lo -= m; hi += m;
+  yTicks(c2d, f, [lo, (lo + hi) / 2, hi].map(v => ({
+    v, py: f.P.y + (1 - (v - lo) / (hi - lo)) * f.P.h })), v => v.toFixed(1));
+  c2d.save(); c2d.beginPath();
+  c2d.rect(f.P.x, f.P.y, f.P.w, f.P.h); c2d.clip();
+  [["#4fc3f7", axes[0]], ["#81c784", axes[1]], ["#ffb74d", axes[2]]]
+    .forEach(([col, a]) => polyline(c2d, f, a, col,
+      v => f.P.y + (1 - (v - lo) / (hi - lo)) * f.P.h, 1));
+  c2d.restore();
+}
+
+function setBandBar(id, val) {
+  const el = $(id);
+  if (!el) return;
+  const pct = (typeof val === "number" && isFinite(val))
+    ? Math.max(0, Math.min(1, (val + 10) / 50)) : 0;
+  el.style.width = (pct * 100).toFixed(0) + "%";
+}
+
+// 2026-09-03：体征字段类型安全格式化。
+// 数据层在无 IMU/PPG 数据时可能给出字符串占位（如 motion = "---"），
+// 直接调用 .toFixed 会抛错并中断整个渲染链（表现为波形空白）。
+function numOr(v, digits) {
+  if (typeof v === "number" && isFinite(v)) return v.toFixed(digits);
+  return typeof v === "string" && v && v !== "---" ? v : "-";
+}
+function unitOr(v, digits, unit) {
+  const s = numOr(v, digits);
+  return s === "-" ? "-" : s + " " + unit;
+}
+function signedOr(v, digits, unit) {
+  if (typeof v !== "number" || !isFinite(v)) return "-";
+  return (v >= 0 ? "+" : "") + v.toFixed(digits) + " " + unit;
+}
+
+function monMsg(text, cls) {
+  const el = $("monMsg");
+  el.textContent = text;
+  el.className = "msg" + (cls ? " " + cls : "");
+}
+
+function channelQuality(data) {
+  // 简易接触质量判定：峰峰值过小（悬空）或过大（运动伪迹）视为异常
+  if (!data || !data.length) return null;
+  let lo = Infinity, hi = -Infinity;
+  for (const v of data) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const ptp = hi - lo;
+  if (ptp < 4 || ptp > 320) return "bad";
+  return "good";
+}
+
+// 右侧仪表面板：通道读数（质量点+RMS μV）、频段读数、体征全套
+function updateLabPanel(wave, bands, vit, ev) {
+  $("monChReads").innerHTML = waveChannels(wave).map(ch => {
+    const q = channelQuality(wave && wave[ch]);
+    const d = wave && wave[ch];
+    let rms = null;
+    if (d && d.length) {
+      let s = 0; for (const v of d) s += v * v;
+      rms = Math.sqrt(s / d.length);
+    }
+    return `<div class="lp-row"><span><span class="chdot ${q || ""}"></span>${ch}</span>`
+      + `<span>${rms != null ? rms.toFixed(1) + " μV" : "-"}</span></div>`;
+  }).join("");
+  $("monBandReads").innerHTML = BAND_META.map(([key, label]) =>
+    `<div class="lp-row"><span>${label.slice(2).trim()}</span>`
+    + `<span>${unitOr(bands && bands[key], 1, "dB")}</span></div>`).join("");
+  $("monState").textContent = (ev.state || "-").split(" ")[0] || "-";
+  $("monHr").textContent = numOr(vit.hr, 0) === "-" ? "-" : numOr(vit.hr, 0) + " 次/分";
+  $("monRmssd").textContent = unitOr(vit.rmssd, 0, "ms");
+  $("monSdnn").textContent = unitOr(vit.sdnn, 0, "ms");
+  $("monPnn50").textContent = unitOr(vit.pnn50, 0, "%");
+  $("monTsi").textContent = unitOr(vit.tsi, 1, "%");
+  $("monDhbo2").textContent = signedOr(vit.d_hbo2, 2, "μM");
+  $("monDhbr").textContent = signedOr(vit.d_hbr, 2, "μM");
+  $("monSpo2").textContent = unitOr(vit.spo2, 0, "%");
+  $("monOptCh").textContent = numOr(vit.optics_ch, 0);
+  $("monElapsed").textContent = Math.round(ev.elapsed) + "s";
+  $("monPackets").textContent = ev.packets != null ? ev.packets : "-";
+  $("monBattery").textContent = unitOr(ev.battery, 0, "%");
+  $("monMotion").textContent = numOr(vit.motion, 1);
+}
+
+let monWaveVisible = true;
+
+function handleMonitorEvent(ev) {
+  if (ev.type === "tick") {
+    monLastTick = ev;
+    updateLabPanel(ev.wave, ev.bands, ev.vitals || {}, ev);
+    if (monWaveVisible) drawMonWave(ev.wave);
+    drawBandsChart(ev.bands);
+    drawPpgChart(ev.ppg);
+    drawMotionChart(ev.motion_xyz);
+  } else if (ev.type === "message") {
+    monMsg(ev.text);
+  } else if (ev.type === "saved") {
+    const again = ev.again ? "（本会话此前已保存，返回同一路径）" : "";
+    $("monSavedCard").style.display = "";
+    $("monSavedInfo").textContent =
+      `✅ 数据：${ev.npz}  报告：${ev.report || "（生成失败）"}${again}`;
+    $("monIngestCmd").value = ev.ingest_cmd;
+    monSaved = ev;
+    showQcBox(ev.qc);
+    refreshSidOptions();
+  } else if (ev.type === "error") {
+    monLastError = ev.text;
+    monMsg("错误：" + ev.text, "err");
+  } else if (ev.type === "end") {
+    monRunning = false;
+    setPhase("待机", "");
+    $("monStart").disabled = false;
+    $("monStop").disabled = true;
+    $("monSave").disabled = true;
+    monMsg(monLastError
+      ? `监测结束 · 最后一次错误：${monLastError}`
+      : "监测已结束" + (ev.saved ? "，数据已保存" : ""),
+      monLastError ? "err" : "ok");
+    monLastError = "";
+    pollStatus();
+  }
+}
+
+function connectMonitorStream() {
+  if (monEs) monEs.close();
+  monEs = new EventSource("/api/monitor/stream");
+  monEs.onmessage = e => handleMonitorEvent(JSON.parse(e.data));
+  monEs.onerror = () => {};
+}
+
+// ── 数据源切换：BLED112 显示串口框，NeuraDock 显示 TCP 地址框 ──
+$("monMode").onchange = () => {
+  const v = $("monMode").value;
+  $("monPortField").style.display = v === "bled112" ? "" : "none";
+  $("monNdField").style.display = v === "neuradock" ? "" : "none";
+};
+$("inMode").onchange = () => {
+  const v = $("inMode").value;
+  $("inPortField").style.display = v === "bled112" ? "" : "none";
+  $("inNdField").style.display = v === "neuradock" ? "" : "none";
+};
+
+$("monStart").onclick = async () => {
+  const mode = $("monMode").value;
+  const payload = {
+    simulate: mode === "simulate",
+    adapter: mode === "bled112" ? "bled112"
+      : mode === "neuradock" ? "neuradock" : "bleak",
+    serial_port: mode === "bled112"
+      ? ($("monPort").value.trim() || null)
+      : mode === "neuradock"
+        ? ($("monNd").value.trim() || "127.0.0.1:9600") : null,
+    address: $("monAddress").value.trim() || null,
+    participant: $("monParticipant").value || null,
+    session_type: $("monSessionType").value,
+    pre_state: $("monPreState").value.trim() || null,
+    contact_quality: $("monContact").value,
+    note: $("monNote").value.trim() || null,
+  };
+  if (!payload.simulate && !payload.participant) {
+    return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
+  }
+  try {
+    $("monStart").disabled = true;
+    await api("/api/monitor/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload) });
+    monRunning = true;
+    $("monStop").disabled = false;
+    $("monSave").disabled = false;
+    setPhase("监测中", "monitor");
+    connectMonitorStream();
+    monMsg("正在连接数据源…", "ok");
+  } catch (e) {
+    $("monStart").disabled = false;
+    monMsg("启动失败：" + e.message, "err");
+  }
+};
+
+$("monStop").onclick = async () => {
+  try {
+    await api("/api/monitor/stop", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        save: true,
+        post_state: $("monPostState").value.trim() || null }) });
+    monMsg("正在保存并停止…");
+  } catch (e) { monMsg(e.message, "err"); }
+};
+
+$("monSave").onclick = async () => {
+  try {
+    await api("/api/monitor/save", { method: "POST" });
+    monMsg("已请求保存（采集不中断）…", "ok");
+  } catch (e) { monMsg(e.message, "err"); }
+};
+
+$("monCopyCmd").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("monIngestCmd").value);
+    monMsg("入库命令已复制", "ok");
+  } catch (e) {
+    $("monIngestCmd").select();
+    document.execCommand("copy");
+    monMsg("入库命令已复制（兼容模式）", "ok");
+  }
+};
+
+// ═══ 2026-09-03 新增：档案 / 登记表 / 预登记 / 隔离区 / 质检 / 一键入库 ═══
+let profiles = { profiles: [], default_participant: "" };
+let monSaved = null;   // 最近一次监测保存事件
+
+// ── 档案（测试者默认可选） ──
+async function loadProfiles() {
+  try { profiles = await api("/api/profiles"); } catch (e) { return; }
+  renderProfileTable();
+  fillParticipantSelects();
+}
+function renderProfileTable() {
+  const body = $("profileBody");
+  if (!body) return;
+  if (!profiles.profiles.length) {
+    body.innerHTML = "<tr><td colspan=5>尚无测试者档案，可在下方添加；也可直接使用 P001</td></tr>";
+    return;
+  }
+  body.innerHTML = profiles.profiles.map(p =>
+    `<tr><td>${p.id}</td><td>${p.name || ""}</td><td>${p.note || ""}</td>` +
+    `<td>${profiles.default_participant === p.id ? "✅ 默认" :
+          `<button class="btn ghost" style="padding:2px 10px;font-size:12px;" onclick="setDefault('${p.id}')">设为默认</button>`}</td>` +
+    `<td><button class="btn ghost" style="padding:2px 10px;font-size:12px;color:var(--warn);border-color:var(--warn);" onclick="removeProfile('${p.id}')">移除</button></td></tr>`
+  ).join("");
+}
+function fillParticipantSelects() {
+  const opts = profiles.profiles.length
+    ? profiles.profiles.map(p =>
+        `<option value="${p.id}">${p.id}${p.name ? " · " + p.name : ""}</option>`).join("")
+    : `<option value="P001">P001（未建档，可直接使用）</option>`;
+  for (const id of ["monParticipant", "inParticipant", "preParticipant"]) {
+    const sel = $(id);
+    if (!sel) continue;
+    sel.innerHTML = (id === "monParticipant"
+      ? `<option value="">（不登记测试者）</option>` : "") + opts;
+    if (profiles.default_participant) {
+      for (const o of sel.options) if (o.value === profiles.default_participant) sel.value = o.value;
+    }
+  }
+}
+window.setDefault = async (id) => {
+  profiles.default_participant = id;
+  await api("/api/profiles", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profiles) });
+  loadProfiles();
+};
+window.removeProfile = async (id) => {
+  if (!await askConfirm("移除本机档案",
+      `移除测试者 ${id} 的本机档案？\n（不影响已入库数据）`)) return;
+  profiles.profiles = profiles.profiles.filter(p => p.id !== id);
+  if (profiles.default_participant === id) profiles.default_participant = "";
+  await api("/api/profiles", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profiles) });
+  loadProfiles();
+};
+$("btnAddProfile").onclick = async () => {
+  const id = $("newProfileId").value.trim();
+  if (!/^P\d{3}$/.test(id)) {
+    $("profileMsg").textContent = "编号需为 P001 形式";
+    $("profileMsg").className = "msg err";
+    return;
+  }
+  if (profiles.profiles.some(p => p.id === id)) {
+    $("profileMsg").textContent = id + " 已存在";
+    $("profileMsg").className = "msg err";
+    return;
+  }
+  profiles.profiles.push({ id,
+    name: $("newProfileName").value.trim(),
+    note: $("newProfileNote").value.trim() });
+  if (!profiles.default_participant) profiles.default_participant = id;
+  await api("/api/profiles", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(profiles) });
+  $("newProfileId").value = $("newProfileName").value = $("newProfileNote").value = "";
+  $("profileMsg").textContent = "已添加 " + id;
+  $("profileMsg").className = "msg ok";
+  loadProfiles();
+};
+
+// ── 登记表与预登记 ──
+async function loadRegistry() {
+  try {
+    const r = await api("/api/registry");
+    const body = $("registryBody");
+    if (!r.rows.length) { body.innerHTML = "<tr><td colspan=6>登记表为空</td></tr>"; return; }
+    const statusBadge = s => s === "planned"
+      ? `<span class="badge warn">planned 待采集</span>`
+      : s === "quarantined"
+        ? `<span class="badge err">quarantined 隔离</span>`
+        : `<span class="badge ok">${s}</span>`;
+    body.innerHTML = r.rows.map(row =>
+      `<tr><td>${row.session_id}</td><td>${row.participant_id}</td>` +
+      `<td>${row.date}</td><td>${row.session_type}</td>` +
+      `<td class="num">${row.duration_seconds || ""}</td><td>${statusBadge(row.status)}</td></tr>`
+    ).join("");
+  } catch (e) { console.error(e); }
+}
+$("btnPreregister").onclick = async () => {
+  try {
+    const r = await api("/api/registry/preregister", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        participant: $("preParticipant").value || "P001",
+        session_type: $("preType").value,
+        date: $("preDate").value || null }) });
+    $("preMsg").textContent = "✅ 已登记 " + r.session_id;
+    $("preMsg").className = "msg ok";
+    loadRegistry();
+  } catch (e) {
+    $("preMsg").textContent = "登记失败：" + e.message;
+    $("preMsg").className = "msg err";
+  }
+};
+$("btnRefreshRegistry").onclick = () => loadRegistry();
+
+// ── 隔离区 ──
+async function loadQuarantine() {
+  try {
+    const r = await api("/api/quarantine");
+    const body = $("quarantineBody");
+    if (!r.items.length) { body.innerHTML = "<tr><td colspan=3>隔离区为空</td></tr>"; return; }
+    body.innerHTML = r.items.map(it =>
+      `<tr><td>${it.session_id}</td><td>${it.mtime}</td><td>${it.reason || ""}</td></tr>`
+    ).join("");
+  } catch (e) { console.error(e); }
+}
+
+// ── 治理页签总入口 ──
+function loadGovern() {
+  loadProfiles();
+  loadRegistry();
+  loadQuarantine();
+}
+
+// ── 质检结论显示 ──
+function showQcBox(qc) {
+  const box = $("monQcBox");
+  if (!box) return;
+  if (!qc) { box.style.display = "none"; return; }
+  const ok = qc.recommend === "ingest";
+  box.style.display = "";
+  const m = qc.metrics || {};
+  box.innerHTML =
+    `<span class="badge ${ok ? "ok" : "warn"}">质检建议：${ok ? "正式入库" : "隔离区落盘"}</span> ` +
+    `<span class="stat">时长 <b>${m.duration ?? "-"}s</b> · 有效采样 <b>${m.effective_hz ?? "-"} Hz</b> · ` +
+    `丢包率 <b>${m.packet_loss_rate != null ? (m.packet_loss_rate * 100).toFixed(1) + "%" : "-"}</b> · ` +
+    `干净数据 <b>${m.clean_ratio != null ? (m.clean_ratio * 100).toFixed(0) + "%" : "-"}</b></span>` +
+    (qc.reasons.length ? qc.reasons.map(r => `<div class="reason">⚠ ${r}</div>`).join("") : "");
+}
+
+// ── 预登记匹配下拉（planned 行） ──
+async function refreshSidOptions() {
+  const sel = $("monSidSelect");
+  if (!sel) return;
+  try {
+    const r = await api("/api/registry");
+    const planned = r.rows.filter(x => x.status === "planned");
+    sel.innerHTML = `<option value="">（不用预登记，补登记模式）</option>` +
+      planned.map(x =>
+        `<option value="${x.session_id}">${x.session_id}（${x.participant_id}/${x.session_type}）</option>`).join("");
+  } catch (e) { sel.innerHTML = ""; }
+}
+
+// ── 一键入库 ──
+$("monIngestRun").onclick = async () => {
+  if (!monSaved || !monSaved.npz) { monMsg("没有可入库的保存数据", "err"); return; }
+  const qc = monSaved.qc || { recommend: "ingest" };
+  const choice = $("monIngestChoice").value;
+  const quarantine = choice === "quarantine" ||
+    (choice === "auto" && qc.recommend === "quarantine");
+  const participant = $("monParticipant").value || "P001";
+  const sessionType = $("monSessionType").value;
+  if (!await askConfirm("确认入库",
+      `目标：${quarantine ? "隔离区" : "正式 02_raw"}\n` +
+      `测试者：${participant} · 类型：${sessionType}\n` +
+      `（Zen-ID 永不复用，请确认无误）`)) return;
+  const out = $("monIngestOut");
+  out.style.display = "";
+  out.textContent = "正在执行入库脚本…";
+  $("monIngestMsg").textContent = "";
+  try {
+    const r = await api("/api/ingest", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        npz: monSaved.npz,
+        report: monSaved.report || null,
+        participant,
+        session_type: sessionType,
+        sid: $("monSidSelect").value || null,
+        quarantine,
+        scene: "monitor",
+        note: $("monNote").value.trim() || null,
+        pre_state: $("monPreState").value.trim() || null,
+        post_state: $("monPostState").value.trim() || null,
+        contact_quality: ($("monContactFinal").value || null),
+      }) });
+    out.textContent = r.output || "(无输出)";
+    $("monIngestMsg").textContent = r.ok ? "✅ 入库完成" : "❌ 入库失败";
+    $("monIngestMsg").className = "msg " + (r.ok ? "ok" : "err");
+    loadRegistry();
+  } catch (e) {
+    out.textContent = "请求失败：" + e.message;
+    $("monIngestMsg").textContent = "❌ " + e.message;
+    $("monIngestMsg").className = "msg err";
+  }
+};
+
+// ── 波形显示开关（监测 & 闭环） ──
+$("monWaveToggle").onclick = () => {
+  monWaveVisible = !monWaveVisible;
+  $("monWaveWrap").style.display = monWaveVisible ? "" : "none";
+  $("monWaveToggle").textContent = monWaveVisible ? "🌊 隐藏波形" : "🌊 显示波形";
+  if (monWaveVisible) {
+    if (monLastTick) drawMonWave(monLastTick.wave); else drawMonIdle();
+  }
+};
+$("liveWaveToggle").onclick = () => {
+  liveWaveVisible = !liveWaveVisible;
+  $("liveWaveWrap").style.display = liveWaveVisible ? "" : "none";
+  $("liveWaveToggle").textContent = liveWaveVisible ? "🌊 隐藏波形" : "🌊 显示波形";
+};
+
+// ── 管理档案入口（监测页） ──
+$("monManageProfiles").onclick = () => {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelector('[data-tab="govern"]').classList.add("active");
+  $("tab-govern").classList.add("active");
+  loadGovern();
+};
+
+// ═══ 闭环实验 ═══
+const chart = $("chart"), ctx = chart.getContext("2d");
+const liveWave = $("liveWave"), liveCtx = liveWave.getContext("2d");
+let pts = [], baselineDb = null, baselineEndAt = null, es = null;
+let nRewardTicks = 0, nLoopTicks = 0, volMaxRef = 0.35, expLastError = "";
+let liveWaveVisible = true;
+
+function showExpSummary(ev) {
+  const card = $("expSummaryCard");
+  if (!card) return;
+  card.style.display = "";
+  $("esTag").textContent = ev.tag || "-";
+  $("esDecisions").textContent = ev.n_decisions ?? "-";
+  $("esReward").textContent = unitOr(ev.reward_pct, 0, "%");
+  $("esBaseline").textContent = numOr(ev.baseline_db, 1);
+  $("esDuration").textContent = ev.duration_s != null ? Math.round(ev.duration_s) + "s" : "-";
+  $("esSample").textContent = ev.sampling_hz != null ? ev.sampling_hz.toFixed(0) + " Hz" : "-";
+}
+
+function resizeChart() {
+  chart.width = chart.clientWidth * (window.devicePixelRatio || 1);
+  chart.height = 260 * (window.devicePixelRatio || 1);
+  drawChart();
+}
+
+function resizeLiveWave() {
+  liveWave.width = liveWave.clientWidth * (window.devicePixelRatio || 1);
+  liveWave.height = 320 * (window.devicePixelRatio || 1);
+}
+
+function drawChart() {
+  const W = chart.width, H = chart.height, dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, W, H);
+  const padL = 44 * dpr, padR = 44 * dpr, padT = 14 * dpr, padB = 26 * dpr;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  if (!pts.length) {
+    ctx.fillStyle = "#555"; ctx.font = `${13 * dpr}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("等待实验数据…", W / 2, H / 2);
+    return;
+  }
+  const alphas = pts.map(p => p.alpha).filter(v => v != null);
+  let lo = Math.min(...alphas, baselineDb ?? Infinity) - 2;
+  let hi = Math.max(...alphas, baselineDb ?? -Infinity) + 2;
+  if (!isFinite(lo)) { lo = 0; hi = 1; }
+  const t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
+  const X = t => padL + (t - t0) / Math.max(t1 - t0, 1) * plotW;
+  const YA = v => padT + (1 - (v - lo) / (hi - lo || 1)) * plotH;
+  const YV = v => padT + (1 - v / Math.max(volMaxRef * 1.2, 0.1)) * plotH;
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + plotH * i / 4;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = "#666"; ctx.font = `${10 * dpr}px sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillText((hi - (hi - lo) * i / 4).toFixed(0), padL - 6 * dpr, y + 3 * dpr);
+    ctx.textAlign = "left";
+    ctx.fillText((volMaxRef * 1.2 * (1 - i / 4)).toFixed(2), W - padR + 6 * dpr, y + 3 * dpr);
+  }
+  if (baselineEndAt != null && baselineEndAt >= t0) {
+    ctx.strokeStyle = "#ffe66d"; ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.beginPath(); ctx.moveTo(X(baselineEndAt), padT);
+    ctx.lineTo(X(baselineEndAt), padT + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (baselineDb != null) {
+    ctx.strokeStyle = "#ffe66d"; ctx.lineWidth = 1.5 * dpr;
+    ctx.beginPath(); ctx.moveTo(padL, YA(baselineDb));
+    ctx.lineTo(W - padR, YA(baselineDb)); ctx.stroke();
+  }
+  ctx.strokeStyle = "#ff6b6b"; ctx.lineWidth = 1.5 * dpr; ctx.beginPath();
+  pts.forEach((p, i) => p.vol != null &&
+    (i ? ctx.lineTo(X(p.t), YV(p.vol)) : ctx.moveTo(X(p.t), YV(p.vol))));
+  ctx.stroke();
+  ctx.strokeStyle = "#4ecdc4"; ctx.lineWidth = 2 * dpr; ctx.beginPath();
+  pts.forEach((p, i) => p.alpha != null &&
+    (i ? ctx.lineTo(X(p.t), YA(p.alpha)) : ctx.moveTo(X(p.t), YA(p.alpha))));
+  ctx.stroke();
+  ctx.fillStyle = "#666"; ctx.font = `${10 * dpr}px sans-serif`; ctx.textAlign = "center";
+  ctx.fillText(`${t0.toFixed(0)}s`, padL, H - 8 * dpr);
+  ctx.fillText(`${t1.toFixed(0)}s`, W - padR, H - 8 * dpr);
+}
+
+function setPhase(text, cls) {
+  const tag = $("phaseTag");
+  tag.textContent = text;
+  tag.className = "phase-tag" + (cls ? " " + cls : "");
+}
+
+function connectStream() {
+  if (es) es.close();
+  es = new EventSource("/api/experiment/stream");
+  es.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    handleEvent(ev);
+  };
+  es.onerror = () => {};
+}
+
+function handleEvent(ev) {
+  if (ev.type === "start") {
+    pts = []; baselineDb = null; baselineEndAt = null;
+    nRewardTicks = 0; nLoopTicks = 0;
+    $("logBody").innerHTML = "";
+    drawWaveIdle(liveWave, liveCtx, "等待实验数据…");
+    for (const k of ["Delta", "Theta", "Alpha", "Beta", "Gamma"]) {
+      setBandBar("lvBar" + k, null);
+      $("lvVal" + k).textContent = "-";
+    }
+    setPhase("基线期", "baseline");
+    liveMsg(`实验「${ev.tag}」已开始（${ev.mode}），基线 ${ev.baseline_seconds}s / 总 ${ev.duration_seconds}s`);
+  } else if (ev.type === "tick") {
+    pts.push({ t: ev.elapsed, alpha: ev.alpha, vol: ev.vol, beat: ev.beat });
+    if (pts.length > 600) pts.shift();
+    if (ev.phase === "闭环" && baselineEndAt == null) baselineEndAt = ev.elapsed;
+    if (ev.phase === "闭环") {
+      nLoopTicks++;
+      if (ev.note && ev.note.indexOf("奖励") >= 0) nRewardTicks++;
+    }
+    $("mAlpha").textContent = numOr(ev.alpha, 1);
+    $("mBaseline").textContent = numOr(baselineDb, 1);
+    $("mVol").textContent = numOr(ev.vol, 2);
+    $("mBeat").textContent = numOr(ev.beat, 1);
+    $("mState").textContent = (ev.state || "-").split(" ")[0];
+    $("mElapsed").textContent = ev.elapsed + "s";
+    $("mReward").textContent = nLoopTicks
+      ? (100 * nRewardTicks / nLoopTicks).toFixed(0) + "%" : "-";
+    if (ev.vol > 0.06 && ev.phase === "闭环") setPhase("闭环·奖励态", "reward");
+    else if (ev.phase === "闭环") setPhase("闭环期", "loop");
+    // 实时脑电波形 + 频段能量（与监测采集页同款显示）
+    if (ev.wave && liveWaveVisible) drawWaveCanvas(liveWave, liveCtx, ev.wave);
+    if (ev.bands) {
+      for (const [key, barId, valId] of [
+        ["delta", "lvBarDelta", "lvValDelta"],
+        ["theta", "lvBarTheta", "lvValTheta"],
+        ["alpha", "lvBarAlpha", "lvValAlpha"],
+        ["beta", "lvBarBeta", "lvValBeta"],
+        ["gamma", "lvBarGamma", "lvValGamma"]]) {
+        const v = ev.bands[key];
+        $(valId).textContent = unitOr(v, 1, "dB");
+        setBandBar(barId, v);
+      }
+    }
+    appendLog(ev);
+    drawChart();
+  } else if (ev.type === "baseline_locked") {
+    baselineDb = ev.baseline_db;
+    liveMsg(`基线已锁定：Alpha = ${numOr(ev.baseline_db, 1)} dB，闭环控制启动`, "ok");
+  } else if (ev.type === "message") {
+    liveMsg(ev.text);
+  } else if (ev.type === "error") {
+    expLastError = ev.text;
+    liveMsg("错误：" + ev.text, "err");
+  } else if (ev.type === "end") {
+    setPhase("已结束", "");
+    $("btnStart").disabled = false; $("btnStop").disabled = true;
+    if (ev.error || expLastError) {
+      liveMsg("实验提前终止：" + (ev.error || expLastError), "err");
+      expLastError = "";
+    } else {
+      liveMsg(`实验结束：决策 ${ev.n_decisions ?? "-"} 次，奖励态占比 ` +
+              `${(ev.reward_pct ?? 0).toFixed(0)}%` + (ev.stopped ? "（手动停止）" : ""), "ok");
+      showExpSummary(ev);
+    }
+    pollStatus();
+  }
+}
+
+function appendLog(ev) {
+  const tr = document.createElement("tr");
+  const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  tr.innerHTML = `<td>${time}</td><td>${ev.phase}</td>` +
+    `<td class="num">${numOr(ev.alpha, 1)}</td>` +
+    `<td class="num">${ev.beat}</td><td class="num">${ev.vol}</td>` +
+    `<td>${ev.note || ""}</td>`;
+  const body = $("logBody");
+  body.insertBefore(tr, body.firstChild);
+  while (body.children.length > 200) body.removeChild(body.lastChild);
+}
+
+function liveMsg(text, cls) {
+  const el = $("liveMsg");
+  el.textContent = text;
+  el.className = "msg" + (cls ? " " + cls : "");
+}
+
+$("btnStart").onclick = async () => {
+  const b = $("inBaseline").value ? +$("inBaseline").value : null;
+  const d = $("inDuration").value ? +$("inDuration").value : null;
+  if (b != null && b < 30) return liveMsg("基线秒数不能小于 30（配置校验要求）", "err");
+  if (d != null && d < 60) return liveMsg("总时长不能小于 60 秒（配置校验要求）", "err");
+  if (b != null && d != null && d <= b) return liveMsg("总时长必须大于基线秒数", "err");
+  const mode = $("inMode").value;
+  const payload = {
+    simulate: mode === "simulate",
+    adapter: mode === "bled112" ? "bled112"
+      : mode === "neuradock" ? "neuradock" : "bleak",
+    serial_port: mode === "bled112"
+      ? ($("inPort").value.trim() || null)
+      : mode === "neuradock"
+        ? ($("inNd").value.trim() || "127.0.0.1:9600") : null,
+    address: $("inAddress").value.trim() || null,
+    config_path: $("inConfigFile").value || null,
+    baseline: b,
+    duration: d,
+    tag: $("inTag").value.trim() || null,
+    participant: $("inParticipant").value || null,
+    pre_state: $("inPreState").value.trim() || null,
+    contact_quality: $("inContact").value,
+    note: $("inNote").value.trim() || null,
+  };
+  try {
+    $("btnStart").disabled = true;
+    await api("/api/experiment/start", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload) });
+    $("btnStop").disabled = false;
+    connectStream();
+    liveMsg("实验已启动，等待数据…", "ok");
+  } catch (e) {
+    $("btnStart").disabled = false;
+    liveMsg("启动失败：" + e.message, "err");
+  }
+};
+
+$("btnStop").onclick = async () => {
+  try {
+    await api("/api/experiment/stop", { method: "POST" });
+    liveMsg("已发送停止指令…");
+  } catch (e) { liveMsg(e.message, "err"); }
+};
+
+// ── 状态轮询（监测与实验合并） ──
+async function pollStatus() {
+  try {
+    const [s, m] = await Promise.all([
+      api("/api/experiment/status"), api("/api/monitor/status")]);
+    if (m.running) {
+      $("statusText").textContent =
+        `监测中 · ${m.mode} · ${m.started_at}`;
+      $("statusDot").className = "dot busy";
+      $("monStart").disabled = true;
+      $("monStop").disabled = false;
+      $("monSave").disabled = false;
+    } else if (s.running) {
+      $("statusText").textContent =
+        `实验运行中 · ${s.mode} · ${s.started_at}`;
+      $("statusDot").className = "dot busy";
+      $("btnStart").disabled = true; $("btnStop").disabled = false;
+    } else {
+      $("statusText").textContent = "服务就绪";
+      $("statusDot").className = "dot";
+      $("btnStart").disabled = false; $("btnStop").disabled = true;
+      $("monStart").disabled = false;
+      $("monStop").disabled = true; $("monSave").disabled = true;
+    }
+  } catch (e) { $("statusText").textContent = "服务不可用"; }
+}
+setInterval(pollStatus, 3000);
+
+// ── 配置文件列表 ──
+async function loadConfigList() {
+  try {
+    const r = await api("/api/config/files");
+    for (const sel of [$("inConfigFile"), $("cfgFileSelect")]) {
+      sel.innerHTML = "";
+      for (const f of r.files) {
+        const o = document.createElement("option");
+        o.value = f.name;
+        o.textContent = f.name + (f.name === r.default ? "（默认）" : "");
+        if (f.name === r.default) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ── 配置编辑 ──
+async function loadConfig(name) {
+  try {
+    const r = await api("/api/config?path=" + encodeURIComponent(name || ""));
+    $("cfgEditor").value = JSON.stringify(r.content, null, 2);
+    $("cfgMerged").textContent = r.merged
+      ? JSON.stringify(r.merged, null, 2)
+      : "⚠️ 配置校验未通过：\n" + r.merged_error;
+    cfgMsg(r.merged ? "已载入 " + r.path : "已载入，但校验未通过", r.merged ? "ok" : "err");
+  } catch (e) { cfgMsg("载入失败：" + e.message, "err"); }
+}
+function cfgMsg(text, cls) {
+  const el = $("cfgMsg");
+  el.textContent = text; el.className = "msg" + (cls ? " " + cls : "");
+}
+$("btnCfgLoad").onclick = () => loadConfig($("cfgFileSelect").value);
+$("btnCfgTemplate").onclick = async () => {
+  try {
+    const t = await api("/api/config/template");
+    $("cfgEditor").value = JSON.stringify(t, null, 2);
+    cfgMsg("已载入模板（含注释键），可另存为新配置文件使用", "ok");
+  } catch (e) { cfgMsg(e.message, "err"); }
+};
+$("btnCfgValidate").onclick = async () => {
+  try {
+    const content = JSON.parse($("cfgEditor").value);
+    const r = await api("/api/config/validate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }) });
+    if (r.ok) {
+      $("cfgMerged").textContent = JSON.stringify(r.merged, null, 2);
+      cfgMsg("✅ 校验通过", "ok");
+    } else cfgMsg("❌ " + r.errors, "err");
+  } catch (e) { cfgMsg("❌ JSON 格式错误：" + e.message, "err"); }
+};
+$("btnCfgSave").onclick = async () => {
+  let content;
+  try { content = JSON.parse($("cfgEditor").value); }
+  catch (e) { return cfgMsg("❌ JSON 格式错误：" + e.message, "err"); }
+  if (!await askConfirm("保存配置",
+      "保存到当前选中的配置文件？\n（旧文件自动备份为 .bak）")) return;
+  try {
+    const r = await api("/api/config/save", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: $("cfgFileSelect").value, content }) });
+    cfgMsg(r.valid ? "✅ 已保存" + (r.backup ? `（备份 ${r.backup}）` : "")
+           : `⚠️ 已保存但校验未通过：${r.validation_error}`,
+           r.valid ? "ok" : "err");
+  } catch (e) { cfgMsg("保存失败：" + e.message, "err"); }
+};
+
+// ── 历史数据（场景筛选 + 质检徽章 + 一键入库） ──
+let reportsCache = [];
+
+function sceneBadge(scene) {
+  if (scene === "monitor") return '<span class="badge scene-mon">监测采集</span>';
+  if (scene === "closedloop") return '<span class="badge scene-loop">闭环实验</span>';
+  return '<span class="badge dim">未标记</span>';
+}
+function qcBadge(qc) {
+  if (!qc) return '<span class="badge dim">-</span>';
+  return qc.recommend === "ingest"
+    ? '<span class="badge ok">建议入库</span>'
+    : '<span class="badge warn">建议隔离</span>';
+}
+
+function renderReports() {
+  const filter = $("histSceneFilter").value;
+  const rows = reportsCache.filter(r => filter === "all" || r.scene === filter);
+  const pOpts = (profiles.profiles.length
+    ? profiles.profiles.map(p => `<option value="${p.id}">${p.id}</option>`)
+    : `<option value="P001">P001</option>`).join("");
+  $("reportBody").innerHTML = rows.map((r, i) =>
+    `<tr><td>${r.name}</td><td>${sceneBadge(r.scene)}</td><td>${qcBadge(r.qc)}</td>` +
+    `<td>${r.mtime}</td><td class="num">${(r.size / 1024).toFixed(0)} KB</td>` +
+    `<td><a href="/api/file?path=report/${encodeURIComponent(r.name)}" target="_blank">打开报告</a>` +
+    (r.npz ? ` · <a href="/api/file?path=report/${encodeURIComponent(r.npz)}" target="_blank">下载数据</a>` : "") +
+    (r.npz_path ? ` <span style="white-space:nowrap;">` +
+      `<select id="hiP${i}" style="width:64px;">${pOpts}</select>` +
+      `<select id="hiT${i}" style="width:76px;"><option>baseline</option><option>training</option><option>sleep</option><option>custom</option><option>test</option></select>` +
+      `<button class="btn ghost" style="padding:2px 8px;font-size:12px;" onclick="ingestFromHistory(${i})">入库</button></span>` : "") +
+    `</td></tr>`
+  ).join("") || "<tr><td colspan=6>暂无报告</td></tr>";
+  window._visibleReports = rows;
+}
+
+window.ingestFromHistory = async (i) => {
+  const r = window._visibleReports[i];
+  if (!r) return;
+  const qc = r.qc || { recommend: "ingest" };
+  const quarantine = qc.recommend === "quarantine";
+  const participant = $("hiP" + i).value;
+  const sessionType = $("hiT" + i).value;
+  if (!await askConfirm("确认入库",
+      `对 ${r.name} 执行${quarantine ? "隔离区落盘" : "正式入库"}？\n` +
+      `测试者：${participant} · 类型：${sessionType}`)) return;
+  const out = $("histIngestOut");
+  out.style.display = "";
+  out.textContent = "正在执行入库脚本…";
+  try {
+    const res = await api("/api/ingest", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        npz: r.npz_path, report: r.report_path,
+        participant, session_type: sessionType,
+        quarantine,
+        scene: r.scene !== "unknown" ? r.scene : null,
+      }) });
+    out.textContent = (res.ok ? "✅ 完成：\n" : "❌ 失败：\n") + res.output;
+    toast(res.ok ? "入库完成" : "入库失败", res.ok ? "ok" : "err");
+    loadRegistry();
+  } catch (e) {
+    out.textContent = "入库失败：" + e.message;
+    toast("入库失败：" + e.message, "err");
+  }
+};
+
+async function loadHistory() {
+  try {
+    const [rep, exp] = await Promise.all([api("/api/reports"), api("/api/experiments")]);
+    reportsCache = rep.reports;
+    renderReports();
+    $("expBody").innerHTML = exp.experiments.map(g =>
+      `<tr><td>${g.mtime}</td><td>` + g.files.map(f =>
+        `<a href="/api/file?path=${encodeURIComponent(f)}" target="_blank" ` +
+        `style="margin-right:10px;">${f.slice(16)}</a>`).join("") + `</td></tr>`
+    ).join("") || "<tr><td colspan=2>暂无实验记录</td></tr>";
+  } catch (e) { console.error(e); }
+}
+
+// ── 初始化 ──
+$("histSceneFilter").onchange = renderReports;
+{ const _d = new Date();
+  $("preDate").value = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`; }
+loadConfigList();
+loadProfiles();
+pollStatus();
+resizeMonWave();
+resizeChart();
+resizeLiveWave();
+redrawMonitor();
+drawWaveIdle(liveWave, liveCtx, "等待实验数据…");
+connectStream();
+connectMonitorStream();
+</script>
+</body>
+</html>
