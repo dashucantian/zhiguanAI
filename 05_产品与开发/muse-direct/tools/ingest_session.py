@@ -27,15 +27,15 @@ device_info.json 与 session_note.txt（登记表不加场景列，字典仍为 
 用法示例：
 # 预登记匹配模式（SOP V0.2 正式流程：先登记、后采集、再匹配入库）
 python ingest_session.py --npz <npz路径> [--report <html路径>] \
-    --participant P001 --type baseline --sid ZEN-20260831-P001-S05 --operator tiand
+    --participant P001 --type baseline --sid ZEN-YYYYMMDD-P001-Snn --operator <你的代号>
 
 # 补登记模式（历史数据补录：自动生成新 Zen-ID）
 python ingest_session.py --npz <npz路径> [--report <html路径>] \
-    --participant P001 --type test --operator tiand [--note "..."]
+    --participant P001 --type test --operator <你的代号> [--note "..."]
 
 # 隔离区模式（不合格数据/链路测试数据，不进 02_raw）
 python ingest_session.py --npz <npz路径> --participant P001 --type test \
-    --quarantine --operator tiand --note "丢包率过高"
+    --quarantine --operator <你的代号> --note "丢包率过高"
 """
 
 import argparse
