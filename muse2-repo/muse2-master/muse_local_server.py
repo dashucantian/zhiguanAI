@@ -310,6 +310,8 @@ class DataBuffer:
         self._disp_samples = int(self.sfreq * DISP_WINDOW_SEC)
         self._bp_epoch_samples = int(self.sfreq * BP_EPOCH_SEC)
         self._bp_min_samples = int(self.sfreq * 8)
+        self._psd_nperseg = int(self.sfreq)       # FFT 窗长 1s（借鉴 NeuraDock）
+        self.latest_psd = None                    # 0–45Hz 通道平均 PSD（dB）
         self.eeg = {ch: deque(maxlen=self._disp_samples) for ch in self.channels}
         self.eeg_all = {ch: [] for ch in self.channels}  # Unlimited for .bin saving
         # L1：滤波前原始副本（仅真机接收器喂入；与 eeg_all 逐样本对齐）
@@ -769,6 +771,23 @@ class DataBuffer:
                 return
             if not all(bp["db"][b].shape[0] == self.n_ch for b in report_generator.BANDS):
                 return
+
+            # 借鉴 NeuraDock 实时 FFT（2026-09-08 法师拍板）：顺手导出
+            # 0–45Hz 通道平均 PSD 曲线，供前端频谱图渲染；失败静默降级。
+            try:
+                from scipy.signal import welch as _welch
+                _f, _p = _welch(data, self.sfreq, nperseg=self._psd_nperseg,
+                                axis=0)
+                _p = _p.mean(axis=0)
+                _m = _f <= 45.0
+                _f, _p = _f[_m], _p[_m]
+                _db = 10.0 * np.log10(np.maximum(_p, 1e-12))
+                with self.lock:
+                    self.latest_psd = {
+                        "freqs": [round(float(v), 2) for v in _f],
+                        "db": [round(float(v), 1) for v in _db]}
+            except Exception:
+                pass
 
             means = {band: float(np.mean(bp["db"][band])) for band in report_generator.BANDS}
             alpha = means["Alpha"]
