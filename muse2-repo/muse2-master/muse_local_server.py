@@ -773,7 +773,7 @@ class DataBuffer:
                 return
 
             # 借鉴 NeuraDock 实时 FFT（2026-09-08 法师拍板）：顺手导出
-            # 0–45Hz 通道平均 PSD 曲线，供前端频谱图渲染；失败静默降级。
+            # 0–45Hz 通道平均 PSD 曲线，供前端频谱图渲染。
             try:
                 from scipy.signal import welch as _welch
                 # welch(axis=0)：输入 (n_times, n_ch) → 输出 (n_freqs, n_ch)。
@@ -789,8 +789,12 @@ class DataBuffer:
                     self.latest_psd = {
                         "freqs": [round(float(v), 2) for v in _f],
                         "db": [round(float(v), 1) for v in _db]}
-            except Exception:
-                pass
+            except Exception as _psd_err:
+                # 失败降级不影响频段主流程，但首次失败记录一次警告，
+                # 避免"前端频谱永远空转却无任何日志"的调试盲区（审计建议5）。
+                if not getattr(self, "_psd_warned", False):
+                    self._psd_warned = True
+                    print(f"[warn] PSD 频谱导出失败（不影响频段分析）：{_psd_err}")
 
             means = {band: float(np.mean(bp["db"][band])) for band in report_generator.BANDS}
             alpha = means["Alpha"]

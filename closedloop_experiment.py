@@ -81,6 +81,11 @@ class SimulateFeeder:
         self.app = app
         self.running = False
         self._thread = None
+        # 与 BleDirectReceiver/MonitorSimulator 接口对齐（2026-09-08 采集台合并）：
+        # 前端"数据稳定性条"据 packet_count 递增判断数据流推进，缺则误报静默。
+        self.packet_count = 0
+        self.battery_percent = None
+        self.last_error = None
 
     def start(self):
         self.running = True
@@ -114,6 +119,7 @@ class SimulateFeeder:
                 batch.append(0.0)
                 t += dt
             self.app.buffer.add_eeg(batch)
+            self.packet_count += 1   # 前端稳定条据此判断数据流推进（对齐监测端）
             time.sleep(12.0 / SFREQ)
 
 
@@ -403,11 +409,28 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 d.flush()
 
                 # 实时脑电波形（每通道最近 5 秒）+ 全频段能量，与监测采集页一致
+                # 采集台合并（2026-09-08）：补齐体征/频谱/脉搏/运动/稳定条字段，
+                # 使闭环模式下共用仪表区与监测模式表现一致（此前只有 wave/bands）。
+                if n_feat % 4 == 0:      # 体征计算节流，无 PPG 设备静默跳过
+                    try:
+                        buf.compute_vitals()
+                    except Exception:
+                        pass
                 wave = {}
                 with buf.lock:
                     for ch in buf.channels:
                         seg = list(buf.eeg[ch])[-1280:]
                         wave[ch] = [round(v, 2) for v in seg]
+                    ppg = list(buf.ppg_ir)
+                    accx, accy, accz = (list(buf.acc_x), list(buf.acc_y),
+                                        list(buf.acc_z))
+                vitals = buf.get_vitals()
+
+                def _ds(seq, n):
+                    if not seq:
+                        return []
+                    step = max(1, len(seq) // n)
+                    return [round(v, 2) for v in seq[::step]][:n]
 
                 emit({"type": "tick", "elapsed": round(elapsed, 1),
                       "phase": "基线" if in_baseline else "闭环",
@@ -416,7 +439,18 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                       "beat": round(beat, 1), "vol": round(vol, 2),
                       "note": note,
                       "bands": bp,
-                      "wave": wave})
+                      "wave": wave,
+                      "connected": receiver.is_connected(),
+                      "packets": getattr(receiver, "packet_count", 0),
+                      "battery": getattr(receiver, "battery_percent", None),
+                      "psd": buf.latest_psd,
+                      "vitals": {k: vitals.get(k) for k in
+                                 ("hr", "rmssd", "sdnn", "pnn50", "motion",
+                                  "spo2", "tsi", "d_hbo2", "d_hbr",
+                                  "optics_ch")},
+                      "ppg": _ds(ppg, 120),
+                      "motion_xyz": {"x": _ds(accx, 80), "y": _ds(accy, 80),
+                                     "z": _ds(accz, 80)}})
 
                 # 每 30 秒打印进度（按决策间隔折算）
                 if n_feat % print_every == 0:

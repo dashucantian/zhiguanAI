@@ -806,11 +806,12 @@ function drawBandsChart(bands) {
   });
 }
 
-// 借鉴 NeuraDock 实时 FFT：0–45Hz 通道平均 PSD 曲线（dB 对数轴）。
+// 借鉴 NeuraDock 实时 FFT：0–45Hz 通道平均 PSD 曲线。
+// 纵轴 dB = 10·log10(PSD)，PSD 单位 μV²/Hz，故基准为 1 μV²/Hz（re 1μV²/Hz）。
 // 数据源为后端 compute_band_power 顺手导出的 tick.psd={freqs,db}。
 function drawPsd(psd) {
   const c2d = monPsdCtx;
-  const f = chartFrame(c2d, monPsd, { title: "实时频谱（0–45Hz，通道平均）", ylab: "dB" });
+  const f = chartFrame(c2d, monPsd, { title: "实时频谱（0–45Hz，通道平均 PSD）", ylab: "dB re μV²/Hz" });
   const FMAX = 45;
   xTicks(c2d, f, [0, 10, 20, 30, 40].map(hz => ({
     t: hz / FMAX, s: String(hz) })));
@@ -1566,12 +1567,17 @@ function handleEvent(ev) {
       ? (100 * nRewardTicks / nLoopTicks).toFixed(0) + "%" : "-";
     if (ev.vol > 0.06 && ev.phase === "闭环") setPhase("闭环·奖励态", "reward");
     else if (ev.phase === "闭环") setPhase("闭环期", "loop");
-    // 复用采集台仪表渲染（波形/频段/通道读数/频谱），与监测模式同款显示
+    // 复用采集台仪表渲染（波形/频段/通道读数/频谱/脉搏/运动/质量/稳定），
+    // 与监测模式同款显示——采集台合并后两种模式共用同一套仪表区
     monLastTick = ev;
     updateLabPanel(ev.wave, ev.bands, ev.vitals || {}, ev);
     if (monWaveVisible) drawMonWave(ev.wave);
     drawBandsChart(ev.bands);
     drawPsd(ev.psd);
+    drawPpgChart(ev.ppg);
+    drawMotionChart(ev.motion_xyz);
+    updateQualityBanner(ev);
+    updateStabilityBar(ev);
     appendLog(ev);
     drawChart();
   } else if (ev.type === "baseline_locked") {
