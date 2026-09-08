@@ -1005,9 +1005,12 @@ function updateStabilityBar(ev) {
   const packets = (ev && ev.packets != null) ? ev.packets : null;
   let cls = "err", width = "0%", label = "未连接";
   if (connected && packets != null) {
-    const growing = _prevPackets == null || packets > _prevPackets;
+    // N2 修复（采集台合并后）：同页切换监测↔闭环时计数器会归零重启，
+    // 故"任何变化"（含变小=新会话）都算数据在流动；仅连续两帧完全相等
+    // 才是真静默。避免用上一会话末包数作基准致新会话首帧误报"数据流静默"。
+    const flowing = _prevPackets == null || packets !== _prevPackets;
     _prevPackets = packets;
-    if (growing) { cls = ""; width = "100%"; label = "稳定"; }
+    if (flowing) { cls = ""; width = "100%"; label = "稳定"; }
     else { cls = "warn"; width = "55%"; label = "数据流静默"; }
   } else {
     _prevPackets = null;

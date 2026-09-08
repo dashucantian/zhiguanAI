@@ -313,6 +313,7 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
 
     stopped = False
     stream_error = None
+    vitals_warned = False   # N1：体征计算异常首次警告标志（防刷屏，对齐 PSD）
 
     t0 = time.time()
     n_feat = 0
@@ -414,8 +415,12 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 if n_feat % 4 == 0:      # 体征计算节流，无 PPG 设备静默跳过
                     try:
                         buf.compute_vitals()
-                    except Exception:
-                        pass
+                    except Exception as _vit_err:
+                        # 无 PPG 设备时 compute_vitals 静默返回不抛错；此处仅
+                        # 捕获真异常，首次记录一次警告消除调试盲区（审计建议N1）。
+                        if not vitals_warned:
+                            vitals_warned = True
+                            print(f"[warn] 体征计算异常（不影响脑电主流程）：{_vit_err}")
                 wave = {}
                 with buf.lock:
                     for ch in buf.channels:

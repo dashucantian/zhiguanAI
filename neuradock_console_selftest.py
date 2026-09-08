@@ -128,6 +128,10 @@ def main():
 
         # ── 2. 回归：模拟会话仍是 Muse 4 通道 ──
         time.sleep(1.0)
+        # 清理根治：模拟会话即便 request_stop(save=False)，后端 worker 的
+        # finally 仍因 status=="recording" 触发"停止即保存"（防真实数据丢失的
+        # 有意设计），会落盘一份 npz。用前后快照差集精确清理，避免每次遗留。
+        before2 = set(os.listdir(REPORT_DIR)) if os.path.isdir(REPORT_DIR) else set()
         MONITOR.start(simulate=True, session_info={})
         ev4, seen4 = wait_events(
             MONITOR, lambda e: e.get("type") == "tick" and e.get("wave"),
@@ -142,6 +146,12 @@ def main():
             fails.append("模拟会话 packets 未递增（前端稳定条会误报静默）")
         MONITOR.request_stop(save=False)
         wait_events(MONITOR, lambda e: e.get("type") == "end", timeout=10.0)
+        after2 = set(os.listdir(REPORT_DIR)) if os.path.isdir(REPORT_DIR) else set()
+        for name in (after2 - before2):
+            try:
+                os.remove(os.path.join(REPORT_DIR, name))
+            except OSError as e:
+                print(f"NOTE: 模拟会话产物延迟删除失败（稍后手工清理）：{name} ({e})")
 
         if fails:
             for f in fails:
