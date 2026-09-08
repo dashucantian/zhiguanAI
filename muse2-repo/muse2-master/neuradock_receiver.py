@@ -291,11 +291,15 @@ class TcpReceiver:
 
         # 平铺送入 buffer：每样本 7 通道 + 1 保留列（stride=8，与设备协议一致）
         # t_rel=设备相对秒：TCP 积压突发到达时保持 250Hz 均匀网格
+        # L1 数据诚实性：x 为设备直出原始值（去直流/带通之前），旁路另存
         flat = []
+        flat_raw = []
         for k in range(out.shape[1]):
             flat.extend(float(v) for v in out[:, k])
             flat.append(0.0)
-        self.buffer.add_eeg(flat, t_rel=t_rel)
+            flat_raw.extend(float(v) for v in x[:, k])
+            flat_raw.append(0.0)
+        self.buffer.add_eeg(flat, t_rel=t_rel, raw_samples=flat_raw)
 
     # ── 看门狗：静默断流处理（对齐 BLE V1.3 行为） ──────────────────────
     def _watchdog_loop(self):

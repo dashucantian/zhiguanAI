@@ -236,6 +236,27 @@ BP_EPOCH_SEC = 10
 BP_EPOCH_SAMPLES = int(SFREQ * BP_EPOCH_SEC)  # 2560 samples
 BP_MIN_SAMPLES = int(SFREQ * 8)  # match report_generator.BP_MIN_EPOCH_SEC
 
+# L1 数据诚实性（2026-09-08）：显示链常数单一事实源。改动 ble_receiver /
+# neuradock_receiver 的滤波参数时必须同步这里（三者一致性由
+# neuradock_console_selftest 断言）。
+SIGNAL_CHAIN = {
+    "chain_tag": "v12_bp_1_40",
+    "highpass_hz": 1.0, "lowpass_hz": 40.0,
+    "filter": "butter2_causal", "zero_phase": False,
+    "dc_removal": "ema_alpha_0_008",
+    "notch_hz": None,
+    "note": "eeg 列经过本链；eeg_pre_filter 列（若有）为滤波前原始值。"
+            "因果滤波存在相位延迟：ERP/毫秒级时序分析仅可用 pre_filter 列。",
+}
+# 旧 Tk GUI 的 process_raw_packet 路径：解码值不经显示链
+SIGNAL_CHAIN_PASSTHROUGH = {
+    "chain_tag": "v12_passthrough",
+    "highpass_hz": None, "lowpass_hz": None,
+    "filter": "none", "zero_phase": None,
+    "dc_removal": "none", "notch_hz": None,
+    "note": "旧 GUI 直存路径：eeg 即解码原始值，未经显示链。",
+}
+
 # Map report_generator band names → bp_history keys
 _BAND_KEY = {"Delta": "delta", "Theta": "theta", "Alpha": "alpha",
              "Beta": "beta", "Gamma": "gamma"}
@@ -272,6 +293,12 @@ class DataBuffer:
     buffer.channels / buffer.sfreq / buffer.n_ch 取布局。
     add_eeg 平铺约定：每样本 n_ch+1 列，末列为保留占位
     （Muse 旧布局 4+1=5 列不变；NeuraDock 为 7+1=8 列，与设备协议保留列一致）。
+
+    L1 数据诚实性（2026-09-08 法师拍板，讨论稿第八节）：eeg_all 存的从来是
+    显示链（去直流+1–40Hz 因果带通）后的数据；接收器现在把滤波前的原始值
+    一并经 add_eeg(raw_samples=) 旁路存入 eeg_raw_all（可选，模拟器/回放无
+    原始概念则留空）。save_bin 在 raw 存在时输出 eeg_pre_filter 列，并把
+    signal_chain 写进 meta——名实相符，跨会话可追溯。
     """
 
     def __init__(self, channels=None, sfreq=None, device="muse"):
@@ -285,6 +312,10 @@ class DataBuffer:
         self._bp_min_samples = int(self.sfreq * 8)
         self.eeg = {ch: deque(maxlen=self._disp_samples) for ch in self.channels}
         self.eeg_all = {ch: [] for ch in self.channels}  # Unlimited for .bin saving
+        # L1：滤波前原始副本（仅真机接收器喂入；与 eeg_all 逐样本对齐）
+        self.eeg_raw_all = {ch: [] for ch in self.channels}
+        self.has_raw = False
+        self.chain_override = None   # 非 None 时 save_bin 以此为准标注链
         self.optics = {name: deque(maxlen=PPG_ANALYSIS_SAMPLES) for name in OPTICS_CHANNELS_8}
         self.optics_n_ch = 0
         self.optics_baseline = {}
@@ -322,10 +353,13 @@ class DataBuffer:
             t = self.timestamps[-1] + 1e-6
         self.timestamps.append(t)
 
-    def add_eeg(self, samples: list, t_rel=None):
+    def add_eeg(self, samples: list, t_rel=None, raw_samples=None):
         """samples: flat list of ns*(n_ch+1) floats（每样本 n_ch 通道值 + 1 保留列）
         t_rel: 可选，本批首样本的相对秒（设备时钟）。TCP 设备积压突发到达时，
-        用设备时间戳才能保持 250Hz 均匀网格；缺省沿用到达时刻（BLE 旧行为）。"""
+        用设备时间戳才能保持 250Hz 均匀网格；缺省沿用到达时刻（BLE 旧行为）。
+        raw_samples: 可选（L1），与 samples 同布局的**滤波前原始值**。真机接收器
+        传入时逐样本另存 eeg_raw_all，供 save_bin 输出 eeg_pre_filter；
+        模拟器/回放不传，has_raw 保持 False，行为与旧版一致。"""
         stride = self.n_ch + 1
         with self.lock:
             if not self.session_start:
@@ -334,20 +368,32 @@ class DataBuffer:
             ns = len(samples) // stride
             t_base = float(t_rel) if t_rel is not None \
                 else time.time() - self.session_start
+            store_raw = raw_samples is not None and len(raw_samples) >= ns * stride
             for s in range(ns):
                 offset = s * stride
                 for i, ch in enumerate(self.channels):
                     val = samples[offset + i] if offset + i < len(samples) else 0.0
                     self.eeg[ch].append(val)
                     self.eeg_all[ch].append(val)
+                    if store_raw:
+                        rv = raw_samples[offset + i]
+                        self.eeg_raw_all[ch].append(
+                            float(rv) if rv is not None else 0.0)
                 self._append_ts(self.session_start + t_base + s / self.sfreq)
+            if store_raw:
+                self.has_raw = True
 
     def process_raw_packet(self, data: bytes, decoder):
-        """Ingest one Muse BLE payload via MuseRealtimeDecoder (same as cloud)."""
+        """Ingest one Muse BLE payload via MuseRealtimeDecoder (same as cloud).
+
+        注意（L1）：本路径为旧 Tk GUI 专用，解码值**不经过**显示链滤波——
+        eeg 即原始值，无需另存 pre_filter；链标注如实写 passthrough，
+        避免被 save_bin 默认的带通链错标。"""
         decoded = decoder.decode(data, datetime.now())
         with self.lock:
             if not self.session_start:
                 self.session_start = time.time()
+            self.chain_override = SIGNAL_CHAIN_PASSTHROUGH
             if decoded.eeg:
                 t_arr = time.time() - self.session_start
                 ns = max((len(v) for v in decoded.eeg.values()), default=0)
@@ -356,8 +402,9 @@ class DataBuffer:
                 for ch in self.channels:
                     if ch in decoded.eeg:
                         for v in decoded.eeg[ch]:
-                            self.eeg[ch].append(float(v))
-                            self.eeg_all[ch].append(float(v))
+                            fv = float(v)
+                            self.eeg[ch].append(fv)
+                            self.eeg_all[ch].append(fv)
             if decoded.ppg:
                 self.optics_n_ch = max(self.optics_n_ch, len(decoded.ppg))
                 for name, samples in decoded.ppg.items():
@@ -589,6 +636,13 @@ class DataBuffer:
         for i, ch in enumerate(self.channels):
             eeg_arr[:n, i] = self.eeg_all[ch][:n]
 
+        # L1 数据诚实性：滤波前原始副本（仅真机会话有；与 eeg 逐样本对齐截断）
+        raw_arr = None
+        if self.has_raw and min((len(self.eeg_raw_all[ch]) for ch in self.channels), default=0) > 0:
+            raw_arr = np.zeros((n, self.n_ch))
+            for i, ch in enumerate(self.channels):
+                raw_arr[:n, i] = self.eeg_raw_all[ch][:n]
+
         # Save raw data
         data_path = os.path.join(REPORT_DIR, f"local_{ts}.npz")
         ts_arr = np.asarray(self.timestamps[:n], dtype=np.float64)
@@ -598,6 +652,17 @@ class DataBuffer:
             start_epoch = self.session_start if self.session_start else time.time()
             ts_arr = start_epoch + np.arange(n) / self.sfreq
         duration_val = float(ts_arr[-1] - ts_arr[0]) if ts_arr.size > 1 else self.duration_seconds()
+        # L1 链标注三分支（诚实优先）：
+        #  ① 接收器显式声明的链（如旧 GUI passthrough）② 真机带通链+pre_filter 可回退
+        #  ③ 无副本的会话（模拟器/回放）——不冒充带通参数，如实标注不可靠
+        if self.chain_override is not None:
+            chain = dict(self.chain_override)
+        elif raw_arr is not None:
+            chain = dict(SIGNAL_CHAIN, pre_filter_available=True)
+        else:
+            chain = {"chain_tag": "no_prefilter_copy",
+                     "note": "本会话未保存滤波前原始副本（模拟器/回放/旧版数据）；"
+                             "eeg 列信号链不可靠，不建议正式入库。"}
         meta = {
             "timestamp": timestamp,
             "sfreq": self.sfreq,
@@ -605,10 +670,15 @@ class DataBuffer:
             "device": self.device,
             "samples": n,
             "duration": duration_val,
+            "signal_chain": chain,
         }
         if extra_meta:
             meta.update(extra_meta)
-        np.savez(data_path, eeg=eeg_arr, timestamps=ts_arr, meta=meta)
+        if raw_arr is not None:
+            np.savez(data_path, eeg=eeg_arr, eeg_pre_filter=raw_arr,
+                     timestamps=ts_arr, meta=meta)
+        else:
+            np.savez(data_path, eeg=eeg_arr, timestamps=ts_arr, meta=meta)
         print(f"Data saved: {data_path}")
 
         report_path = os.path.join(REPORT_DIR, f"local_{ts}.report.html")

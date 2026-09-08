@@ -281,17 +281,19 @@ class BleDirectReceiver:
         buf = self.buffer
         n_decoded = 0
 
-        # ── EEG（4 主通道，去直流 + 滤波后送入界面）──
+        # ── EEG（4 主通道，去直流 + 滤波后送入界面；L1 另存滤波前原始副本）──
         import numpy as _np
         for sub in parsed["EEG"]:
             arr = sub["data"]  # (n_samples, n_channels)
             nch = arr.shape[1]
             batch = []
+            batch_raw = []        # L1：与 batch 同布局的滤波前值
             for i in MAIN_EEG_IDX:
                 if i >= nch:
                     continue
                 ch = CHANNELS[i]
                 raw = arr[:, i].astype(float)
+                batch_raw.append(raw.copy())
                 # 去直流
                 dc = self._dc.get(ch)
                 if dc is None:
@@ -312,11 +314,14 @@ class BleDirectReceiver:
             if batch:
                 n_s = batch[0].shape[0]
                 flat = []
+                flat_raw = []
                 for s in range(n_s):
                     for i in range(len(CHANNELS)):
                         flat.append(float(batch[i][s]) if i < len(batch) else 0.0)
+                        flat_raw.append(float(batch_raw[i][s]) if i < len(batch_raw) else 0.0)
                     flat.append(0.0)  # 第 5 列占位
-                buf.add_eeg(flat)
+                    flat_raw.append(0.0)
+                buf.add_eeg(flat, raw_samples=flat_raw)
                 n_decoded += 1
 
         # ── 光学 / PPG（按通道名送入）──

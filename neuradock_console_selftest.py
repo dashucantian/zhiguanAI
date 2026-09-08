@@ -78,6 +78,8 @@ def main():
             with np.load(saved["npz"], allow_pickle=True) as z:
                 meta = z["meta"].item()
                 eeg = z["eeg"]
+                has_pf = "eeg_pre_filter" in z.files
+                pf = z["eeg_pre_filter"] if has_pf else None
             if eeg.shape[1] != 7:
                 fails.append(f"npz 通道数 {eeg.shape[1]} ≠ 7")
             if float(meta["sfreq"]) != 250.0:
@@ -86,6 +88,20 @@ def main():
                 fails.append(f"npz device {meta.get('device')} ≠ neuradock")
             if meta.get("channels", [])[:1] != ["CP5"]:
                 fails.append(f"npz channels {meta.get('channels')} 首通道非 CP5")
+            # L1 数据诚实性断言
+            chain = meta.get("signal_chain") or {}
+            if not has_pf:
+                fails.append("真机会话 npz 缺少 eeg_pre_filter 列（L1 未生效）")
+            else:
+                if pf.shape != eeg.shape:
+                    fails.append(f"pre_filter 形状 {pf.shape} ≠ eeg 形状 {eeg.shape}")
+                # 滤波后与原始不应逐点相等（带通生效）
+                elif np.allclose(pf, eeg):
+                    fails.append("pre_filter 与 eeg 完全相同（raw 旁路可能未接滤波前数据）")
+            if chain.get("chain_tag") != "v12_bp_1_40":
+                fails.append(f"signal_chain.chain_tag={chain.get('chain_tag')} ≠ v12_bp_1_40")
+            if chain.get("pre_filter_available") is not True:
+                fails.append("signal_chain.pre_filter_available 非 True")
             try:
                 os.remove(saved["npz"])   # 自测产物即删
             except OSError as e:
