@@ -79,6 +79,7 @@ class BleDirectReceiver:
         self._disconnect_handled = False  # V1.2 幂等断连处理标记
         self._last_data_time = time.time()   # 最近一次收到数据的时刻
         self._reconnect_attempts = 0      # V1.3 自动重连已用次数（收到数据即清零）
+        self._last_reconnect_cause = None  # 2026-09-09：最近一次重连的真实底层原因
         self._session_stop = threading.Event()  # V1.3 本轮连接会话结束信号（重连用）
         self._reconnecting = False        # V1.3 重连进行中标记（防看门狗重复触发）
         self._dc = {}  # 每通道直流分量估计
@@ -128,7 +129,10 @@ class BleDirectReceiver:
                 if self._request_reconnect(f"数据流静默 {silence:.0f} 秒"):
                     continue
                 reason = (f"数据流静默 {silence:.0f} 秒（疑似蓝牙断开，"
-                          f"重连 {RECONNECT_MAX_ATTEMPTS} 次未成功）")
+                          f"重连 {RECONNECT_MAX_ATTEMPTS} 次未成功")
+                if self._last_reconnect_cause:
+                    reason += f"；最后一次原因：{self._last_reconnect_cause}"
+                reason += "）"
                 self._ui_msg(f"❌ {reason}，正在自动保存并停止...")
                 self._connected.clear()
                 self.running = False
@@ -145,6 +149,7 @@ class BleDirectReceiver:
             return False
         self._reconnect_attempts += 1
         n = self._reconnect_attempts
+        self._last_reconnect_cause = cause   # 保留真实底层原因（如"扫描未发现头环"）
         self._ui_msg(f"⚠️ {cause}，自动重连（第 {n}/{RECONNECT_MAX_ATTEMPTS} 次）...")
         self._connected.clear()
         self.running = False
