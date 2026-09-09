@@ -76,6 +76,9 @@ def main():
                 ad = d.get("address") if isinstance(d, dict) else getattr(d, "address", None)
                 return "muse" in (nm or "").lower() or (ad or "").upper().startswith("00:55:DA")
 
+            def _d_addr(d):
+                return d.get("address") if isinstance(d, dict) else getattr(d, "address", None)
+
             muses = [_d_addr(d) for d in devices if _is_muse(d)]
             if not muses:
                 L(3, "❌ 未发现 Muse（名称与 00:55:DA 前缀都不匹配）。检查：头环是否"
