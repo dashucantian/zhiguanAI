@@ -120,7 +120,7 @@ water.rotation.x = -Math.PI/2; scene.add(water);
 const orb = new THREE.Mesh(new THREE.SphereGeometry(.28,48,32),
   new THREE.MeshStandardMaterial({color:0x8fd8ff, emissive:0x2a7fa8,
     emissiveIntensity:1.2, roughness:.25, metalness:.1}));
-orb.position.set(0,1.5,-1.6); scene.add(orb);
+orb.position.set(0,0.9,-1.6); scene.add(orb);
 
 /* 念珠粒子：Theta 驱动漂移 */
 const PN = 900;
@@ -155,6 +155,29 @@ function themeFor(state){
 }
 let curCol = new THREE.Color(THEMES.default.col);
 
+/* ── 频段 → 画面 映射 v2（2026-09-08 凌晨，经两份真机数据标定）──────────
+ v1（绝对 dB 线性映射）被 09-08 法师 42 分钟实测会话证伪：
+   Alpha/Theta dB 双双被总功率劫持（corr(α,θ)=+0.98、corr(总功率,α)=+0.98），
+   伪迹一来两者同涨——画面成了"幅度镜子"，定/躁/沉无法区分；且 v1 theta
+   上限 16.62 dB 远低于实测 p95=36.54，80% 帧顶格。
+ v2 改用对总功率不敏感的相对量：
+   S.a ← relα = Alpha功率/五频段总功率（0~1占比；躁动时 beta/gamma 涌入
+         分母，relα 下降 → 变暗；安定时上升 → 变亮）
+   S.th ← log10(θ/β)（沉掉轴：高=昏沉慢波主导，低=躁动快波主导；
+         粒子速度与雾浓度随 θ/β 比，不再随幅度）
+ 区间取两份真机合并 p5/p95（09-06 baseline 帧×3 加权，防伪迹数据主导）：
+   relα: lo=0.0303 span=0.0582   log10(θ/β): lo=-0.8198 span=1.2105
+ 解耦验证：合并 corr(relα, logθβ)=+0.30（v1 为 +0.94）；干净数据 A 内 +0.54，
+ 含伪迹 B 内 +0.23。标定与验证脚本：b2_mapping_v2.py（report\b2_mapping_v2.json）
+ 语义方向（待法师审定，见工作日志 008 遗留）：安定=亮；昏沉=暗而粒子快雾浓；
+ 躁动=暗而慢。注意与 v1 体感（"散乱变亮变快"）方向相反——v1 那个实为伪迹镜像。 */
+const CAL = {
+  relALo: 0.0303, relASpan: 0.0582,     // 安定度（relα）
+  ltBLo: -0.8198, ltBSpan: 1.2105,      // 沉掉轴 log10(theta/beta)
+  relAFallback: 0.0500,                 // 无数据时取两数据集合并中位 → 中性态
+  ltBFallback: -0.20                    // 同上（A 中位），S.th≈0.51
+};
+
 /* ── 数据接入：WebSocket ─────────────────────────────── */
 /* https 页面自动走 wss（WebXR 要求安全上下文，Pico 进 VR 必经 HTTPS） */
 const wsURL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/vr`;
@@ -171,9 +194,18 @@ function connect(){
       S.state = d.state||S.state; S.phase = d.phase||'';
       if(d.bands) S.bands = d.bands;
       if(d.vitals) S.vitals = d.vitals;
-      // alpha dB → 0..1（经验区间 5~20 dB），theta 同理 0~15 dB
-      const a  = clamp01(((S.bands.alpha ?? d.alpha ?? 8) - 5)/15);
-      const th = clamp01(((S.bands.theta ?? d.theta ?? 6) - 2)/13);
+      // v2 映射：S.a←relα（Alpha 占五频段总功率比），S.th←log10(θ/β) 沉掉轴
+      // （绝对 dB 会被伪迹总功率劫持，见顶部 CAL 注释；bands 值为 4 通道 dB 均值）
+      const B = S.bands;
+      let ra = CAL.relAFallback, lt = CAL.ltBFallback;
+      if (B && B.alpha != null && B.theta != null && B.beta != null) {
+        const p = k => (B[k] != null ? Math.pow(10, B[k]/10) : 0);
+        const tot = p("delta")+p("theta")+p("alpha")+p("beta")+p("gamma");
+        if (tot > 0) ra = p("alpha")/tot;
+        lt = (B.theta - B.beta)/10;                       // = log10(theta/beta)
+      }
+      const a  = clamp01((ra - CAL.relALo)/CAL.relASpan);
+      const th = clamp01((lt - CAL.ltBLo)/CAL.ltBSpan);
       S.a  += (a  - S.a )*.25;
       S.th += (th - S.th)*.25;
       S.hr = S.vitals.hr || 0;
@@ -249,7 +281,7 @@ const clock = new THREE.Clock();
 let breath = 0;
 renderer.setAnimationLoop(()=>{
   const dt = clock.getDelta(), t = clock.elapsedTime;
-  waterU.uT.value = t; waterU.uA.value = S.a; waterU.uTh.value = S.th;
+  waterU.uT.value = t*0.4; waterU.uA.value = S.a; waterU.uTh.value = S.th;  // 水面动画放慢到40%（原速波纹/网格光点移动过快，干扰禅修）
 
   if(S.autoTheme){
     const th = themeFor(S.state);
@@ -263,8 +295,8 @@ renderer.setAnimationLoop(()=>{
   pMat.opacity = .35 + .55*S.a;
   pMat.color.copy(curCol).lerp(new THREE.Color(0xffffff), .35);
 
-  // 心息之珠：心率缺失时退回 6 次/分的禅修呼吸节律
-  const rate = S.hr>40 ? S.hr/60 : 0.1;
+  // 心息之珠：脉动跟随心率但整体放慢到禅修节律（09-10法师实测原速过快干扰入定）
+  const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
   breath += dt*rate*Math.PI*2;
   const pulse = .85 + .25*Math.sin(breath);
   orb.scale.setScalar(pulse*(0.8+0.5*S.a));
@@ -274,7 +306,7 @@ renderer.setAnimationLoop(()=>{
   // 粒子缓慢上升漂移（Theta 越快越"散"）
   const pos = pGeo.attributes.position;
   for(let i=0;i<PN;i++){
-    let y = pos.getY(i) + dt*(.08 + .5*S.th*pSeedAt(i));
+    let y = pos.getY(i) + dt*(.02 + .12*S.th*pSeedAt(i));  // 放慢粒子上升漂移（原速干扰禅修）
     if(y>5.5) y = .2;
     pos.setY(i,y);
   }
