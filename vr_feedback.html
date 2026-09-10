@@ -120,7 +120,7 @@ water.rotation.x = -Math.PI/2; scene.add(water);
 const orb = new THREE.Mesh(new THREE.SphereGeometry(.28,48,32),
   new THREE.MeshStandardMaterial({color:0x8fd8ff, emissive:0x2a7fa8,
     emissiveIntensity:1.2, roughness:.25, metalness:.1}));
-orb.position.set(0,1.25,-1.6); scene.add(orb);  // y=胸口高度（09-10法师实测：0.9偏低、1.5挡脸，取1.25与观者及对面模型胸口对齐）
+orb.position.set(0,1.25,-1.4); scene.add(orb);  // 固定在观者(z=3.2)与本尊模型(z≈-6)的中点 z=-1.4；y=胸口高度（09-10法师实测：往复移动干扰禅修，改为定点呼吸胀缩）
 
 /* 念珠粒子：Theta 驱动漂移 */
 const PN = 900;
@@ -299,10 +299,7 @@ renderer.setAnimationLoop(()=>{
   const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
   breath += dt*rate*Math.PI*2;
   const pulse = .85 + .25*Math.sin(breath);
-  orb.scale.setScalar(pulse*(0.8+0.5*S.a));
-  // 沿纵深往复：与呼吸脉动同相位（一次呼吸一个来回），幅度收窄、节奏放慢
-  // （09-10法师实测：原振幅1.4→跨度2.8m过大过快；收到0.5→跨度1m，跟呼吸节律相应）
-  orb.position.z = -1.7 + 0.5*Math.sin(breath);
+  orb.scale.setScalar(pulse*(0.8+0.5*S.a));  // 定点呼吸胀缩（09-10法师实测：来回移动打扰禅修，改为固定中点随呼吸变大变小）
   orb.material.emissive.copy(curCol);
   orb.material.emissiveIntensity = .6 + 1.8*S.a;
 
