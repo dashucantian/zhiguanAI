@@ -298,8 +298,8 @@ renderer.setAnimationLoop(()=>{
   // 心息之珠：脉动跟随心率但整体放慢到禅修节律（09-10法师实测原速过快干扰入定）
   const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
   breath += dt*rate*Math.PI*2;
-  const pulse = .85 + .25*Math.sin(breath);
-  orb.scale.setScalar(pulse*(0.8+0.5*S.a));  // 定点呼吸胀缩（09-10法师实测：来回移动打扰禅修，改为固定中点随呼吸变大变小）
+  const pulse = 1.0 + 0.12*Math.sin(breath);   // 纯呼吸胀缩，幅度仅±12%（09-10法师：大幅缩放使球面前表面推进~0.3m，被看成前后移动；收窄到温和呼吸）
+  orb.scale.setScalar(pulse);                  // 定点只随呼吸变大变小；脑电状态(S.a)移出尺寸、改由发光强度体现，避免"移动感"
   orb.material.emissive.copy(curCol);
   orb.material.emissiveIntensity = .6 + 1.8*S.a;
 
