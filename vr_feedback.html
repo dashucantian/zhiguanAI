@@ -300,9 +300,9 @@ renderer.setAnimationLoop(()=>{
   breath += dt*rate*Math.PI*2;
   const pulse = .85 + .25*Math.sin(breath);
   orb.scale.setScalar(pulse*(0.8+0.5*S.a));
-  // 沿纵深往复：从观者侧(z≈-0.7)缓慢移向对面模型侧(z≈-3.5)再返回，与呼吸同相位
-  // （09-10法师实测：要"从我这边往他那边来回来移动"，而非原地胀缩的上下感）
-  orb.position.z = -2.1 + 1.4*Math.sin(breath);
+  // 沿纵深往复：与呼吸脉动同相位（一次呼吸一个来回），幅度收窄、节奏放慢
+  // （09-10法师实测：原振幅1.4→跨度2.8m过大过快；收到0.5→跨度1m，跟呼吸节律相应）
+  orb.position.z = -1.7 + 0.5*Math.sin(breath);
   orb.material.emissive.copy(curCol);
   orb.material.emissiveIntensity = .6 + 1.8*S.a;
 
