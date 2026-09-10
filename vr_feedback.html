@@ -171,6 +171,22 @@ let curCol = new THREE.Color(THEMES.default.col);
  含伪迹 B 内 +0.23。标定与验证脚本：b2_mapping_v2.py（report\b2_mapping_v2.json）
  语义方向（待法师审定，见工作日志 008 遗留）：安定=亮；昏沉=暗而粒子快雾浓；
  躁动=暗而慢。注意与 v1 体感（"散乱变亮变快"）方向相反——v1 那个实为伪迹镜像。 */
+/* ── 截图自检注入开关（2026-09-10，三重分析用）───────────────────────
+   仅当 URL 带 fix_a/fix_th/breath/autoload/wt/state 参数时生效；
+   默认全部关闭——法师日常使用与 V1 标准模板（tag vr-scene-v1-template）零影响。
+   用途：把 S.a/S.th/呼吸相位/水面时间/主题状态精确钉住，供无头浏览器截图做
+   「参数 ↔ 视觉」对照；参数随 URL 记录，截图可复现、可对账。 */
+const _qp = new URLSearchParams(location.search);
+const INJ = {
+  active: _qp.has('fix_a') || _qp.has('fix_th'),
+  a: parseFloat(_qp.get('fix_a')) || 0,
+  th: parseFloat(_qp.get('fix_th')) || 0,
+  breath: _qp.has('breath') ? parseFloat(_qp.get('breath')) : null,
+  wt: _qp.has('wt') ? parseFloat(_qp.get('wt')) : null,
+  state: _qp.get('state') || null,
+  autoload: _qp.get('autoload') === '1',
+  loaded: false,
+};
 const CAL = {
   relALo: 0.0303, relASpan: 0.0582,     // 安定度（relα）
   ltBLo: -0.8198, ltBSpan: 1.2105,      // 沉掉轴 log10(theta/beta)
@@ -257,6 +273,7 @@ async function loadModel(){
   }catch(err){ saySticky('模型载入失败：'+(err && err.message ? err.message : err)); }
 }
 $('btnModel').onclick = loadModel;
+if(INJ.autoload) loadModel();   // 截图自检：自动载入3D模型，复现法师实机场景（仅URL带autoload=1生效）
 
 /* ── VR 进入 ─────────────────────────────────────────── */
 $('btnVR').onclick = async ()=>{
@@ -281,7 +298,8 @@ const clock = new THREE.Clock();
 let breath = 0;
 renderer.setAnimationLoop(()=>{
   const dt = clock.getDelta(), t = clock.elapsedTime;
-  waterU.uT.value = t*0.4; waterU.uA.value = S.a; waterU.uTh.value = S.th;  // 水面动画放慢到40%（原速波纹/网格光点移动过快，干扰禅修）
+  if(INJ.active){ S.a = INJ.a; S.th = INJ.th; if(INJ.state) S.state = INJ.state; }  // 截图自检：钉住参数（仅 URL 带参生效）
+  waterU.uT.value = (INJ.active && INJ.wt!=null) ? INJ.wt : t*0.4; waterU.uA.value = S.a; waterU.uTh.value = S.th;  // 水面动画放慢到40%（原速波纹/网格光点移动过快，干扰禅修）
 
   if(S.autoTheme){
     const th = themeFor(S.state);
@@ -297,7 +315,7 @@ renderer.setAnimationLoop(()=>{
 
   // 心息之珠：脉动跟随心率但整体放慢到禅修节律（09-10法师实测原速过快干扰入定）
   const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
-  breath += dt*rate*Math.PI*2;
+  breath = (INJ.active && INJ.breath!=null) ? INJ.breath : breath + dt*rate*Math.PI*2;
   const s = Math.sin(breath);            // 呼吸相位 -1..1
   const inhale = (s + 1) * 0.5;          // 0..1，1=吸气顶点
   const pulse = 1.0 + 0.20*s;            // 呼吸胀缩幅度±20%（法师：±12%太小看不出）
@@ -328,7 +346,10 @@ renderer.setAnimationLoop(()=>{
       `<b>状态</b> ${S.state||'—'} ${S.phase?('· '+S.phase):''}<br>`+
       `<b>Alpha</b> ${fmt(S.bands.alpha)} dB　<b>Theta</b> ${fmt(S.bands.theta)} dB<br>`+
       `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'—'}　<b>时长</b> ${S.elapsed|0}s<br>`+
-      `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`;
+      `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`+
+      (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`+
+        (INJ.breath!=null?` 呼吸=${INJ.breath.toFixed(2)}`:'')+
+        (INJ.state?` 态=${INJ.state}`:'')+(INJ.wt!=null?` wt=${INJ.wt}`:''):'');
   }
   if(msgT && Date.now()-msgT>5000){ msg.textContent=''; msgT=0; }
   renderer.render(scene,camera);
