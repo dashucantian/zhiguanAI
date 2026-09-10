@@ -104,14 +104,14 @@ const water = new THREE.Mesh(new THREE.CircleGeometry(40,96),
       uniform float uT,uA,uTh;
       void main(){vUv=uv; vec3 p=position;
         float r=length(p.xy);
-        p.z += sin(r*1.6-uT*1.2)*(.05+.16*uA) + sin(p.x*.8+uT*.7)*.03*uTh;
+        p.z += sin(r*1.6-uT*0.5)*(.05+.16*uA) + sin(p.x*.8+uT*0.3)*.03*uTh;
         vP=p; gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
     fragmentShader:`varying vec2 vUv; varying vec3 vP; uniform float uT,uA,uTh; uniform vec3 uCol;
       void main(){float r=length(vUv-.5)*2.;
-        float ring=.5+.5*sin(r*22.-uT*1.4);
+        float ring=.5+.5*sin(r*22.-uT*0.55);
         vec3 c=mix(uCol*.25,uCol,(.25+.75*uA)*ring*smoothstep(1.,.15,r));
         c+=uCol*pow(max(0.,1.-r*1.15),3.)*(.35+.9*uA);
-        c+=vec3(.6,.8,1.)*uTh*.06*sin(vUv.x*60.+uT);
+        c+=vec3(.6,.8,1.)*uTh*.06*sin(vUv.x*60.+uT*0.45);
         gl_FragColor=vec4(c,1.);}`
   }));
 water.rotation.x = -Math.PI/2; scene.add(water);
@@ -298,10 +298,14 @@ renderer.setAnimationLoop(()=>{
   // 心息之珠：脉动跟随心率但整体放慢到禅修节律（09-10法师实测原速过快干扰入定）
   const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
   breath += dt*rate*Math.PI*2;
-  const pulse = 1.0 + 0.12*Math.sin(breath);   // 纯呼吸胀缩，幅度仅±12%（09-10法师：大幅缩放使球面前表面推进~0.3m，被看成前后移动；收窄到温和呼吸）
-  orb.scale.setScalar(pulse);                  // 定点只随呼吸变大变小；脑电状态(S.a)移出尺寸、改由发光强度体现，避免"移动感"
-  orb.material.emissive.copy(curCol);
-  orb.material.emissiveIntensity = .6 + 1.8*S.a;
+  const s = Math.sin(breath);            // 呼吸相位 -1..1
+  const inhale = (s + 1) * 0.5;          // 0..1，1=吸气顶点
+  const pulse = 1.0 + 0.20*s;            // 呼吸胀缩幅度±20%（法师：±12%太小看不出）
+  orb.scale.setScalar(0.6 * pulse);      // 整体缩小到约0.6倍（法师：球太大）；球小后±20%前表面仍只位移~7cm，不会回到"前后移动"感
+  // 光色随呼吸：呼气=状态主色 curCol，吸气=过渡到亮青白（法师：加光色随呼吸变化）
+  orb.material.emissive.copy(curCol).lerp(new THREE.Color(0xbfeaff), 0.55*inhale);
+  // 亮度随呼吸明显起伏：吸气更亮（法师：原亮度变化不明显——此前只随缓慢的脑电S.a变，不随呼吸）
+  orb.material.emissiveIntensity = 0.7 + 1.7*inhale + 0.7*S.a;
 
   // 粒子缓慢上升漂移（Theta 越快越"散"）
   const pos = pGeo.attributes.position;
