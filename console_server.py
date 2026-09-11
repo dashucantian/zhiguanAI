@@ -54,6 +54,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from closedloop_experiment import run_closed_loop, EXP_DIR
+from closedloop_controller import ClosedLoopController
 from experiment_config_loader import (load_experiment_config, validate_config,
                                       save_snapshot, DEFAULT_CONFIG)
 
@@ -402,6 +403,18 @@ class MonitorSession:
         self.saved = None      # {"npz": ..., "report": ..., "ingest_cmd": ...}
         self.session_info = {}  # 测试者信息/反馈（保存时写入 meta）
         self._save_req = threading.Event()
+        # ── 声音决策（复用 closedloop_controller，红线5：不新建平行路径）──
+        # 2026-09-11 法师裁定5：本轮接入、默认静音。
+        # 此前 beat/vol 只在闭环实验路径产出（push_from_experiment 已透传），
+        # 监测路径（法师日常所用）完全没有 → VR 场景无法获得声音指令。
+        self.ctrl = None            # ClosedLoopController 实例
+        self.ctrl_cfg = None        # 实验配置（controller/audio/baseline_seconds）
+        self.ctrl_sig = None        # bands 去重签名（决策器平滑步长按2秒周期标定，
+                                    # 而 tick 为0.25秒，若每tick调用会使平滑快8倍）
+        self.ctrl_beat = None       # 最近决策的节拍 Hz
+        self.ctrl_vol = 0.0         # 最近决策的音量（基线期前为0＝静音）
+        self.ctrl_note = ""         # 最近决策说明（供调试，不下发VR）
+        self.ctrl_phase = "idle"    # idle / baseline / locked
 
     def is_running(self):
         return self.thread is not None and self.thread.is_alive()
@@ -614,6 +627,41 @@ class MonitorSession:
                         pass
                 bp, state = buf.get_latest_bp()
                 vitals = buf.get_vitals()
+                # ── 声音决策（复用 closedloop_controller，裁定5：本轮接入、前端默认静音）──
+                # 与 closedloop_experiment 同构的基线期语义，不自建平行流程（红线5）。
+                # 按 bands 签名去重：决策器的 vol_smooth_step/beat_step 是按"每2秒
+                # 决策周期"标定的，而 tick 为0.25秒，若每tick调用平滑会快8倍。
+                if bp:
+                    try:
+                        if self.ctrl is None:
+                            self.ctrl_cfg = load_experiment_config()
+                            self.ctrl = ClosedLoopController.from_config(self.ctrl_cfg)
+                        sig = "|".join(str(bp.get(k)) for k in ("alpha", "theta", "beta"))
+                        if sig != self.ctrl_sig:
+                            self.ctrl_sig = sig
+                            elapsed = buf.duration_seconds()
+                            base_sec = float((self.ctrl_cfg.get("experiment") or {})
+                                             .get("baseline_seconds", 120))
+                            if elapsed < base_sec:
+                                # 基线期：累积个人基线，节拍音量维持构造默认值
+                                self.ctrl.add_baseline(bp.get("alpha"))
+                                self.ctrl_phase = "baseline"
+                                self.ctrl_beat = self.ctrl.beat
+                                self.ctrl_vol = self.ctrl.volume
+                                self.ctrl_note = "基线采集"
+                            else:
+                                if not self.ctrl.has_baseline:
+                                    b = self.ctrl.finalize_baseline()
+                                    self.ctrl_phase = "locked"
+                                    self._emit({"type": "baseline_locked",
+                                                "baseline_db": b})
+                                self.ctrl_beat, self.ctrl_vol, self.ctrl_note = \
+                                    self.ctrl.update(bp)
+                    except Exception as e:
+                        # 声音决策失败不得影响监测主流程（环一可靠性优先）
+                        if not getattr(self, "_ctrl_warned", False):
+                            self._ctrl_warned = True
+                            print(f"[warn] 声音决策器异常（不影响监测推流）：{e}")
                 # 最近 5 秒波形（每通道 1280 点；通道布局随设备，V1.4）
                 wave = {}
                 with buf.lock:
@@ -649,6 +697,11 @@ class MonitorSession:
                     "motion_xyz": {"x": _ds(accx, 80), "y": _ds(accy, 80),
                                    "z": _ds(accz, 80)},
                     "wave": wave,
+                    # 声音指令（2026-09-11 附加式新增，不改既有字段）：
+                    # 监测路径此前无 beat/vol，VR 场景拿不到声音指令。
+                    # phase 供前端判断是否已过基线期（基线期不出声）。
+                    "beat": self.ctrl_beat, "vol": self.ctrl_vol,
+                    "audio_phase": self.ctrl_phase,
                 }
                 self._emit(payload)
                 VR.push_from_monitor(payload)
@@ -850,7 +903,13 @@ class VRSession:
                     "connected": ev.get("connected"),
                     "battery": ev.get("battery"),
                     "bands": ev.get("bands"), "state": ev.get("state"),
-                    "vitals": ev.get("vitals")})
+                    "vitals": ev.get("vitals"),
+                    # 声音指令透传（2026-09-11，裁定5）：
+                    # 此前只有 push_from_experiment 带 beat/vol，监测路径的 VR 场景
+                    # 收不到声音指令 → 法师要的"声音气息绵延感"无载体。
+                    # 与 push_from_experiment 字段名一致，前端可统一消费。
+                    "beat": ev.get("beat"), "vol": ev.get("vol"),
+                    "audio_phase": ev.get("audio_phase")})
 
     def push_from_experiment(self, ev):
         """闭环实验事件 → VR 指标包（剥离原始波形）。"""

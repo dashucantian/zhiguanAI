@@ -33,6 +33,7 @@ addEventListener('unhandledrejection', e => { window.__vrErr = 'rejection: ' + (
   <button id="btnVR">进入 VR</button>
   <button id="btnModel">载入禅修场景模型</button>
   <button id="btnTheme" class="on">自动配色</button>
+  <button id="btnSound">声音：关</button>
 </div>
 <script type="importmap">
 {"imports":{
@@ -50,7 +51,12 @@ const S = {
   bands:{}, vitals:{},
   a:0.5, th:0.5, hr:0,              // 平滑后的视觉参数 0..1 / bpm（初值0.5＝中性）
   aTarget:0.5, thTarget:0.5,        // EMA 目标值（每 2 秒由新 bands 更新一次）
-  autoTheme:true, model:null, modelList:[]
+  autoTheme:true, model:null, modelList:[],
+  // ── 声音（裁定5：本轮接入、默认静音）─────────────
+  // beat/vol 由后端 closedloop_controller 决策（监测路径 09-11 起才透传），
+  // 前端只负责渲染，不自建决策逻辑（红线5）。
+  beat:null, vol:0, audioPhase:'idle',   // 后端指令
+  soundOn:false                          // 法师开关，默认 false（静音）
 };
 const $ = id => document.getElementById(id);
 const hud = $('hud'), msg = $('msg');
@@ -259,6 +265,98 @@ const GUIDE = {
   scale: 0.6        // 光球基准尺寸（V1 标准模板值，法师："球太大"）
 };
 
+/* ── 声音渲染（前端 Web Audio，裁定5：本轮接入、默认静音）─────
+   为何前端渲染而非复用后端 IsoEngine：IsoEngine 走 sounddevice 输出到
+   **电脑扬声器**，而法师佩戴 Pico 头显 → 声音到不了耳朵。故复用后端
+   **决策层**（closedloop_controller：基线自适应→beat/vol），输出层在 VR
+   路径必须由前端 Web Audio 渲染。这不是平行路径，而是同一决策、不同物理
+   输出设备（红线5 禁的是重建决策逻辑，非禁必要的输出适配）。
+
+   合成方式与 IsoEngine 逐项等价（closedloop_engine.py:_callback）：
+     sig = sin(载波相位) × max(sin(节拍相位), 0)^0.6 × 限速音量
+   - 载波 220Hz（同 experiment_config.json audio.carrier_hz）
+   - 等时节拍包络：正弦正半周取 0.6 次幂 → 50% 占空比、过零连续无咔哒
+   - 音量限速：每采样最多变 0.0002（约 9/秒满幅），防爆音
+   - 相位累积：频率热更新时波形连续不跳变
+   ⚠️ 需逐样本合成，只能用 AudioWorklet（ScriptProcessor 已废弃、VR 下卡顿）。
+   Worklet 源码用字符串数组 join 构建、内部全用单引号——避免嵌套模板串反引号
+   （2026-09-10 曾因未闭合模板串改坏实机页面，此处刻意规避）。 */
+const AUDIO = {
+  carrier: 220.0,       // 载波 Hz，同 experiment_config.json audio.carrier_hz
+  volLimit: 0.0002,     // 每采样音量最大变化，同 IsoEngine max_step
+  ctx: null, node: null, gain: null, ready: false
+};
+const WORKLET_SRC = [
+  'class IsoProc extends AudioWorkletProcessor {',
+  '  constructor(){ super();',
+  '    this.phC = 0; this.phM = 0; this.cur = 0;',
+  '    this.beat = 10; this.carrier = 220; this.vol = 0; this.limit = 0.0002;',
+  '    this.port.onmessage = (e) => {',
+  '      const d = e.data;',
+  '      if (d.beat != null) this.beat = Math.max(0.5, Math.min(40, d.beat));',
+  '      if (d.carrier != null) this.carrier = Math.max(50, Math.min(1500, d.carrier));',
+  '      if (d.vol != null) this.vol = Math.max(0, Math.min(1, d.vol));',
+  '      if (d.limit != null) this.limit = d.limit;',
+  '    };',
+  '  }',
+  '  process(inputs, outputs){',
+  '    const out = outputs[0]; if (!out || !out.length) return true;',
+  '    const sr = sampleRate, n = out[0].length;',
+  '    const TWO_PI = 6.283185307179586;',
+  '    let pc = this.phC, pm = this.phM;',
+  '    const stepC = TWO_PI * this.carrier / sr;',
+  '    const stepM = TWO_PI * this.beat / sr;',
+  '    for (let i = 0; i < n; i++){',
+  '      const env = Math.pow(Math.max(Math.sin(pm), 0), 0.6);',
+  '      let dv = this.vol - this.cur;',
+  '      const mx = this.limit * n;',
+  '      if (dv > mx) dv = mx; else if (dv < -mx) dv = -mx;',
+  '      const vt = this.cur + dv * (i + 1) / n;',
+  '      const sig = Math.sin(pc) * env * vt;',
+  '      for (let ch = 0; ch < out.length; ch++) out[ch][i] = sig;',
+  '      pc += stepC; pm += stepM;',
+  '    }',
+  '    this.cur += Math.max(-this.limit * n, Math.min(this.limit * n, this.vol - this.cur));',
+  '    this.phC = pc % TWO_PI; this.phM = pm % TWO_PI;',
+  '    return true;',
+  '  }',
+  '}',
+  'registerProcessor("iso-proc", IsoProc);'
+].join('\n');
+
+async function audioInit(){
+  if (AUDIO.ready) return true;
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC){ say('本浏览器不支持 Web Audio，声音不可用'); return false; }
+    AUDIO.ctx = new AC();
+    if (AUDIO.ctx.state === 'suspended') await AUDIO.ctx.resume();
+    // Worklet 源码用 Blob URL 内联加载：不新增静态文件、不加服务器路由
+    const url = URL.createObjectURL(new Blob([WORKLET_SRC], {type:'application/javascript'}));
+    await AUDIO.ctx.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+    AUDIO.node = new AudioWorkletNode(AUDIO.ctx, 'iso-proc');
+    AUDIO.gain = AUDIO.ctx.createGain();
+    AUDIO.gain.gain.value = 0;              // 默认静音（裁定5）
+    AUDIO.node.connect(AUDIO.gain).connect(AUDIO.ctx.destination);
+    AUDIO.ready = true;
+    return true;
+  }catch(err){
+    say('声音初始化失败：'+(err && err.message ? err.message : err));
+    return false;
+  }
+}
+function audioPush(){
+  if (!AUDIO.ready || !AUDIO.node) return;
+  // 基线期（audioPhase!=='locked'）或未开启 → 目标音量 0（不出声）
+  const target = (S.soundOn && S.audioPhase === 'locked' && S.beat != null)
+                 ? Math.max(0, Math.min(1, S.vol || 0)) : 0;
+  AUDIO.node.port.postMessage({beat: S.beat, carrier: AUDIO.carrier,
+                               vol: target, limit: AUDIO.volLimit});
+  if (AUDIO.gain) AUDIO.gain.gain.setTargetAtTime(S.soundOn ? 1 : 0,
+                                                  AUDIO.ctx.currentTime, 0.05);
+}
+
 /* ── 数据接入：WebSocket ─────────────────────────────── */
 /* https 页面自动走 wss（WebXR 要求安全上下文，Pico 进 VR 必经 HTTPS） */
 const wsURL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/vr`;
@@ -344,8 +442,14 @@ function connect(){
       const th = clamp01((lt - CAL.ltBLo)/CAL.ltBSpan);
       S.thTarget = th;
       S.hr = S.vitals.hr || 0;
+      // 声音指令（后端 closedloop_controller 决策，监测路径 09-11 起才透传）
+      if (d.beat != null) S.beat = d.beat;
+      if (d.vol != null) S.vol = d.vol;
+      if (d.audio_phase) S.audioPhase = d.audio_phase;
+      audioPush();
     } else if(d.type==='start'||d.type==='baseline_locked'){
       say(d.type==='start' ? `实验开始：${d.tag||''}` : '基线已锁定');
+      if(d.type==='baseline_locked') S.audioPhase = 'locked';   // 基线锁定后可出声
     } else if(d.type==='end'){ say('会话结束'); }
     else if(d.type==='error'){ say('错误：'+(d.text||'')); }
   };
@@ -412,6 +516,24 @@ $('btnVR').onclick = async ()=>{
 $('btnTheme').onclick = ()=>{ S.autoTheme = !S.autoTheme;
   $('btnTheme').classList.toggle('on', S.autoTheme); };
 
+/* 声音开关（裁定5：默认关闭）。
+   AudioContext 必须由用户手势创建/恢复，故初始化放在点击回调内——
+   页面加载时自动 new AudioContext 会被浏览器策略挂起（suspended）且无法恢复。 */
+$('btnSound').onclick = async ()=>{
+  if (!S.soundOn) {
+    const ok = await audioInit();          // 首次点击：创建并 resume
+    if (!ok) return;
+    S.soundOn = true;
+    if (S.audioPhase !== 'locked')
+      say('声音已开启，基线采集期结束后出声（约 2 分钟）');
+  } else {
+    S.soundOn = false;
+  }
+  $('btnSound').classList.toggle('on', S.soundOn);
+  $('btnSound').textContent = '声音：' + (S.soundOn ? '开' : '关');
+  audioPush();                             // 立即生效（关→静音，开→按当前指令）
+};
+
 /* ── 主循环 ──────────────────────────────────────────── */
 const clock = new THREE.Clock();
 let breath = 0;
@@ -474,6 +596,9 @@ renderer.setAnimationLoop(()=>{
       `<b>Alpha</b> ${fmt(S.bands.alpha)} dB　<b>Theta</b> ${fmt(S.bands.theta)} dB<br>`+
       `<b>安定 S.a</b> ${S.a.toFixed(3)}　<b>沉掉 S.th</b> ${S.th.toFixed(3)}<br>`+
       `<b>引导所缘</b> ${GUIDE.bpm} 次/分（引导锚，非测量）<br>`+
+      `<b>声音</b> ${S.soundOn?'开':'关（默认静音）'}`+
+        `${S.beat!=null?` · 节拍 ${S.beat.toFixed(1)}Hz · 音量 ${(S.vol||0).toFixed(2)}`:''}`+
+        ` · ${S.audioPhase==='locked'?'基线已锁':(S.audioPhase==='baseline'?'基线采集中':'待启动')}<br>`+
       `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'— （本机无 PPG 设备）'}　<b>时长</b> ${S.elapsed|0}s<br>`+
       `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`+
       (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`+
