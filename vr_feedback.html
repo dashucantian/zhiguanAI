@@ -48,7 +48,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const S = {
   connected:false, source:null, elapsed:0, state:'', phase:'',
   bands:{}, vitals:{},
-  a:0.3, th:0.3, hr:0,              // 平滑后的视觉参数 0..1 / bpm
+  a:0.5, th:0.5, hr:0,              // 平滑后的视觉参数 0..1 / bpm（初值0.5＝中性）
+  aTarget:0.5, thTarget:0.5,        // EMA 目标值（每 2 秒由新 bands 更新一次）
   autoTheme:true, model:null, modelList:[]
 };
 const $ = id => document.getElementById(id);
@@ -198,17 +199,88 @@ const INJ = {
   autoload: _qp.get('autoload') === '1',
   loaded: false,
 };
+/* ── 沉掉轴 S.th 标定（v2.0 维持）───────────────────────
+   实测中位 0.579、IQR 0.419~0.741，居中健康，无需重标定。
+   （relALo/relASpan/relAFallback 已移除：安定度改走 ALGO 滚动分位，见下） */
 const CAL = {
-  relALo: 0.0306, relASpan: 0.0119,     // 安定度（relα）v2.1 q1/q3 标定（09-10，原 p5/p95 致 S.a 贴底失效）
-  ltBLo: -0.8198, ltBSpan: 1.2105,      // 沉掉轴 log10(theta/beta) 标定健康，维持 v2.0
-  relAFallback: 0.0350,                 // 无数据时取两段真机合并中位 → S.a≈0.37 中性态（原 0.0500 在新窄区间下会触顶变最亮，必须随标定同改）
-  ltBFallback: -0.20                    // 同上（A 中位），S.th≈0.51
+  ltBLo: -0.8198, ltBSpan: 1.2105,      // S.th ← log10(theta/beta)
+  ltBFallback: -0.20                    // 无数据时中性 → S.th≈0.51
 };
+
+/* ── 状态标准 ALGO：因果滚动分位数（H-A′）───────────────
+   2026-09-11 依法师裁定2（个人基线自适应）实现，经三段真机验证后移植。
+
+   为何弃用静态标定：rel_alpha 绝对水平跨场次漂移大——同一人三场在旧标定下
+   触顶率 30.7%/11.9%/43.1%、触底 2.5%/22.4%/8.8%，任何固定区间都无法同时
+   适配（A段单调降21.9%、C段倒U型冲高、B段开场被伪迹污染）。
+   改用「当前值在本次会话已见历史中的分位排名」：中位≈0.5 由构造保证、
+   量程随个人波动自适应、结构上不存在触顶触底。
+
+   验证结果（algo_verify_2s.py，按前端真实节奏 10秒窗/2秒步进）：
+     三段触顶触底全 0.0%，|ΔS.a|p90 ≤0.0046，max jump 0.0205
+     对照旧 q1q3：max jump 0.2874（差 14 倍）→ 即法师实测所见"闪、跳跃"
+   ⚠️ 损失投影诚实：分位排名使"中位/IQR"两项验收由构造必然满足、无判别力，
+      不得据数值全绿宣称达标；最终判定权在法师实机体感。 */
+const ALGO = {
+  shortSec: 60,     // 短窗：60 秒滚动中位数（当前状态）
+  histSec: 300,     // 历史窗 5 分钟。验证三档（5/10/15分）全过，5分最居中
+  tau: 12,          // EMA 时间常数（裁定6默认；源数据 2s 周期的 6 倍）
+  warmSec: 90,      // 预热期：前 90 秒落中性不出数（判语009 不当场评分）
+  noiseBg: 0.65,    // 噪声门＝report_generator.NOISE_BG_RATIO（复用既有阈值，不自建）
+  minHist: 15       // 历史至少 15 值（约 30 秒）才出分位，否则中性
+};
+/* 窗口一律按【时间秒】定义，不按个数——后端每 2 秒出新值（BP_EPOCH_SEC=10、
+   last_bp_time<2.0 则跳过），若按个数定义会与离线验证口径不符（曾险致
+   历史窗缩成 1/2.5，见 algo_verify_2s.py 头部说明）。 */
+const RA = { raw: [], lastSig: null };   // lastSig：bands 去重签名（后端2秒才出新值）
 
 /* ── 数据接入：WebSocket ─────────────────────────────── */
 /* https 页面自动走 wss（WebXR 要求安全上下文，Pico 进 VR 必经 HTTPS） */
 const wsURL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/vr`;
 let ws, retry = 0;
+
+/* ── H-A′ 实现：因果滚动分位数 ─────────────────────────
+   与 algo_verify_2s.py 的 runq_time 同构，逐项对应以便回归比对。 */
+function median(a){
+  if(!a.length) return NaN;
+  const s = a.slice().sort((x,y)=>x-y), m = s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+}
+/** 推入一个新 rel_alpha 样本，返回因果滚动分位 S.a（0..1）。
+ *  与 algo_verify_2s.py 的 runq_time 逐项对应；未就绪时返回 0.5 中性
+ *  （对应 Python 的 s_val=np.full(n,0.5)，不可返回 null 否则画面失驱动）。 */
+function pushRA(t, ra, noise){
+  RA.raw.push({t, v:ra, n:!!noise});
+  // 只保留历史窗内的样本，防长会话内存增长
+  const cut = t - ALGO.histSec;
+  while(RA.raw.length && RA.raw[0].t < cut) RA.raw.shift();
+
+  // 窗内取值：优先剔噪声，不足 3 个则退回全窗（对应 Python roll_med_time）
+  const vals = (from, to) => {
+    const all = RA.raw.filter(x=>x.t>=from && x.t<=to);
+    const good = all.filter(x=>!x.n).map(x=>x.v);
+    return good.length>=3 ? good : all.map(x=>x.v);
+  };
+
+  // ① 短窗中位（60秒）—— 当前状态（对应 Python short）
+  const cur = median(vals(t - ALGO.shortSec, t));
+  if (!isFinite(cur)) return 0.5;
+  if (t < ALGO.warmSec) return 0.5;                 // 预热期→中性（判语009 不当场评分）
+
+  // ② 历史短窗中位序列，**剔除噪声点**（对应 Python hist[~hz]）
+  const hist = [];
+  for (const p of RA.raw){
+    if (p.n) continue;
+    const m = median(vals(p.t - ALGO.shortSec, p.t));
+    if (isFinite(m)) hist.push(m);
+  }
+  if (hist.length < ALGO.minHist) return 0.5;       // 历史不足→中性
+
+  // ③ 分位排名：当前值在历史中的位置 → 0..1
+  let le = 0;
+  for (const h of hist) if (h <= cur) le++;
+  return le/hist.length;
+}
 function connect(){
   ws = new WebSocket(wsURL);
   ws.onopen  = ()=>{ S.connected = true; retry = 0; $('load').style.display='none'; say('已连接控制台'); };
@@ -221,20 +293,31 @@ function connect(){
       S.state = d.state||S.state; S.phase = d.phase||'';
       if(d.bands) S.bands = d.bands;
       if(d.vitals) S.vitals = d.vitals;
-      // v2 映射：S.a←relα（Alpha 占五频段总功率比），S.th←log10(θ/β) 沉掉轴
-      // （绝对 dB 会被伪迹总功率劫持，见顶部 CAL 注释；bands 值为 4 通道 dB 均值）
+      // v2.2 映射：S.a←因果滚动分位（H-A′，已验证），S.th←log10(θ/β) 沉掉轴
+      // （绝对 dB 会被伪迹总功率劫持；bands 值为 4 通道 dB 均值）
       const B = S.bands;
-      let ra = CAL.relAFallback, lt = CAL.ltBFallback;
+      let ra = null, lt = CAL.ltBFallback, noise = false;
       if (B && B.alpha != null && B.theta != null && B.beta != null) {
         const p = k => (B[k] != null ? Math.pow(10, B[k]/10) : 0);
         const tot = p("delta")+p("theta")+p("alpha")+p("beta")+p("gamma");
         if (tot > 0) ra = p("alpha")/tot;
         lt = (B.theta - B.beta)/10;                       // = log10(theta/beta)
+        // 噪声门＝report_generator.NOISE_BG_RATIO（复用既有阈值，不自建）
+        noise = tot > 0 && (p("beta")+p("gamma"))/tot > ALGO.noiseBg;
       }
-      const a  = clamp01((ra - CAL.relALo)/CAL.relASpan);
+      // 后端每 2 秒才重算一次频段（BP_EPOCH_SEC=10、间隔<2.0s 跳过），
+      // 而 tick 每 0.25 秒到一次 → 按 bands 签名去重，只在真出新值时推样本，
+      // 否则同值会被重复计入历史窗，使 minHist/histSec 语义错位。
+      if (ra != null) {
+        const sig = `${B.alpha.toFixed(3)}|${B.beta.toFixed(3)}`;
+        if (sig !== RA.lastSig) {
+          RA.lastSig = sig;
+          S.aTarget = pushRA(S.elapsed, ra, noise);
+        }
+      }
+      // EMA 在主循环按真实 dt 做（tick 有抖动，此处做会与验证脚本 τ 不等价）
       const th = clamp01((lt - CAL.ltBLo)/CAL.ltBSpan);
-      S.a  += (a  - S.a )*.25;
-      S.th += (th - S.th)*.25;
+      S.thTarget = th;
       S.hr = S.vitals.hr || 0;
     } else if(d.type==='start'||d.type==='baseline_locked'){
       say(d.type==='start' ? `实验开始：${d.tag||''}` : '基线已锁定');
@@ -309,7 +392,15 @@ const clock = new THREE.Clock();
 let breath = 0;
 renderer.setAnimationLoop(()=>{
   const dt = clock.getDelta(), t = clock.elapsedTime;
-  if(INJ.active){ S.a = INJ.a; S.th = INJ.th; if(INJ.state) S.state = INJ.state; }  // 截图自检：钉住参数（仅 URL 带参生效）
+  /* EMA 平滑：连续形式 1-exp(-dt/τ)，与帧率无关（VR 90fps 与桌面 60fps 同效）。
+     在 dt=0.25s 时与验证脚本 algo_verify_2s.py 的 a=TICK_SEC/τ 相差约 1%，物理等价。
+     这是"连绵不闪"的关键：τ=12s 是源数据 2s 周期的 6 倍（验证 τ≥10s 要求）。
+     INJ 注入态跳过平滑、直接钉住，保证受控截图可复现。 */
+  if(!INJ.active){
+    const k = 1 - Math.exp(-Math.min(dt, 0.5)/ALGO.tau);   // dt 上限防切后台回来暴冲
+    S.a  += (S.aTarget  - S.a )*k;
+    S.th += (S.thTarget - S.th)*k;
+  } else { S.a = INJ.a; S.th = INJ.th; if(INJ.state) S.state = INJ.state; }  // 截图自检：钉住参数（仅 URL 带参生效）
   waterU.uT.value = (INJ.active && INJ.wt!=null) ? INJ.wt : t*0.4; waterU.uA.value = S.a; waterU.uTh.value = S.th;  // 水面动画放慢到40%（原速波纹/网格光点移动过快，干扰禅修）
 
   if(S.autoTheme){
