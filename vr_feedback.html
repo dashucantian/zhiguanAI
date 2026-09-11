@@ -234,6 +234,31 @@ const ALGO = {
    历史窗缩成 1/2.5，见 algo_verify_2s.py 头部说明）。 */
 const RA = { raw: [], lastSig: null };   // lastSig：bands 去重签名（后端2秒才出新值）
 
+/* ── 引导所缘 GUIDE（裁定4：6 次/分）──────────────────
+   2026-09-11 重定位。原代码 rate = S.hr>40 ? S.hr/60*0.1 : 0.08，注释称"脉动
+   跟随心率"，但实测本机无 PPG 设备：vitals.hr 初值 None、仅在 ppg_m 存在时赋值
+   （muse_local_server.py:334 / 569-572），采集文件只含 4 通道 EEG
+   （eeg / eeg_pre_filter / timestamps / meta）→ S.hr 恒为 0 → 永远走 0.08 常数
+   分支（固定 12.5 秒/周期）。即**注释与事实不符的虚假生理映射**（红线9）。
+   法师 09-11 的质疑"它是随我的呼吸节奏实时变化的吗？但我好像看到它是一种固定
+   的节奏"——观察正确。
+
+   又实测呼吸无法从 EEG 提取（diag_breath.py：四通道呼吸峰间隔 CV=0.40~0.47，
+   远超 0.25 判据；主频跨通道一致 0.156~0.172Hz 但长程能量波动 5.9 倍）
+   → "测量真实呼吸"这条路不成立。
+
+   故重定位为「引导所缘」：不是测量法师的呼吸，而是提供一个可供依止的稳定节律，
+   法师的呼吸与之相应。这既守硬件事实，也合"入"相（止于所缘）本义。
+   ⚠️ 边界诚实：法师 09-11 裁定的是节律值（6 次/分）；"引导所缘"这一定性属
+      AI 工程推断，法师未单独明示认可。若不认可此定性，数值可保留、仅改表述。
+   ZG-052 说明：法师选定固定值而非可调 UI，故做成命名常量（改一处即可），
+      本轮不建运行时调节控件，避免超出授权范围。 */
+const GUIDE = {
+  bpm: 6,           // 裁定4：6 次/分（原 0.08Hz＝7.5 次/分）→ 10 秒一周期
+  amp: 0.20,        // 胀缩幅度 ±20%（V1 标准模板值，法师已认可）
+  scale: 0.6        // 光球基准尺寸（V1 标准模板值，法师："球太大"）
+};
+
 /* ── 数据接入：WebSocket ─────────────────────────────── */
 /* https 页面自动走 wss（WebXR 要求安全上下文，Pico 进 VR 必经 HTTPS） */
 const wsURL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/vr`;
@@ -415,13 +440,13 @@ renderer.setAnimationLoop(()=>{
   pMat.opacity = .35 + .55*S.a;
   pMat.color.copy(curCol).lerp(new THREE.Color(0xffffff), .35);
 
-  // 心息之珠：脉动跟随心率但整体放慢到禅修节律（09-10法师实测原速过快干扰入定）
-  const rate = S.hr>40 ? S.hr/60*0.1 : 0.08;  // 禅修节律：脉动放慢到约5-8次/分（原跟心率达75次/分，干扰入定）
+  // 引导所缘之珠：节律由 GUIDE.bpm 定（引导锚，非生理测量——本机无 PPG，见 GUIDE 注释）
+  const rate = GUIDE.bpm/60;              // Hz；裁定4＝6次/分＝0.1Hz（10秒一周期）
   breath = (INJ.active && INJ.breath!=null) ? INJ.breath : breath + dt*rate*Math.PI*2;
   const s = Math.sin(breath);            // 呼吸相位 -1..1
   const inhale = (s + 1) * 0.5;          // 0..1，1=吸气顶点
-  const pulse = 1.0 + 0.20*s;            // 呼吸胀缩幅度±20%（法师：±12%太小看不出）
-  orb.scale.setScalar(0.6 * pulse);      // 整体缩小到约0.6倍（法师：球太大）；球小后±20%前表面仍只位移~7cm，不会回到"前后移动"感
+  const pulse = 1.0 + GUIDE.amp*s;       // 胀缩幅度（V1 标准值 ±20%，法师：±12%太小看不出）
+  orb.scale.setScalar(GUIDE.scale * pulse);   // V1 标准尺寸 0.6（法师："球太大"）；球小后±20%前表面仍只位移~7cm，不会回到"前后移动"感
   // 光色随呼吸：呼气=状态主色 curCol，吸气=过渡到亮青白（法师：加光色随呼吸变化）
   orb.material.emissive.copy(curCol).lerp(new THREE.Color(0xbfeaff), 0.55*inhale);
   // 亮度随呼吸明显起伏：吸气更亮（法师：原亮度变化不明显——此前只随缓慢的脑电S.a变，不随呼吸）
@@ -447,7 +472,9 @@ renderer.setAnimationLoop(()=>{
     hud.innerHTML =
       `<b>状态</b> ${S.state||'—'} ${S.phase?('· '+S.phase):''}<br>`+
       `<b>Alpha</b> ${fmt(S.bands.alpha)} dB　<b>Theta</b> ${fmt(S.bands.theta)} dB<br>`+
-      `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'—'}　<b>时长</b> ${S.elapsed|0}s<br>`+
+      `<b>安定 S.a</b> ${S.a.toFixed(3)}　<b>沉掉 S.th</b> ${S.th.toFixed(3)}<br>`+
+      `<b>引导所缘</b> ${GUIDE.bpm} 次/分（引导锚，非测量）<br>`+
+      `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'— （本机无 PPG 设备）'}　<b>时长</b> ${S.elapsed|0}s<br>`+
       `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`+
       (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`+
         (INJ.breath!=null?` 呼吸=${INJ.breath.toFixed(2)}`:'')+
