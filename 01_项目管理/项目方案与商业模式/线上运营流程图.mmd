@@ -1,0 +1,20 @@
+graph TD
+    H[宣传推广<br/>宣传总监] --> I[系统下载安装注册<br/>运营支持]
+    I --> J[课程运营<br/>运营总监]
+    J --> K[捐赠<br/>捐赠团队]
+    K --> L[升级订阅<br/>技术支持团队、线上运营团队]
+
+    subgraph 支撑团队
+        M[研发团队<br/>研发总监]
+        N[课程研发团队]
+    end
+
+    N -.-> J
+
+    style H fill:#f3e5f5
+    style I fill:#f3e5f5
+    style J fill:#f3e5f5
+    style K fill:#f3e5f5
+    style L fill:#f3e5f5
+    style M fill:#e8f5e8
+    style N fill:#e8f5e8
