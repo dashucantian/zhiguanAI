@@ -1287,15 +1287,46 @@ def vr_page():
                         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/manifest.webmanifest")
+def pwa_manifest():
+    """PWA 清单（PICO Web App 最低要求：name/icons/start_url/display）。
+    须从根路径提供，且 scope=/ 才能覆盖 /vr 页面。"""
+    return FileResponse(os.path.join(VR_ASSET_DIR, "manifest.webmanifest"),
+                        media_type="application/manifest+json",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/sw.js")
+def pwa_sw():
+    """Service Worker（离线缓存）。**必须从根路径 / 提供**——若放
+    /vr_assets/sw.js 则 scope 仅 /vr_assets/，无法控制 /vr 页面。
+    Service-Worker-Allowed:/ 显式声明作用域为全站。"""
+    return FileResponse(os.path.join(VR_ASSET_DIR, "sw.js"),
+                        media_type="text/javascript; charset=utf-8",
+                        headers={"Cache-Control": "no-store",
+                                 "Service-Worker-Allowed": "/"})
+
+
 @app.get("/vr_assets/{path:path}")
 def vr_asset(path: str):
-    """本地 3D 引擎文件（three.js 等），限定 vr_assets 目录。"""
+    """本地 3D 引擎文件（three.js 等）与 PWA 图标，限定 vr_assets 目录。"""
+    # ── 安全：TLS 私钥/证书绝不可经静态路由下发（PWA 使 vr_assets 成为公开目录）──
+    norm = path.replace("\\", "/").lower()
+    if norm.startswith("tls/") or norm.endswith(".pem") or norm.endswith(".key"):
+        raise HTTPException(status_code=404, detail="资源不存在")
     real = _safe_join(VR_ASSET_DIR, path)
     if not os.path.isfile(real):
         raise HTTPException(status_code=404, detail="资源不存在")
-    media = ("text/javascript; charset=utf-8" if real.endswith(".js")
-             else "text/html; charset=utf-8" if real.endswith(".html")
-             else "application/octet-stream")
+    if real.endswith(".js"):
+        media = "text/javascript; charset=utf-8"
+    elif real.endswith(".html"):
+        media = "text/html; charset=utf-8"
+    elif real.endswith(".png"):
+        media = "image/png"                      # PWA 图标须正确 MIME，否则安装不识别
+    elif real.endswith(".webmanifest"):
+        media = "application/manifest+json"
+    else:
+        media = "application/octet-stream"
     return FileResponse(real, media_type=media,
                         headers={"Cache-Control": "public, max-age=86400"})
 

@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>止观 · VR 视觉反馈</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0b1d33">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#050a10;font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#cfe3ee}
   #hud{position:fixed;left:16px;top:14px;z-index:10;font-size:13px;line-height:1.7;
@@ -209,6 +211,37 @@ const _cCol = new THREE.Color(), _cTop = new THREE.Color(), _cBot = new THREE.Co
    用途：把 S.a/S.th/呼吸相位/水面时间/主题状态精确钉住，供无头浏览器截图做
    「参数 ↔ 视觉」对照；参数随 URL 记录，截图可复现、可对账。 */
 const _qp = new URLSearchParams(location.search);
+
+/* ── 引导模式（2026-09-12 法师裁定：打包为无脑电可用的通用场景）──────
+   裁定三项：PWA 形态 + 纯引导冥想版（去脑电）+ 先本机 HTTPS(8778) 当场测。
+   **单文件双模式，绝不 fork 第二份场景**（守统一架构不造冗余）：
+     /vr?mode=guided → 引导版：无任何后端/传感器依赖，点开即用
+     /vr             → 脑电版：行为与 V2 完全一致，零影响
+   两模式共用渲染、四维分工、粒子避让、声音引擎，仅数据来源不同 ——
+   以后改场景，两版一起受益，不会分叉。
+
+   进入引导版：① URL 显式 mode=guided（PWA 的 start_url 即此）
+              ② 后端不可达时自动降级（避免给出死页面） */
+const GUIDED = {
+  on: _qp.get('mode') === 'guided',   // 显式请求引导模式
+  auto: false,                        // 后端探测失败后置 true（自动降级）
+  saBase: 0.52,       // S.a 基准：水面/粒子处于中上亮度，画面"活"而不刺眼
+  saAmp: 0.16,        // S.a 缓慢流转幅度 ±0.16
+  saPeriod: 210,      // S.a 流转周期 210 秒（3.5 分钟，慢到只作底色呼吸）
+  thBase: 0.50,       // S.th 基准（雾浓度/粒子漂移取中性）
+  thAmp: 0.10,
+  thPeriod: 330,      // 与 saPeriod 比值 0.636 非简单整数比 → 不产生拍频
+  state: '静',        // 底色固定「安定」基调（法师要的调和/安稳/纯粹）
+  beat: 10.0,         // 引导音节拍 Hz（无后端，前端自主生成）
+  vol: 0.16,          // 引导音音量：可闻但不注意（底色）；仍默认静音，须点开关
+};
+/* 现实锚在引导版改用前端自计时：S.elapsed 由后端推送，引导版恒为 0，
+   若不换源则水面永不起伏、四维中的维度4失效。 */
+const GUIDED_T0 = Date.now();
+function guidedElapsed(){ return (Date.now() - GUIDED_T0) / 1000; }
+/** 引导模式是否生效（显式请求 或 后端不可达自动降级） */
+function isGuided(){ return GUIDED.on || GUIDED.auto; }
+
 const INJ = {
   active: _qp.has('fix_a') || _qp.has('fix_th'),
   a: parseFloat(_qp.get('fix_a')) || 0,
@@ -489,18 +522,69 @@ function connect(){
   };
 }
 function clamp01(v){ return Math.max(0, Math.min(1, v)); }
-connect();
+
+/* ── 引导模式：自主生成 S.a/S.th（不依赖任何后端与传感器）──
+   用两条互质周期的正弦叠加，让画面"活"起来但不构成可预测的机械循环。
+   周期 210s / 330s 比值 0.636，非简单整数比 → 不产生拍频（对齐方案 §3.2 要求）。
+   注意：这里产出的是 **慢变量**，仍走主循环同一套 EMA（τ=12s），
+   故与脑电版共享同一平滑链路，视觉质感一致。 */
+function guidedUpdate(sec){
+  S.aTarget = clamp01(GUIDED.saBase
+    + GUIDED.saAmp * Math.sin(sec / GUIDED.saPeriod * Math.PI * 2)
+    + GUIDED.saAmp * 0.35 * Math.sin(sec / 97 * Math.PI * 2 + 1.7));
+  S.thTarget = clamp01(GUIDED.thBase
+    + GUIDED.thAmp * Math.sin(sec / GUIDED.thPeriod * Math.PI * 2 + 0.8));
+  S.state = GUIDED.state;              // 底色固定「安定」
+  S.elapsed = sec;                     // 现实锚改用前端自计时（见 GUIDED_T0 注释）
+  // 声音：引导版无后端决策器，前端自主给固定引导音参数；
+  // audioPhase 置 'locked' 使 audioPush 放行（仍受 soundOn 总开关控制，默认静音）
+  S.beat = GUIDED.beat; S.vol = GUIDED.vol; S.audioPhase = 'locked';
+}
+/* 诊断探针（与 INJ/__vrDiag 同类测试设施）：模块作用域变量 CDP 取不到，
+   主动挂 window 供实测核验 S.a 是否真在自主流转、以及当前处于哪种模式。 */
+window.__vrSaProbe = () => S.a;
+window.__vrMode = () => ({guided: isGuided(), on: GUIDED.on, auto: GUIDED.auto,
+                          aTarget: S.aTarget, thTarget: S.thTarget, elapsed: S.elapsed});
+
+if (isGuided()) {
+  // 引导模式：完全不连后端（无 WebSocket、无 /api 请求）→ 可纯离线运行
+  $('load').style.display = 'none';
+  S.connected = false;
+  say(GUIDED.on ? '引导模式：无需设备，点开即入' : '未连到控制台，已自动进入引导模式');
+  guidedUpdate(0);
+  audioPush();                          // 初始化音频参数（默认静音，不发声）
+} else {
+  connect();
+  /* 后端不可达自动降级：连不上就切引导模式，避免给出死页面。
+     3.5 秒内未 onopen 即判定不可达（本地局域网足够）。 */
+  setTimeout(()=>{
+    if (!S.connected && !isGuided()) {
+      GUIDED.auto = true;
+      try { if (ws) ws.close(); } catch(e){}
+      $('load').style.display = 'none';
+      say('未连到控制台，已自动进入引导模式');
+      guidedUpdate(guidedElapsed());
+    }
+  }, 3500);
+}
 
 /* ── 3D 模型载入（本机素材） ─────────────────────────── */
 async function loadModel(){
   try{
-    if(!S.modelList.length){
-      const r = await fetch('/api/vr/models'); S.modelList = (await r.json()).models||[];
+    let pick;
+    if(isGuided()){
+      // 引导版：不请求 /api/vr/models（离线无后端），固定用最小模型 4.glb。
+      // 该模型经 SW 预缓存，装到 Pico 后离线可读。
+      pick = { name: '4.glb', size_mb: 26.84 };
+    } else {
+      if(!S.modelList.length){
+        const r = await fetch('/api/vr/models'); S.modelList = (await r.json()).models||[];
+      }
+      if(!S.modelList.length){ saySticky('本机暂无 3D 模型素材'); return; }
+      // 选体积最小的一个先试（首屏快），后续可在控制台扩展选择
+      S.modelList.sort((x,y)=>x.size_mb-y.size_mb);
+      pick = S.modelList[0];
     }
-    if(!S.modelList.length){ saySticky('本机暂无 3D 模型素材'); return; }
-    // 选体积最小的一个先试（首屏快），后续可在控制台扩展选择
-    S.modelList.sort((x,y)=>x.size_mb-y.size_mb);
-    const pick = S.modelList[0];
     say(`载入模型 ${pick.name}（${pick.size_mb}MB）…`);
     let lastPct = -1;
     const onProg = ev => {
@@ -514,6 +598,8 @@ async function loadModel(){
         say(`下载模型中 ${(ev.loaded/1e6).toFixed(1)}MB…`);
       }
     };
+    /* 模型 URL：引导版与脑电版走同一路径。引导版离线时由 SW 预缓存命中
+       （sw.js 的 PRECACHE 已含 /api/vr/model?name=4.glb），在线时正常取。 */
     const g = await new GLTFLoader().loadAsync(
       `/api/vr/model?name=${encodeURIComponent(pick.name)}`, onProg);
     if(S.model) scene.remove(S.model);
@@ -537,6 +623,7 @@ async function loadModel(){
 }
 $('btnModel').onclick = loadModel;
 if(INJ.autoload) loadModel();   // 截图自检：自动载入3D模型，复现法师实机场景（仅URL带autoload=1生效）
+if(isGuided()) loadModel();     // 引导模式：自动载入模型 → 「点开就进入场景」，无需手点按钮
 
 /* ── VR 进入 ─────────────────────────────────────────── */
 $('btnVR').onclick = async ()=>{
@@ -585,6 +672,7 @@ renderer.setAnimationLoop(()=>{
      INJ 注入态跳过平滑、直接钉住，保证受控截图可复现。 */
   if(!INJ.active){
     const k = 1 - Math.exp(-Math.min(dt, 0.5)/ALGO.tau);   // dt 上限防切后台回来暴冲
+    if(isGuided()) guidedUpdate(t);   // 引导模式：前端自主产出 S.a/S.th 目标值
     S.a  += (S.aTarget  - S.a )*k;
     S.th += (S.thTarget - S.th)*k;
   } else { S.a = INJ.a; S.th = INJ.th; if(INJ.state) S.state = INJ.state; }  // 截图自检：钉住参数（仅 URL 带参生效）
@@ -642,7 +730,18 @@ renderer.setAnimationLoop(()=>{
 
   // HUD（桌面）
   if(!renderer.xr.isPresenting){
-    hud.innerHTML =
+    if(isGuided()){
+      // 引导版：无脑电数据，不显示 Alpha/Theta dB 与心率（避免无意义的「—」占位）
+      hud.innerHTML =
+        `<b>模式</b> 引导冥想（无需设备）<br>`+
+        `<b>状态</b> ${S.state||'安定'}<br>`+
+        `<b>引导所缘</b> ${GUIDE.bpm} 次/分（呼吸锚，非测量）<br>`+
+        `<b>声音</b> ${S.soundOn?'开':'关（默认静音）'}`+
+          `${S.beat!=null?` · 节拍 ${S.beat.toFixed(1)}Hz · 音量 ${(S.vol||0).toFixed(2)}`:''}<br>`+
+        `<b>时长</b> ${S.elapsed|0}s`+
+        (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`:'');
+    } else {
+      hud.innerHTML =
       `<b>状态</b> ${S.state||'—'} ${S.phase?('· '+S.phase):''}<br>`+
       `<b>Alpha</b> ${fmt(S.bands.alpha)} dB　<b>Theta</b> ${fmt(S.bands.theta)} dB<br>`+
       `<b>安定 S.a</b> ${S.a.toFixed(3)}　<b>沉掉 S.th</b> ${S.th.toFixed(3)}<br>`+
@@ -655,6 +754,7 @@ renderer.setAnimationLoop(()=>{
       (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`+
         (INJ.breath!=null?` 呼吸=${INJ.breath.toFixed(2)}`:'')+
         (INJ.state?` 态=${INJ.state}`:'')+(INJ.wt!=null?` wt=${INJ.wt}`:''):'');
+    }
   }
   if(msgT && Date.now()-msgT>5000){ msg.textContent=''; msgT=0; }
   renderer.render(scene,camera);
@@ -725,6 +825,27 @@ addEventListener('resize',()=>{
 });
 </script>
 <script>
+/* ── PWA：注册 Service Worker（2026-09-12 法师裁定：打包为 Pico 通用应用）──
+   仅安全上下文（HTTPS 或 localhost）可注册——WebXR 与 SW 同此要求。
+   sw.js 从根路径提供，scope 默认 '/'，故能控制 /vr 页面。
+   注册失败不影响场景运行（引导模式本就不依赖 SW，SW 只为离线加速）。 */
+if ('serviceWorker' in navigator && (location.protocol === 'https:' ||
+    location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('/sw.js', {scope: '/'})
+      .then(function(reg){
+        console.log('[PWA] SW 已注册, scope=', reg.scope);
+        window.__swOK = true;
+      })
+      .catch(function(err){
+        console.warn('[PWA] SW 注册失败（不影响使用）：', err);
+        window.__swOK = false;
+      });
+  });
+} else {
+  window.__swOK = false;   // 非安全上下文（如 http://局域网IP）：不注册，页面仍可用
+}
+
 /* 看门狗：8 秒仍停在加载层则展示失败原因 */
 setTimeout(function(){
   var l = document.getElementById('load');

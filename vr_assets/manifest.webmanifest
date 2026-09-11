@@ -1,0 +1,16 @@
+{
+  "name": "止观 · 禅修引导",
+  "short_name": "止观禅修",
+  "description": "简单纯粹的 3D 禅修引导场景，无需脑电设备，点开即入。",
+  "start_url": "/vr?mode=guided",
+  "scope": "/",
+  "display": "fullscreen",
+  "background_color": "#050a10",
+  "theme_color": "#0b1d33",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/vr_assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/vr_assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/vr_assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
