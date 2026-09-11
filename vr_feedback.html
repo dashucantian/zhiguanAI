@@ -162,6 +162,20 @@ function themeFor(state){
 }
 let curCol = new THREE.Color(THEMES.default.col);
 
+/* ── 底色层配置（四维分工·维度1）────────────────────
+   底色 = 状态色调/空间氛围，应是四要素中**最慢**的一层（分钟级），
+   持续存在、不抢注意——即法师要求的"使其成为底色"。
+   原实现 curCol.lerp(..., .04) 是每帧固定系数：
+     - 60fps 下 τ≈0.41 秒，比中程 S.a（τ=12s）还快 30 倍 → **分工错位**
+     - 帧率相关：VR 90fps 下过渡快 1.5 倍，与桌面不一致 → **bug**
+       （同一问题已在 EMA 处用 1-exp(-dt/τ) 修掉，主题色此前漏改）
+     - state 在分类阈值附近抖动时，色调会频繁快速跳变 → 潜在闪源
+   改法：帧率无关连续形式 + τ=60s，使色调缓慢流淌成真正底色。
+   Color 对象缓存复用：原写法每帧 new THREE.Color×3，VR 90fps 下
+   每秒 270 次分配造成 GC 压力（改这行顺带修，不扩大范围）。 */
+const THEME = { tau: 60 };
+const _cCol = new THREE.Color(), _cTop = new THREE.Color(), _cBot = new THREE.Color();
+
 /* ── 频段 → 画面 映射 v2（2026-09-08 凌晨，经两份真机数据标定）──────────
  v1（绝对 dB 线性映射）被 09-08 法师 42 分钟实测会话证伪：
    Alpha/Theta dB 双双被总功率劫持（corr(α,θ)=+0.98、corr(总功率,α)=+0.98），
@@ -263,6 +277,26 @@ const GUIDE = {
   bpm: 6,           // 裁定4：6 次/分（原 0.08Hz＝7.5 次/分）→ 10 秒一周期
   amp: 0.20,        // 胀缩幅度 ±20%（V1 标准模板值，法师已认可）
   scale: 0.6        // 光球基准尺寸（V1 标准模板值，法师："球太大"）
+};
+
+/* ── 现实锚（四维分工·维度4）────────────────────────
+   法师意图：「同时又知道自己身处在现实环境当中，这种虚实重叠感（或者叫做
+   时空重叠感）所带来的张力，是它的一个主要状态基调。」
+   → 需要一个**现实侧**的信号源与虚拟侧（脑电映射）并存，张力才成立。
+
+   可用现实锚的实测筛查（详见对齐方案 §3.2）：
+     真实呼吸 ❌ 不可从EEG提取（diag_breath.py：CV=0.40~0.47>0.25判据）
+     心率/HRV ❌ 本机无PPG（vitals.hr恒为None/0）
+     头部微动 ⏸ 裁定7暂缓（npz未存ACC，motion_xyz稳定性未实测）
+     **真实会话时长 ✅** 裁定7采纳：elapsed 已推送，是确凿的现实侧量
+   → 本轮用 elapsed（真实经过秒数）驱动极缓慢的环境起伏。
+
+   ⚠️ 硬约束：**VR 下绝不动相机**。相机位移在沉浸式头显中会引发晕动症，
+     且 WebXR 下相机由头显姿态接管、代码改动无效或冲突。
+     故锚点落在场景元素（水面）而非相机——桌面模式的镜头呼吸保持原样不动。 */
+const ANCHOR = {
+  period: 300,      // 5 分钟一周期：慢到只作"时间在流"的底层暗示，不抢注意
+  amp: 0.012        // 水面高度起伏 ±1.2%（约 ±0.5cm），刻意微弱成"底色"
 };
 
 /* ── 声音渲染（前端 Web Audio，裁定5：本轮接入、默认静音）─────
@@ -552,11 +586,20 @@ renderer.setAnimationLoop(()=>{
 
   if(S.autoTheme){
     const th = themeFor(S.state);
-    curCol.lerp(new THREE.Color(th.col), .04);
-    sky.material.uniforms.uTop.value.lerp(new THREE.Color(th.top), .04);
-    sky.material.uniforms.uBot.value.lerp(new THREE.Color(th.bot), .04);
+    // 帧率无关连续形式（同 EMA 处理），τ=60s → 色调缓慢流淌成底色
+    const kt = 1 - Math.exp(-Math.min(dt, 0.5)/THEME.tau);
+    _cCol.setHex(th.col); _cTop.setHex(th.top); _cBot.setHex(th.bot);
+    curCol.lerp(_cCol, kt);
+    sky.material.uniforms.uTop.value.lerp(_cTop, kt);
+    sky.material.uniforms.uBot.value.lerp(_cBot, kt);
   }
   waterU.uCol.value.copy(curCol);
+  /* 现实锚（维度4）：真实会话时长驱动水面极缓慢起伏。
+     用 S.elapsed（后端推送的真实经过秒数）而非渲染时钟 t——
+     前者是"现实中确实过去了多久"，这是虚实张力的现实侧依据；
+     渲染时钟在切后台/掉帧时不连续，不能承载现实锚语义。
+     300秒一周期、幅度±0.5cm：慢且微弱，只作底层暗示不成扰动。 */
+  water.position.y = Math.sin(S.elapsed/ANCHOR.period*Math.PI*2)*ANCHOR.amp;
   sky.material.uniforms.uGlow.value = .2 + .8*S.a;
   scene.fog.density = .020 + .030*S.th;
   pMat.opacity = .35 + .55*S.a;
