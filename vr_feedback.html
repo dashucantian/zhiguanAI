@@ -51,7 +51,7 @@ const S = {
   bands:{}, vitals:{},
   a:0.5, th:0.5, hr:0,              // 平滑后的视觉参数 0..1 / bpm（初值0.5＝中性）
   aTarget:0.5, thTarget:0.5,        // EMA 目标值（每 2 秒由新 bands 更新一次）
-  autoTheme:true, model:null, modelList:[],
+  autoTheme:true, model:null, modelList:[], modelBox:null,   // modelBox：模型世界坐标包围盒（粒子避让用）
   // ── 声音（裁定5：本轮接入、默认静音）─────────────
   // beat/vol 由后端 closedloop_controller 决策（监测路径 09-11 起才透传），
   // 前端只负责渲染，不自建决策逻辑（红线5）。
@@ -526,6 +526,12 @@ async function loadModel(){
     const c = box.getCenter(new THREE.Vector3()).multiplyScalar(k);
     S.model.position.set(-c.x, -box.min.y*k, -c.z - 6);
     scene.add(S.model);
+    // ── 粒子避让（法师09-12实测：粒子穿透瑜伽士身体不合理，应触碰即消失）──
+    // 粒子仅垂直上升、水平坐标(x,z)终生不变 → 只需水平 footprint 判定，
+    // 无需射线检测（每帧 900 次比较即可，零额外开销）。
+    S.modelBox = new THREE.Box3().setFromObject(S.model);
+    S.modelBox.expandByScalar(0.18);   // 外扩：在"触碰到"体表时即散，而非穿入体内
+    relocateInsideParticles();         // 载入瞬间就把已在体内的粒子重排到盒外
     say('模型已载入');
   }catch(err){ saySticky('模型载入失败：'+(err && err.message ? err.message : err)); }
 }
@@ -622,6 +628,8 @@ renderer.setAnimationLoop(()=>{
   for(let i=0;i<PN;i++){
     let y = pos.getY(i) + dt*(.02 + .12*S.th*pSeedAt(i));  // 放慢粒子上升漂移（原速干扰禅修）
     if(y>5.5) y = .2;
+    // 触碰本尊即消散（就地重生到模型范围外），不穿透、不从背面穿出
+    if(S.modelBox && inModelFootprint(pos.getX(i), pos.getZ(i))){ relocateParticle(i); y = .2; }
     pos.setY(i,y);
   }
   pos.needsUpdate = true;
@@ -655,6 +663,61 @@ renderer.setAnimationLoop(()=>{
 let firstFrame = true;
 function pSeedAt(i){ return pSeed[i]; }
 function fmt(v){ return (v==null||isNaN(v))?'—':(+v).toFixed(1); }
+
+/* ── 粒子避让本尊（法师 09-12 实测：粒子穿透瑜伽士不合理，应触碰即消失）──
+   粒子只垂直上升、水平坐标终生不变 → 用水平 footprint 判定即可，无需射线检测。
+   「消失」实现为就地重生到模型范围外的新位置（粒子数恒定，避免密度突降）。 */
+function inModelFootprint(x, z){
+  const b = S.modelBox;
+  if(!b) return false;
+  return x >= b.min.x && x <= b.max.x && z >= b.min.z && z <= b.max.z;
+}
+function relocateParticle(i){
+  const pos = pGeo.attributes.position;
+  for(let t=0; t<24; t++){
+    const r = 2 + Math.random()*14, a = Math.random()*Math.PI*2;
+    const x = Math.cos(a)*r, z = Math.sin(a)*r;
+    if(!inModelFootprint(x, z)){
+      pos.setX(i, x); pos.setZ(i, z);
+      return;
+    }
+  }
+  pos.setZ(i, -14);   // 兜底：环内无合法位则推到远处（实测不会走到）
+}
+function relocateInsideParticles(){
+  const pos = pGeo.attributes.position;
+  let n = 0;
+  for(let i=0; i<PN; i++){
+    if(inModelFootprint(pos.getX(i), pos.getZ(i))){ relocateParticle(i); n++; }
+  }
+  if(n) pos.needsUpdate = true;
+  /* 诊断暴露（与 INJ 钩子同类测试设施）：模块作用域变量 CDP 取不到，
+     主动挂 window 供实机核验穿透是否消除——insideAfter 必须为 0。 */
+  window.__vrDiag = {
+    relocated: n, total: PN,
+    box: S.modelBox ? {
+      x0:+S.modelBox.min.x.toFixed(3), x1:+S.modelBox.max.x.toFixed(3),
+      y0:+S.modelBox.min.y.toFixed(3), y1:+S.modelBox.max.y.toFixed(3),
+      z0:+S.modelBox.min.z.toFixed(3), z1:+S.modelBox.max.z.toFixed(3) } : null,
+    insideAfter: (()=>{ let c=0; for(let i=0;i<PN;i++) if(inModelFootprint(pos.getX(i),pos.getZ(i))) c++; return c; })(),
+    /* 模型在屏幕上的投影矩形（归一化 0..1）——供视觉层按真实投影区取样，
+       不靠猜分区（本轮已三次因猜分区误判，故一律用页面自己的 camera 投影） */
+    screenRect: (()=>{
+      try{
+        if(!S.modelBox) return null;
+        camera.lookAt(0,1.4,-1.6); camera.updateMatrixWorld();
+        const b=S.modelBox, xs=[], ys=[];
+        for(const X of [b.min.x,b.max.x]) for(const Y of [b.min.y,b.max.y]) for(const Z of [b.min.z,b.max.z]){
+          const p=new THREE.Vector3(X,Y,Z).project(camera);
+          xs.push((p.x+1)/2); ys.push((1-p.y)/2);
+        }
+        return {x0:+Math.min(...xs).toFixed(4), x1:+Math.max(...xs).toFixed(4),
+                y0:+Math.min(...ys).toFixed(4), y1:+Math.max(...ys).toFixed(4)};
+      }catch(e){ return null; }
+    })(),
+  };
+  return n;
+}
 
 addEventListener('resize',()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
