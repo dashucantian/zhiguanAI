@@ -385,6 +385,95 @@ def make_ingest_command(npz_path, report_path=None, scene="monitor",
 # ── 监测采集会话（单例，同一时间只允许一个监测或实验） ─────────────────
 
 
+class EventBroadcaster:
+    """事件广播注册表：一个事件源 → N 个独立订阅队列。
+
+    ── 为何替换原「单消费 queue.Queue + run_in_executor 阻塞取」设计 ──
+    2026-09-13 法师实测故障：界面永久停在"正在连接数据源…"、波形全空，
+    而 /api/monitor/status 正常返回 recording、后端 worker 正常推 tick。
+    探针实测 13 分钟内事件在队列中零消费（开始采集那一刻的消息仍积压未取）。
+
+    三个叠加缺陷：
+    ① SSE 生成器用 `loop.run_in_executor(None, lambda: q.get(timeout=1.0))`
+       阻塞取事件 → 每个连接长期占用一个默认线程池线程（上限 min(32,cpu+4)）。
+       EventSource 断线会自动重连，旧生成器若未及时退出即持续堆积 →
+       **线程池饥饿**：status 等普通 async 接口正常，但推流零输出。
+    ② 单消费队列：多个 SSE 连接互相抢事件，任一连接的消费都会让其它连接
+       （含法师正在看的那个）收不到 tick；多开标签页必现。
+    ③ 队列无界：无人消费时无限积压（wave 每帧含 4×1280 点），13 分钟即
+       显著占用内存。
+
+    新设计：asyncio.Queue 按订阅者独立分配（非阻塞、不占线程池），
+    publish 用 loop.call_soon_threadsafe 跨线程投递；队列有界，慢消费者
+    丢最旧一帧（推流是实时显示非可靠传输，保实时性优先）；
+    断开时 finally 摘除订阅，杜绝生成器泄漏。
+    legacy 队列供既有自测直接消费（neuradock_console_selftest 读 .events），
+    同样有界，防无人消费时泄漏。
+    """
+
+    def __init__(self, maxlen=200):
+        self.maxlen = maxlen
+        self._subs = []                 # [(loop, asyncio.Queue)]
+        self._lock = threading.Lock()
+        self.legacy = queue.Queue(maxsize=maxlen)
+        self.dropped = 0                # 因队列满而丢弃的最旧帧计数（诊断用）
+
+    def reset(self):
+        """新会话开始时清空积压，避免旧事件污染本次连接。"""
+        with self._lock:
+            self._subs.clear()
+        while True:
+            try:
+                self.legacy.get_nowait()
+            except queue.Empty:
+                break
+
+    def subscribe(self, loop):
+        q = asyncio.Queue(maxsize=self.maxlen)
+        with self._lock:
+            self._subs.append((loop, q))
+        return q
+
+    def unsubscribe(self, q):
+        with self._lock:
+            self._subs = [(lp, qq) for (lp, qq) in self._subs if qq is not q]
+
+    def _put(self, q, ev):
+        try:
+            q.put_nowait(ev)
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()          # 丢最旧一帧，保住实时性
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                q.put_nowait(ev)
+            except asyncio.QueueFull:
+                pass
+            self.dropped += 1
+
+    def publish(self, ev):
+        """线程安全发布：worker 线程调用，投递到全部订阅者 + legacy 队列。"""
+        try:
+            self.legacy.put_nowait(ev)
+        except queue.Full:
+            try:
+                self.legacy.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self.legacy.put_nowait(ev)
+            except queue.Full:
+                pass
+        with self._lock:
+            subs = list(self._subs)
+        for loop, q in subs:
+            try:
+                loop.call_soon_threadsafe(self._put, q, ev)
+            except RuntimeError:
+                pass                    # 事件循环已关闭（该连接已断开）
+
+
 class MonitorSession:
     """监测采集会话：连接头环/模拟源 → 实时推流 → 保存会话数据。"""
 
@@ -394,7 +483,7 @@ class MonitorSession:
     def __init__(self):
         self.thread = None
         self.stop_event = threading.Event()
-        self.events = queue.Queue()
+        self.broadcaster = EventBroadcaster()
         self.status = "idle"   # idle / connecting / recording / saving
         self.mode = None
         self.started_at = None
@@ -419,6 +508,13 @@ class MonitorSession:
     def is_running(self):
         return self.thread is not None and self.thread.is_alive()
 
+    @property
+    def events(self):
+        """兼容别名：指向广播器的 legacy 队列。
+        neuradock_console_selftest 等既有自测直接消费 MONITOR.events，
+        保留此属性避免破坏其接口（红线5：不建平行路径）。"""
+        return self.broadcaster.legacy
+
     def snapshot(self):
         return {
             "status": self.status,
@@ -435,7 +531,7 @@ class MonitorSession:
             raise RuntimeError("已有监测会话正在运行")
         self.stop_event.clear()
         self._save_req.clear()
-        self.events = queue.Queue()
+        self.broadcaster.reset()        # 清空上次会话积压事件，防污染本次连接
         self.saved = None
         self.status = "connecting"
         self.started_at = datetime.now()
@@ -474,7 +570,7 @@ class MonitorSession:
         return True
 
     def _emit(self, ev):
-        self.events.put(ev)
+        self.broadcaster.publish(ev)
 
     def _do_save(self, tag=""):
         # 数据边界硬约束：B3 离线回放的数据来自已入库 npz，回放会话
@@ -753,7 +849,7 @@ class ExperimentSession:
         self.lock = threading.Lock()
         self.thread = None
         self.stop_event = threading.Event()
-        self.events = queue.Queue()
+        self.broadcaster = EventBroadcaster()
         self.status = "idle"          # idle / running / saving
         self.started_at = None
         self.mode = None
@@ -763,12 +859,17 @@ class ExperimentSession:
     def is_running(self):
         return self.thread is not None and self.thread.is_alive()
 
+    @property
+    def events(self):
+        """兼容别名：指向广播器 legacy 队列（同 MonitorSession.events）。"""
+        return self.broadcaster.legacy
+
     def start(self, cfg, simulate, address, session_info=None,
               adapter="bleak", serial_port=None):
         if self.is_running():
             raise RuntimeError("已有实验正在运行")
         self.stop_event.clear()
-        self.events = queue.Queue()
+        self.broadcaster.reset()      # 清空上次会话积压
         self.status = "running"
         self.started_at = datetime.now()
         if simulate:
@@ -793,7 +894,7 @@ class ExperimentSession:
                 try:
                     qc = qc_assess(data_path, report_path)
                     info = self.session_info
-                    self.events.put({
+                    self.broadcaster.publish({
                         "type": "saved",
                         "npz": data_path, "report": report_path,
                         "ingest_cmd": make_ingest_command(
@@ -809,14 +910,14 @@ class ExperimentSession:
                         "again": False, "qc": qc,
                     })
                 except Exception as ex:
-                    self.events.put({"type": "message",
+                    self.broadcaster.publish({"type": "message",
                                      "text": f"入库卡片生成失败：{ex}"})
 
             try:
                 def _exp_relay(ev):
                     if ev.get("type") == "end":
                         _emit_saved_card(ev)
-                    self.events.put(ev)
+                    self.broadcaster.publish(ev)
                     VR.push_from_experiment(ev)
                 result = run_closed_loop(
                     cfg, simulate=simulate, address=address,
@@ -826,7 +927,7 @@ class ExperimentSession:
                     session_info=self.session_info)
             except Exception as ex:
                 result = {"ok": False, "error": f"实验异常: {ex}"}
-                self.events.put({"type": "error", "text": str(ex)})
+                self.broadcaster.publish({"type": "error", "text": str(ex)})
             self.last_result = result
             self.status = "idle"
 
@@ -1143,24 +1244,36 @@ def monitor_status():
 
 @app.get("/api/monitor/stream")
 async def monitor_stream():
-    """SSE 实时推流：把监测线程产生的事件持续推给前端。"""
+    """SSE 实时推流：每个连接独立订阅广播队列（EventBroadcaster）。
+
+    2026-09-13 改造要点（根治"status正常但波形永久空白"故障）：
+    - 不再用 run_in_executor 阻塞取事件 → 不占默认线程池，杜绝饥饿
+    - 每连接独立队列 → 多标签页/EventSource 自动重连互不抢事件
+    - finally 必摘除订阅 → 断线不泄漏生成器
+    - 收不到事件 1 秒即检查运行状态并发 ping，客户端可感知连接活性
+    """
+    loop = asyncio.get_running_loop()
+    q = MONITOR.broadcaster.subscribe(loop)
 
     async def gen():
-        loop = asyncio.get_running_loop()
-        last_ping = time.time()
-        while True:
-            try:
-                ev = await loop.run_in_executor(
-                    None, lambda: MONITOR.events.get(timeout=1.0))
+        try:
+            last_ping = time.time()
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    if not MONITOR.is_running() and q.empty():
+                        break           # 会话已结束且无积压 → 正常关流
+                    if time.time() - last_ping > 10:
+                        yield ": ping\n\n"
+                        last_ping = time.time()
+                    continue
                 yield f"data: {json.dumps(ev, ensure_ascii=False, default=str)}\n\n"
+                last_ping = time.time()
                 if ev.get("type") == "end":
                     break
-            except queue.Empty:
-                if time.time() - last_ping > 10:
-                    yield ": ping\n\n"
-                    last_ping = time.time()
-            if not MONITOR.is_running() and MONITOR.events.empty():
-                break
+        finally:
+            MONITOR.broadcaster.unsubscribe(q)
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",
@@ -1233,24 +1346,33 @@ def experiment_status():
 
 @app.get("/api/experiment/stream")
 async def experiment_stream():
-    """SSE 实时推流：把实验线程产生的事件持续推给前端。"""
+    """SSE 实时推流：每个连接独立订阅广播队列（同 monitor_stream 改造）。
+
+    2026-09-13 与监测路径同构修复：原 run_in_executor 阻塞取单消费队列，
+    会导致线程池饥饿、多连接互抢事件、断线重连泄漏生成器（监测路径已实测
+    出现"status 正常但波形永久空白"故障）。"""
+    loop = asyncio.get_running_loop()
+    q = SESSION.broadcaster.subscribe(loop)
 
     async def gen():
-        loop = asyncio.get_running_loop()
-        last_ping = time.time()
-        while True:
-            try:
-                ev = await loop.run_in_executor(
-                    None, lambda: SESSION.events.get(timeout=1.0))
+        try:
+            last_ping = time.time()
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    if not SESSION.is_running() and q.empty():
+                        break
+                    if time.time() - last_ping > 10:
+                        yield ": ping\n\n"
+                        last_ping = time.time()
+                    continue
                 yield f"data: {json.dumps(ev, ensure_ascii=False, default=str)}\n\n"
+                last_ping = time.time()
                 if ev.get("type") == "end":
                     break
-            except queue.Empty:
-                if time.time() - last_ping > 10:
-                    yield ": ping\n\n"
-                    last_ping = time.time()
-            if not SESSION.is_running() and SESSION.events.empty():
-                break
+        finally:
+            SESSION.broadcaster.unsubscribe(q)
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache",

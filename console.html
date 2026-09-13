@@ -637,6 +637,16 @@ function waveChannels(wave) {
   return keys.length ? keys : MON_CH;
 }
 let monEs = null, monRunning = false, monLastError = "";
+// ── 推流看门狗状态（2026-09-13 故障根治）──
+// 原 `monEs.onerror = () => {}` 吞掉一切错误且全文件零重连逻辑：SSE 一旦
+// 断流（睡眠/切网/代理空闲超时/服务端饥饿），界面就永久停在"正在连接数据源…"、
+// 波形全空，而后端采集照常进行 —— 正是本次实测故障的表现。
+// 修法：记录最后一次收到事件的时刻，由 pollStatus（3秒轮询）做看门狗，
+// 发现"后端在跑但前端久无事件"即主动重连，并在界面如实标注。
+let monLastEventAt = 0;      // 最后一次收到任意监测事件的时间戳(ms)
+let monReconnects = 0;       // 累计重连次数（诊断用，超阈值提示法师）
+let monEsState = "init";     // init / reconnecting / closed（供界面如实显示）
+const MON_STALL_MS = 6000;   // 后端 recording 但超过 6 秒无任何事件 → 判定断流
 
 // ── 仪器级图表底座（复用旧版监测仪视觉语言：坐标轴/图例/等宽读数）──
 const LAB_FONT = "Consolas, 'Courier New', monospace";
@@ -1054,6 +1064,7 @@ function bindNeuraDockExtras() {
 let monWaveVisible = true;
 
 function handleMonitorEvent(ev) {
+  monLastEventAt = Date.now();   // 看门狗：收到任意事件即证明推流活着
   if (ev.type === "tick") {
     monLastTick = ev;
     updateLabPanel(ev.wave, ev.bands, ev.vitals || {}, ev);
@@ -1094,10 +1105,20 @@ function handleMonitorEvent(ev) {
 }
 
 function connectMonitorStream() {
-  if (monEs) monEs.close();
+  if (monEs) {
+    try { monEs.close(); } catch (e) {}   // 旧连接显式关闭，防泄漏叠加
+  }
   monEs = new EventSource("/api/monitor/stream");
+  // 连接建立即刷新活性时间戳：否则看门狗会拿"上一次断流前"的旧时刻，
+  // 在首帧到达前就误判为断流并反复重连（自我干扰）。
+  monEs.onopen = () => { monLastEventAt = Date.now(); };
   monEs.onmessage = e => handleMonitorEvent(JSON.parse(e.data));
-  monEs.onerror = () => {};
+  // 原实现 `onerror = () => {}` 把一切错误吞掉，是本次故障"静默黑屏"的直接原因之一：
+  // EventSource 断开时既不报错也无重连提示，法师只能看到永久空白。
+  // 改为如实记录状态，供界面显示与看门狗判断。
+  monEs.onerror = () => {
+    monEsState = (monEs && monEs.readyState === 2) ? "closed" : "reconnecting";
+  };
 }
 
 // ── 数据源切换：BLED112 显示串口框，NeuraDock 显示 TCP 地址框 ──
@@ -1634,12 +1655,33 @@ async function pollStatus() {
   try {
     const [s, m] = await Promise.all([
       api("/api/experiment/status"), api("/api/monitor/status")]);
+    // ── 推流看门狗（2026-09-13 故障根治）──
+    // 后端在跑但前端久无任何事件 → 判定 SSE 断流，主动重连并在界面如实标注。
+    // 复用本函数既有的 3 秒轮询，不新建定时器（避免多套轮询互相干扰）。
+    if (m.running && monLastEventAt > 0 &&
+        Date.now() - monLastEventAt > MON_STALL_MS) {
+      monReconnects++;
+      monLastEventAt = Date.now();      // 先刷新，避免下轮立刻重复重连
+      monMsg(`推流中断，正在自动重连（第 ${monReconnects} 次）…`, "err");
+      connectMonitorStream();
+      if (monReconnects >= 5) {
+        monMsg(`已重连 ${monReconnects} 次仍未恢复推流：采集数据仍在后台正常累积，` +
+               `可稍后点"停止并保存"取回数据；建议刷新页面或检查服务。`, "err");
+      }
+    }
     if (m.running) {
-      $("statusText").textContent = `监测中 · ${m.mode} · ${m.started_at}`;
+      const stall = monLastEventAt > 0
+        ? Math.round((Date.now() - monLastEventAt) / 1000) : null;
+      // 如实标注推流活性：让"后端在采集但界面不更新"这种分裂状态可见，
+      // 而不是像本次故障那样静默黑屏、无从判断。
+      $("statusText").textContent =
+        `监测中 · ${m.mode} · ${m.started_at}` +
+        (stall !== null && stall > 3 ? ` · ⚠推流 ${stall}s 未更新` : "");
     } else if (s.running) {
       $("statusText").textContent = `实验运行中 · ${s.mode} · ${s.started_at}`;
     } else {
       $("statusText").textContent = "服务就绪";
+      monLastEventAt = 0;               // 无会话时清零，避免下次误判
     }
     const busy = m.running || s.running;
     $("statusDot").className = busy ? "dot busy" : "dot";
