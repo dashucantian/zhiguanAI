@@ -485,6 +485,21 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 "experiment_mode": mode}
     if session_info:
         exp_meta.update(session_info)
+    # ── 架构命名 ZG-059 A2（2026-09-14 法师裁定：字段名 zx_phase、多值数组）──
+    # 附加式新增，不改既有字段；判据走 muse_local_server.derive_zx_phase 单一
+    # 事实源，与监测路径共用（红线5：不建平行定义）。
+    # 用**实际运行证据**派生：n_feat>0 → 算出过频段功率（照相）；
+    # n_loop>0 → 确实产出过闭环决策（运相）。若基线期即中止、n_loop==0，
+    # 则如实不记运相——这正是丙方案相对"按 scene 静态映射"的价值所在。
+    # 融相恒 False（引导多模态层未建成，红线9）；出相恒 False（治理发生在保存之后）。
+    try:
+        from muse_local_server import derive_zx_phase
+        exp_meta["zx_phase"] = derive_zx_phase(
+            has_bandpower=(n_feat > 0),
+            has_closedloop_decision=(n_loop > 0),
+        )
+    except Exception as e:
+        print(f"[warn] zx_phase 派生失败（不影响保存）：{e}")
     result = buf.save_bin(extra_meta=exp_meta)
     if result:
         data_path, report_path = result

@@ -257,6 +257,53 @@ SIGNAL_CHAIN_PASSTHROUGH = {
     "note": "旧 GUI 直存路径：eeg 即解码原始值，未经显示链。",
 }
 
+# ── 五相（架构命名 ZG-059 A2，2026-09-14 法师裁定：字段名 zx_phase、多值数组）──
+# 判据单一事实源，与 SIGNAL_CHAIN 同性质：两条写入路径（console_server 监测、
+# closedloop_experiment 闭环）都从这里派生，不各自硬编码，避免平行定义（红线5）。
+#
+# ⚠️ 语义澄清（09-10 清单未定、本轮补齐）：五相是**架构分层**，不是会话阶段。
+#    一次会话会同时经过多个相，故 zx_phase 为**数组**（法师裁定丙方案）。
+#    且**按会话实际运行了什么派生**——若按 scene 静态映射，两条路径会得到同一
+#    个数组，字段值退化、对印证矩阵（ZG-057）无聚合价值。
+#
+# 各相的客观证据判据（可审计，不用推测）：
+#   入＝采集接入层   → 有数据落盘即成立（经 BleDirectReceiver/TcpReceiver→DataBuffer）
+#   照＝校准映射层   → 本会话确实算出过频段功率（compute_band_power 产出 bp）
+#   运＝闭环控制层   → 确实产出过闭环决策（监测路径 ctrl_phase=="locked"；
+#                      闭环路径 n_loop>0）。仅在基线期累积、未出决策则不计
+#   融＝引导多模态层 → **尚未建成**（C 阶段），恒不计入。红线9：不得把未建成的
+#                      能力记成已发生
+#   出＝治理复盘层   → 发生在**保存之后**（入库/质检阶段），故保存时如实不计；
+#                      若将来在治理阶段回填，由调用方显式传入
+ZX_PHASES = ("入", "照", "运", "融", "出")
+
+
+def derive_zx_phase(has_bandpower=False, has_closedloop_decision=False,
+                    has_guided=False, has_governance=False):
+    """按会话**实际运行证据**派生五相数组（ZG-059 A2）。
+
+    参数全部为客观可查的运行时事实，调用方不得凭 scene 猜测传入：
+      has_bandpower           照相证据：本会话是否算出过频段功率
+      has_closedloop_decision 运相证据：是否产出过闭环决策（非仅基线累积）
+      has_guided              融相证据：引导多模态层是否参与（当前恒 False）
+      has_governance          出相证据：治理/质检是否已完成（保存时恒 False）
+
+    返回按 ZX_PHASES 规范顺序排列的数组，如 ["入", "照", "运"]。
+    入相恒成立（无采集即无 npz）。缺省参数下返回 ["入"]，不抛异常。
+    """
+    phases = ["入"]                      # 有 npz 落盘即必然经过采集接入层
+    if has_bandpower:
+        phases.append("照")
+    if has_closedloop_decision:
+        phases.append("运")
+    if has_guided:
+        phases.append("融")
+    if has_governance:
+        phases.append("出")
+    # 按规范顺序归一，防调用方顺序错乱
+    return [p for p in ZX_PHASES if p in phases]
+
+
 # Map report_generator band names → bp_history keys
 _BAND_KEY = {"Delta": "delta", "Theta": "theta", "Alpha": "alpha",
              "Beta": "beta", "Gamma": "gamma"}

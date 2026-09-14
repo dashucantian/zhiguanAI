@@ -597,6 +597,25 @@ class MonitorSession:
             return self.saved
         info = dict(self.session_info)
         info["scene"] = "monitor"
+        # ── 架构命名 ZG-059 A2（2026-09-14 法师裁定：字段名 zx_phase、多值数组）──
+        # 附加式新增，不改既有字段；判据走 muse_local_server.derive_zx_phase
+        # 单一事实源，不在此硬编码（红线5：不建平行定义）。
+        # ⚠️ 用**本会话实际运行证据**派生，不按 scene 静态映射——否则字段值退化、
+        #    对印证矩阵（ZG-057）无聚合价值。
+        #   照相证据：确实算出过频段功率（buf.latest_bp 非空）
+        #   运相证据：闭环决策已出基线期并实际产出决策（ctrl_phase=="locked"）
+        #             仅在基线期累积、未出决策则为 "baseline"，不计运相
+        #   融相恒 False：引导多模态层尚未建成（红线9：不得记成已发生）
+        #   出相恒 False：治理/质检发生在此保存动作**之后**
+        try:
+            from muse_local_server import derive_zx_phase
+            info["zx_phase"] = derive_zx_phase(
+                has_bandpower=bool(getattr(buf, "latest_bp", None)),
+                has_closedloop_decision=(self.ctrl_phase == "locked"),
+            )
+        except Exception as e:
+            # 五相标注失败不得影响数据保存主流程（同声音决策的容错原则）
+            print(f"[warn] zx_phase 派生失败（不影响保存）：{e}")
         result = buf.save_bin(extra_meta=info)
         if result:
             data_path, report_path = result
