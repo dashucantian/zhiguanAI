@@ -199,9 +199,13 @@ answer = {
     },
     "数据治理附注": "S09/S11 被登记为 session_type=test、session_note 写'链路测试录制'，"
                     "但实质是模拟器产物、未真实走过信号通路。"
-                    "此发现已提请法师裁定处置方式（见 README_L4线素材说明.md §二）。"
-                    "**评测期间不得因本发现而修改这两个 session 的登记信息**，"
-                    "否则素材冻结失效、本轮结果作废。",
+                    "【处置已执行完毕】法师 2026-09-11 同意处置选项 A，已在两个 session 的 "
+                    "session_note.txt 各追加一行 'data_origin: simulator' 标记（见决策日志 D26）。"
+                    "原建议的'给 session_registry.csv 加列'因 console_server.py:105-111 使用硬编码列白名单"
+                    "＋DictWriter 默认 extrasaction='raise'，会导致控制台入库功能抛 ValueError，故未采用。"
+                    "CSV 结构未动、notes 行未动、脑电数据文件未动。"
+                    "⚠️ 仍有效约束：不得移动这两个 session 的文件位置（选项 B 未获批准）。"
+                    "素材冻结限制已解除，本轮评测结果不再因该项作废。",
 }
 
 ans_path = os.path.join(OUT_DIR, "L4-02b_标准答案_裁判专用.json")
