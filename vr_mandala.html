@@ -73,6 +73,46 @@ const PALETTE = {
   center:  0xe3cb76,   // 中心光点
 };
 
+/* ── 构图变体注册表（09-16 法师需求："更多版本不同设计效果比较"）────
+   所有变体共用同一批生成器（rosePoints/ringPoints/spokePoints）与同一
+   色板，差别只在构图参数——"换设计＝换参数"是这套程序化方法的本性，
+   也正因此，任何一个变体条目本身就是一份可交付给本地模型/他人的
+   「任务书」：照 JSON 描述新构图 → 无头验收 → 截图对比，流程不变。
+   · s1        已收口基准（三层纵深：近身/主坛/大地）＝默认
+   · v2-abyss  大地深渊：大地坛城升为主角（巨大而亮），主坛退远退小——
+               "立于大坛之沿，远望金殿"
+   · v3-immersion 单坛沉浸：一具近前大十六叶坛＋浓雾收尽周边——
+               视野极减，注意力无处可去
+   S1 纪律对所有变体同等生效：静态、无粒子、无 bloom、无数据流。 */
+const VARIANTS = {
+  s1: {
+    label: 'S1 基准 · 三层纵深',
+    cam: [0, 1.6, 3.2], fog: 0.022,
+    inner:  {k:4, r:0.55, seg:720,  rings:[0.62,0.30],                color:'goldNear', op:0.85, pos:[0,1.15,-1.3]},
+    middle: {k:8, r:2.6,  seg:1440, rings:[2.8,1.9,0.9], spokes:[2.8,3.35,32], color:'goldMid', op:0.80, pos:[0,2.1,-6]},
+    ground: {k:8, r:9.0,  seg:1440, rings:[9.6,5.2],                   color:'goldFar',  op:0.55, y:0.02},
+    orb: {r:0.045, color:'center', glow:0.9, followInner:true},
+  },
+  v2abyss: {
+    label: 'V2 · 大地深渊',
+    cam: [0, 1.6, 2.0], fog: 0.030,
+    inner:  null,
+    middle: {k:8, r:2.2,  seg:1440, rings:[2.4,1.5,0.7], spokes:[2.4,2.9,24], color:'goldMid', op:0.60, pos:[0,1.7,-11]},
+    ground: {k:8, r:13.0, seg:2160, rings:[14.0,7.2,4.0], spokes:[14.0,15.6,48], color:'goldNear', op:0.80, y:0.02},
+    orb: {r:0.05, color:'center', glow:1.1, pos:[0,1.45,-2.6]},
+  },
+  v3immersion: {
+    label: 'V3 · 单坛沉浸',
+    cam: [0, 1.6, 2.6], fog: 0.055,
+    inner:  null,
+    middle: {k:8, r:3.1, seg:1440, rings:[3.4,2.3,1.2], spokes:[3.4,3.9,40], color:'goldMid', op:0.92, pos:[0,1.7,-3.4]},
+    ground: {k:4, r:6.0, seg:720,  rings:[6.6],                          color:'goldFar',  op:0.35, y:0.02},
+    orb: {r:0.06, color:'center', glow:1.3, pos:[0,1.7,-3.4]},
+  },
+};
+const VARIANT_KEY = (new URLSearchParams(location.search).get('variant') || 's1').toLowerCase().replace(/-/g,'');
+const spec = VARIANTS[VARIANT_KEY] || VARIANTS.s1;
+
 /* ── 渲染器 / 场景 / 相机 ────────────────────────────── */
 let renderer;
 try{
@@ -89,12 +129,12 @@ renderer.xr.enabled = true;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-/* 黑雾：不是氛围装饰，是纵深的物理表达——远处金线沉入黑暗，
-   密度取低值（0.022），保证外环可见但明显退远 */
-scene.fog = new THREE.FogExp2(PALETTE.black, 0.022);
+/* 黑雾：不是氛围装饰，是纵深的物理表达——远处金线沉入黑暗。
+   密度随变体（s1 低值保证外环可见但明显退远；v3 浓雾主动收窄视野） */
+scene.fog = new THREE.FogExp2(PALETTE.black, spec.fog);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 200);
-camera.position.set(0, 1.6, 3.2);   // 立姿眼高，与修习者同高
+camera.position.set(...spec.cam);   // 立姿眼高，与修习者同高
 
 /* ── 金线曼荼罗生成器（程序化，全部几何合并为少量 draw call）──
    三层纵深（v0.3 §四原则6"缓慢即昂贵"的空间表达：深度即安静）：
@@ -136,56 +176,35 @@ function lineMat(color, opacity){
                                       depthWrite:false, fog:true});
 }
 
-/* 内环 · 近身所缘（八叶，暖金亮）——中心辐射注意力的落点。
-   09-16 自查修正（验收截图实证）：原 y=1.55/z=-1.6 与中环在屏幕上几乎
-   重叠，"三层纵深"的"深"没立起来。下移至胸腹高（y=1.15）并拉近
-   （z=-1.3）：近身所缘在视野下方占明确位置，与略高略远的主坛形成
-   上下＋远近的双重分离——纵深即安静（v0.3 原则6）。 */
-{
-  const g = new THREE.BufferGeometry().setFromPoints([
-    ...rosePoints(4, 0.55, 720, 0),
-    ...ringPoints(0.62, 240, 0),
-    ...ringPoints(0.30, 180, 0),
-  ]);
-  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldNear, 0.85));
-  m.position.set(0, 1.15, -1.3);
+/* 通用层构建（09-16 变体化）：层规格缺省(null)则不建；
+   s1 基准的三层参数与硬编码版逐值一致——变体系统不改基准 */
+function buildLayer(cfg){
+  if(!cfg) return null;
+  const pts = [...rosePoints(cfg.k, cfg.r, cfg.seg, 0)];
+  for(const rr of (cfg.rings||[])) pts.push(...ringPoints(rr, Math.max(180, cfg.seg/6), 0));
+  if(cfg.spokes) pts.push(...spokePoints(cfg.spokes[0], cfg.spokes[1], cfg.spokes[2], 0));
+  const m = new THREE.LineSegments(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    lineMat(PALETTE[cfg.color], cfg.op));
+  if(cfg.pos) m.position.set(...cfg.pos);
+  if(cfg.y !== undefined){ m.rotation.x = -Math.PI/2; m.position.y = cfg.y; }
   scene.add(m);
+  return m;
 }
+const innerMesh  = buildLayer(spec.inner);
+const middleMesh = buildLayer(spec.middle);
+const groundMesh = buildLayer(spec.ground);
 
-/* 中环 · 主坛城（十六叶＋三同心环＋32辐条，主金叶）——坛城主体 */
-{
-  const g = new THREE.BufferGeometry().setFromPoints([
-    ...rosePoints(8, 2.6, 1440, 0),
-    ...ringPoints(2.8, 360, 0),
-    ...ringPoints(1.9, 300, 0),
-    ...ringPoints(0.9, 240, 0),
-    ...spokePoints(2.8, 3.35, 32, 0),
-  ]);
-  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldMid, 0.8));
-  m.position.set(0, 2.1, -6);
-  scene.add(m);
-}
-
-/* 外环 · 大地坛城（平铺脚下，暗金）——立于曼荼罗之中 */
-{
-  const g = new THREE.BufferGeometry().setFromPoints([
-    ...rosePoints(8, 9.0, 1440, 0),
-    ...ringPoints(9.6, 480, 0),
-    ...ringPoints(5.2, 360, 0),
-  ]);
-  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldFar, 0.55));
-  m.rotation.x = -Math.PI/2;
-  m.position.y = 0.02;
-  scene.add(m);
-}
-
-/* 中心光点：唯一"实体"——注意力的原点（The Journey 取证：中心辐射结构，
-   不是菜单是坛城；中心必须存在，但必须极克制：小球一枚，无光源无特效） */
+/* 中心光点：唯一"实体"——注意力的原点。位置：followInner 时与内环所缘
+   同心（s1 语义），否则用显式 pos；半径/光晕强度随变体 */
+const orbPos = spec.orb.followInner && innerMesh
+  ? innerMesh.position.clone()
+  : new THREE.Vector3(...(spec.orb.pos || [0,1.15,-1.3]));
 const centerOrb = new THREE.Mesh(
-  new THREE.SphereGeometry(0.045, 24, 16),
-  new THREE.MeshBasicMaterial({color:PALETTE.center, transparent:true,
+  new THREE.SphereGeometry(spec.orb.r, 24, 16),
+  new THREE.MeshBasicMaterial({color:PALETTE[spec.orb.color], transparent:true,
                                opacity:0.9, fog:false}));
-centerOrb.position.set(0, 1.15, -1.3);   // 与内环所缘同心（09-16 同步修正）
+centerOrb.position.copy(orbPos);
 scene.add(centerOrb);
 /* 中心微光晕（sprite 单枚，暖金，极淡）——给光点一点"呼吸感"的静态暗示，
    不动画（S1 纪律：完全静态） */
@@ -201,7 +220,7 @@ const glowTex = (()=>{
 })();
 const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,
   transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
-glow.scale.setScalar(0.9);
+glow.scale.setScalar(spec.orb.glow);
 glow.position.copy(centerOrb.position);
 scene.add(glow);
 
@@ -239,12 +258,24 @@ addEventListener('mousemove', e=>{
 /* 诊断钩子：供无头验收脚本读取场景构成（同 vr_feedback __vrDiag 先例） */
 window.__mandalaDiag = {
   stage: 'S1',
-  layers: {inner:8, middle:16, ground:8},      // 各层玫瑰线瓣数
+  variant: VARIANT_KEY,
+  variantLabel: spec.label,
+  fog: spec.fog,
+  cam: spec.cam,
+  layers: {
+    inner:  spec.inner  ? spec.inner.k  : null,   // 玫瑰线瓣数（k；2k 瓣图样）
+    middle: spec.middle ? spec.middle.k : null,
+    ground: spec.ground ? spec.ground.k : null,
+  },
   drawCallsScene: scene.children.length,
   center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
   palette: PALETTE,
   static: true,
 };
+
+/* HUD 标注当前变体（桌面预览对比时肉眼可辨） */
+document.getElementById('hud').textContent =
+  '曼荼罗场域 · S1 · ' + spec.label;
 
 /* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色） */
 document.getElementById('load').style.display = 'none';
