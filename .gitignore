@@ -93,6 +93,7 @@ vr_assets/tls/
 !config*.json
 !vr_feedback.html
 !console.html
+!vr_mandala.html
 
 # 2026-09-13 法师裁定：开工规约与闸门脚本须入库（否则跨窗口 clone 不到，规则无法传播）
 # 注意：只放开这两个精确文件名，不放开 *.ps1 通则——根目录《设置千问密钥.ps1》仍须被排除

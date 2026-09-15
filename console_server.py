@@ -1428,6 +1428,18 @@ def vr_page():
                         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/mandala")
+def mandala_page():
+    """曼荼罗场域页（独立场景，2026-09-16 S1）。
+
+    与 /vr（vr_feedback.html）完全独立：法师 09-15 裁定"风格完全不同，
+    不要混合在一起"。共享后端与 vr_assets 静态资源，不共享场景代码。
+    规划见 01_项目管理\\20260916_曼荼罗场域战略规划_v0.3.md。"""
+    return FileResponse(os.path.join(SCRIPT_DIR, "vr_mandala.html"),
+                        media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
     """PWA 清单（PICO Web App 最低要求：name/icons/start_url/display）。

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>止观 · 曼荼罗场域</title>
+<meta name="theme-color" content="#000000">
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;
+            font-family:"PingFang SC","Microsoft YaHei",serif;color:#c9b287}
+  #hud{position:fixed;left:16px;top:14px;z-index:10;font-size:12px;line-height:1.7;
+       color:#8a7a5c;letter-spacing:1px;user-select:none}
+  #bar{position:fixed;left:16px;bottom:14px;z-index:10;display:flex;gap:8px}
+  button{background:rgba(20,16,8,.6);color:#c9b287;border:1px solid #4a3d24;
+         border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;
+         letter-spacing:2px;font-family:inherit}
+  button:hover{background:rgba(40,32,16,.7)}
+  #load{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+        background:#000;z-index:20;font-size:14px;letter-spacing:4px;color:#8a7a5c}
+</style>
+</head>
+<body>
+<div id="load">止观 · 曼荼罗场域</div>
+<script>
+/* 诊断钩子：模块加载/初始化失败时把原因写进页面，便于无头环境定位 */
+window.__vrErr = '';
+addEventListener('error', e => { window.__vrErr = (e.message||'') + ' @' + (e.filename||'') + ':' + (e.lineno||''); });
+addEventListener('unhandledrejection', e => { window.__vrErr = 'rejection: ' + (e.reason && e.reason.message || e.reason); });
+</script>
+<div id="hud">曼荼罗场域 · S1</div>
+<div id="bar">
+  <button id="btnVR">进入 VR</button>
+</div>
+<script type="importmap">
+{"imports":{
+  "three":"/vr_assets/three.module.js",
+  "three/addons/":"/vr_assets/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ════════════════════════════════════════════════════════════════
+   止观 · 曼荼罗场域（独立场景，2026-09-16 S1）
+   ────────────────────────────────────────────────────────────────
+   缘起：法师 09-15 裁定借鉴《The Journey》（云中工作室）之形式/结构/
+   要素/风格，但以止观禅修为根本做独立场域——「与现有 VR 场景风格完全
+   不同，不要混合在一起」。规划见 01_项目管理\20260916_曼荼罗场域战略
+   规划_v0.3.md（GPT 评审 8.5/10 全量吸收）。
+
+   S1 目标（唯一）：验证【道场感】——摘下头显说"我刚才进入了一个地方"，
+   而非"我用了一个软件"。
+   S1 纪律（v0.3 §六）：
+     · 只做黑底＋金线曼荼罗＋三层纵深
+     · 不要粒子、不要脑电、不要 AI、不要 bloom
+     · 完全静态（空间呼吸是 S2 的事；心率原则：每加一个元素先问
+       让人更安静还是更兴奋）
+     · 纯前端独立页面：不依赖 console_server 数据流（S6 才接）
+   借形式不借内容：金线语法/中心辐射构图学自 The Journey 之形式取证
+   （其站 THREE/WebGL 零次、全预渲染视频——我们用程序化实时生成达成
+   同等连贯，借语法不借实现）；曼荼罗图像全部程序化绘制，不使用其素材。
+
+   色板（v0.1 §一 CSS 频次取证）：
+     黑底 #000000/#0d0e06 · 金叶 #d4af5a/#e3cb76 · 暖金 #f0d2b4
+     赭红点缀 #ba7c69（S1 不用，留待后续章节）
+   ════════════════════════════════════════════════════════════════ */
+
+const PALETTE = {
+  black:   0x000000,
+  goldFar: 0x6b5630,   // 外环：暗金（大气透视，退远）
+  goldMid: 0xd4af5a,   // 中环：主金叶
+  goldNear:0xf0d2b4,   // 内环：暖金亮（近身）
+  center:  0xe3cb76,   // 中心光点
+};
+
+/* ── 渲染器 / 场景 / 相机 ────────────────────────────── */
+let renderer;
+try{
+  renderer = new THREE.WebGLRenderer({antialias:true});
+}catch(err){
+  document.getElementById('load').innerHTML =
+    '本环境无法初始化 WebGL：<br>' + (err && err.message ? err.message : err);
+  throw err;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.setClearColor(PALETTE.black, 1);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+/* 黑雾：不是氛围装饰，是纵深的物理表达——远处金线沉入黑暗，
+   密度取低值（0.022），保证外环可见但明显退远 */
+scene.fog = new THREE.FogExp2(PALETTE.black, 0.022);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.05, 200);
+camera.position.set(0, 1.6, 3.2);   // 立姿眼高，与修习者同高
+
+/* ── 金线曼荼罗生成器（程序化，全部几何合并为少量 draw call）──
+   三层纵深（v0.3 §四原则6"缓慢即昂贵"的空间表达：深度即安静）：
+     内环 · 近身（z=-1.6，眼高前方）：八叶玫瑰线＋双细环——所缘雏形
+     中环 · 主坛（z=-6，直立）：十六叶玫瑰线＋三同心环＋32辐条——坛城主体
+     外环 · 大地（y=0.02，平铺脚下）：大玫瑰线＋双环——立于坛城之中
+   玫瑰线 r=cos(kθ)：k 偶数时 2k 瓣；八叶＝k=4，十六叶＝k=8 */
+function rosePoints(k, radius, segments, z){
+  const pts = [];
+  for(let i=0;i<segments;i++){
+    const t0 = (i/segments)*Math.PI*2, t1 = ((i+1)/segments)*Math.PI*2;
+    const r0 = Math.abs(Math.cos(k*t0))*radius, r1 = Math.abs(Math.cos(k*t1))*radius;
+    pts.push(new THREE.Vector3(Math.cos(t0)*r0, Math.sin(t0)*r0, z));
+    pts.push(new THREE.Vector3(Math.cos(t1)*r1, Math.sin(t1)*r1, z));
+  }
+  return pts;
+}
+function ringPoints(radius, segments, z){
+  const pts = [];
+  for(let i=0;i<segments;i++){
+    const t0 = (i/segments)*Math.PI*2, t1 = ((i+1)/segments)*Math.PI*2;
+    pts.push(new THREE.Vector3(Math.cos(t0)*radius, Math.sin(t0)*radius, z));
+    pts.push(new THREE.Vector3(Math.cos(t1)*radius, Math.sin(t1)*radius, z));
+  }
+  return pts;
+}
+function spokePoints(rIn, rOut, count, z){
+  const pts = [];
+  for(let i=0;i<count;i++){
+    const t = (i/count)*Math.PI*2;
+    pts.push(new THREE.Vector3(Math.cos(t)*rIn, Math.sin(t)*rIn, z));
+    pts.push(new THREE.Vector3(Math.cos(t)*rOut, Math.sin(t)*rOut, z));
+  }
+  return pts;
+}
+function lineMat(color, opacity){
+  return new THREE.LineBasicMaterial({color, transparent:true, opacity,
+                                      blending:THREE.AdditiveBlending,
+                                      depthWrite:false, fog:true});
+}
+
+/* 内环 · 近身所缘（八叶，暖金亮）——中心辐射注意力的落点。
+   09-16 自查修正（验收截图实证）：原 y=1.55/z=-1.6 与中环在屏幕上几乎
+   重叠，"三层纵深"的"深"没立起来。下移至胸腹高（y=1.15）并拉近
+   （z=-1.3）：近身所缘在视野下方占明确位置，与略高略远的主坛形成
+   上下＋远近的双重分离——纵深即安静（v0.3 原则6）。 */
+{
+  const g = new THREE.BufferGeometry().setFromPoints([
+    ...rosePoints(4, 0.55, 720, 0),
+    ...ringPoints(0.62, 240, 0),
+    ...ringPoints(0.30, 180, 0),
+  ]);
+  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldNear, 0.85));
+  m.position.set(0, 1.15, -1.3);
+  scene.add(m);
+}
+
+/* 中环 · 主坛城（十六叶＋三同心环＋32辐条，主金叶）——坛城主体 */
+{
+  const g = new THREE.BufferGeometry().setFromPoints([
+    ...rosePoints(8, 2.6, 1440, 0),
+    ...ringPoints(2.8, 360, 0),
+    ...ringPoints(1.9, 300, 0),
+    ...ringPoints(0.9, 240, 0),
+    ...spokePoints(2.8, 3.35, 32, 0),
+  ]);
+  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldMid, 0.8));
+  m.position.set(0, 2.1, -6);
+  scene.add(m);
+}
+
+/* 外环 · 大地坛城（平铺脚下，暗金）——立于曼荼罗之中 */
+{
+  const g = new THREE.BufferGeometry().setFromPoints([
+    ...rosePoints(8, 9.0, 1440, 0),
+    ...ringPoints(9.6, 480, 0),
+    ...ringPoints(5.2, 360, 0),
+  ]);
+  const m = new THREE.LineSegments(g, lineMat(PALETTE.goldFar, 0.55));
+  m.rotation.x = -Math.PI/2;
+  m.position.y = 0.02;
+  scene.add(m);
+}
+
+/* 中心光点：唯一"实体"——注意力的原点（The Journey 取证：中心辐射结构，
+   不是菜单是坛城；中心必须存在，但必须极克制：小球一枚，无光源无特效） */
+const centerOrb = new THREE.Mesh(
+  new THREE.SphereGeometry(0.045, 24, 16),
+  new THREE.MeshBasicMaterial({color:PALETTE.center, transparent:true,
+                               opacity:0.9, fog:false}));
+centerOrb.position.set(0, 1.15, -1.3);   // 与内环所缘同心（09-16 同步修正）
+scene.add(centerOrb);
+/* 中心微光晕（sprite 单枚，暖金，极淡）——给光点一点"呼吸感"的静态暗示，
+   不动画（S1 纪律：完全静态） */
+const glowTex = (()=>{
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d');
+  const gr = x.createRadialGradient(32,32,0, 32,32,32);
+  gr.addColorStop(0, 'rgba(227,203,118,0.55)');
+  gr.addColorStop(0.4, 'rgba(212,175,90,0.18)');
+  gr.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = gr; x.fillRect(0,0,64,64);
+  const t = new THREE.CanvasTexture(c); return t;
+})();
+const glow = new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,
+  transparent:true, blending:THREE.AdditiveBlending, depthWrite:false}));
+glow.scale.setScalar(0.9);
+glow.position.copy(centerOrb.position);
+scene.add(glow);
+
+/* ── 主循环：S1 完全静态，渲染循环只为 WebXR 帧同步存在 ──────
+   （无任何 per-frame 状态更新——这本身就是 S1 的验收判据之一：
+   连续帧差应恒为 0，"绝对安静"） */
+renderer.setAnimationLoop(()=>{
+  renderer.render(scene, camera);
+});
+
+/* ── VR 进入（复用既有 WebXR 模式：HTTPS 8778 下 Pico 可用） ── */
+const btnVR = document.getElementById('btnVR');
+btnVR.onclick = async ()=>{
+  if(!navigator.xr){ alert('本浏览器不支持 WebXR'); return; }
+  try{
+    const session = await navigator.xr.requestSession('immersive-vr',
+      {optionalFeatures:['local-floor','bounded-floor']});
+    renderer.xr.setSession(session);
+    session.addEventListener('end', ()=>{ btnVR.textContent = '进入 VR'; });
+    btnVR.textContent = 'VR 中';
+  }catch(err){
+    alert('进入 VR 失败：' + (err && err.message ? err.message : err));
+  }
+};
+
+/* ── 桌面视角微调（非 VR 时：鼠标缓动环视 ±6°，帮助桌面截图取景；
+   Pico 内以头显姿态为准，本段不生效——renderer.xr.isPresenting 时跳过。
+   幅度极小且经阻尼，不构成"动效"，不违 S1 静态纪律） ── */
+let targetYaw = 0, curYaw = 0;
+addEventListener('mousemove', e=>{
+  if(renderer.xr.isPresenting) return;
+  targetYaw = ((e.clientX/innerWidth) - 0.5) * 0.21;   // ±6°
+});
+
+/* 诊断钩子：供无头验收脚本读取场景构成（同 vr_feedback __vrDiag 先例） */
+window.__mandalaDiag = {
+  stage: 'S1',
+  layers: {inner:8, middle:16, ground:8},      // 各层玫瑰线瓣数
+  drawCallsScene: scene.children.length,
+  center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
+  palette: PALETTE,
+  static: true,
+};
+
+/* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色） */
+document.getElementById('load').style.display = 'none';
+
+/* 窗口自适应 */
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+/* 桌面环视的阻尼跟随放在渲染循环外：用 rAF 低频更新（30fps 足够，
+   且 XR presenting 时完全不写相机——头显姿态优先） */
+(function dampLoop(){
+  requestAnimationFrame(dampLoop);
+  if(renderer.xr.isPresenting) return;
+  curYaw += (targetYaw - curYaw) * 0.04;
+  camera.rotation.y = -curYaw;
+})();
+</script>
+</body>
+</html>
