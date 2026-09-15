@@ -36,6 +36,7 @@ addEventListener('unhandledrejection', e => { window.__vrErr = 'rejection: ' + (
   <button id="btnModel">载入禅修场景模型</button>
   <button id="btnTheme" class="on">自动配色</button>
   <button id="btnSound">声音：关</button>
+  <button id="btnMeditation">冥想引导</button>
 </div>
 <script type="importmap">
 {"imports":{
@@ -58,7 +59,11 @@ const S = {
   // beat/vol 由后端 closedloop_controller 决策（监测路径 09-11 起才透传），
   // 前端只负责渲染，不自建决策逻辑（红线5）。
   beat:null, vol:0, audioPhase:'idle',   // 后端指令
-  soundOn:false                          // 法师开关，默认 false（静音）
+  soundOn:false,                         // 法师开关，默认 false（静音）
+  // ── 冥想引导（2026-09-15 法师指示接入）─────────────
+  meditationOn:false,                    // 冥想引导开关
+  meditationVideo:null,                  // 视频屏幕对象
+  meditationAudio:null                   // 音频播放器
 };
 const $ = id => document.getElementById(id);
 const hud = $('hud'), msg = $('msg');
@@ -124,6 +129,38 @@ const water = new THREE.Mesh(new THREE.CircleGeometry(40,96),
         gl_FragColor=vec4(c,1.);}`
   }));
 water.rotation.x = -Math.PI/2; scene.add(water);
+
+/* 冥想引导视频屏幕（2026-09-15 法师指示接入）─────────────
+   位于用户左前方，半透明显示，不干扰主场景。
+   视频循环播放（10秒视频配17分钟音频），与音频同步。 */
+const meditationVideoEl = document.createElement('video');
+meditationVideoEl.src = '/vr_assets/meditation_video.mp4';
+meditationVideoEl.loop = true;
+meditationVideoEl.muted = true;  // 视频静音，音频单独播放
+meditationVideoEl.playsInline = true;
+meditationVideoEl.crossOrigin = 'anonymous';
+const meditationVideoTexture = new THREE.VideoTexture(meditationVideoEl);
+meditationVideoTexture.minFilter = THREE.LinearFilter;
+meditationVideoTexture.magFilter = THREE.LinearFilter;
+const meditationScreen = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.6, 0.9),  // 16:9 比例
+  new THREE.MeshBasicMaterial({
+    map: meditationVideoTexture,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide
+  })
+);
+meditationScreen.position.set(-2.5, 1.8, -2);  // 左前方，眼睛高度
+meditationScreen.rotation.y = Math.PI / 6;  // 稍微转向用户
+meditationScreen.visible = false;  // 默认隐藏
+scene.add(meditationScreen);
+
+/* 冥想引导音频播放器 */
+const meditationAudioEl = document.createElement('audio');
+meditationAudioEl.src = '/vr_assets/meditation_guide.mp3';
+meditationAudioEl.loop = false;  // 17分钟音频不循环
+meditationAudioEl.preload = 'auto';
 
 /* 心息之珠：随心率/呼吸脉动 */
 const orb = new THREE.Mesh(new THREE.SphereGeometry(.28,48,32),
@@ -659,6 +696,44 @@ $('btnSound').onclick = async ()=>{
   $('btnSound').classList.toggle('on', S.soundOn);
   $('btnSound').textContent = '声音：' + (S.soundOn ? '开' : '关');
   audioPush();                             // 立即生效（关→静音，开→按当前指令）
+};
+
+/* 冥想引导开关（2026-09-15 法师指示接入）
+   点击按钮开启/关闭冥想引导（视频屏幕+音频播放器）
+   开启时：显示视频屏幕、播放音频和视频（视频循环，音频单次）
+   关闭时：隐藏视频屏幕、暂停音频和视频 */
+$('btnMeditation').onclick = ()=>{
+  if (!S.meditationOn) {
+    // 开启冥想引导
+    S.meditationOn = true;
+    meditationScreen.visible = true;
+    
+    // 播放视频（循环）
+    meditationVideoEl.currentTime = 0;
+    meditationVideoEl.play().catch(err => {
+      say('视频播放失败：' + (err && err.message ? err.message : err));
+    });
+    
+    // 播放音频（单次，17分钟）
+    meditationAudioEl.currentTime = 0;
+    meditationAudioEl.play().catch(err => {
+      say('音频播放失败：' + (err && err.message ? err.message : err));
+    });
+    
+    say('冥想引导已开启（17分钟）');
+  } else {
+    // 关闭冥想引导
+    S.meditationOn = false;
+    meditationScreen.visible = false;
+    
+    // 暂停视频和音频
+    meditationVideoEl.pause();
+    meditationAudioEl.pause();
+    
+    say('冥想引导已关闭');
+  }
+  $('btnMeditation').classList.toggle('on', S.meditationOn);
+  $('btnMeditation').textContent = '冥想引导：' + (S.meditationOn ? '开' : '关');
 };
 
 /* ── 主循环 ──────────────────────────────────────────── */
