@@ -199,6 +199,8 @@
     <span class="tab-sub">出 · 复盘</span></button>
   <button class="tab-btn" data-tab="govern">数据治理
     <span class="tab-sub">出 · 治理</span></button>
+  <button class="tab-btn" data-tab="guide">引导体验
+    <span class="tab-sub">融 · 他山之石</span></button>
 </nav>
 <main>
 
@@ -558,6 +560,24 @@
       <thead><tr><th>会话编号</th><th>落盘时间</th><th>说明</th></tr></thead>
       <tbody id="quarantineBody"></tbody>
     </table>
+  </div>
+</section>
+
+<!-- ═══ 引导体验（他山之石）═══ -->
+<section id="tab-guide" class="tab">
+  <div class="card">
+    <h2>引导体验 · 他山之石</h2>
+    <div class="hint" style="margin-top:0;">
+      外部 VR 引导体验（云中工作室出品）。仅供参考，与脑电数据无联动。
+    </div>
+    <div class="toolbar" style="margin-top:10px;">
+      <button class="btn" id="btnLoadGuide">加载引导体验</button>
+      <button class="btn ghost" id="btnUnloadGuide">关闭</button>
+      <span class="msg" id="guideMsg"></span>
+    </div>
+    <div id="guideContainer" style="margin-top:15px; display:none;">
+      <iframe id="guideIframe" src="" style="width:100%; height:600px; border:1px solid var(--border); border-radius:4px;" allow="xr-spatial-tracking; fullscreen"></iframe>
+    </div>
   </div>
 </section>
 
@@ -1851,6 +1871,42 @@ async function loadHistory() {
     ).join("") || "<tr><td colspan=2>暂无实验记录</td></tr>";
   } catch (e) { console.error(e); }
 }
+
+// ── 引导体验（他山之石）──
+const GUIDE_URL = "https://www.yunzhongstudio.com/vr-the-journey/";
+$("btnLoadGuide").onclick = () => {
+  const container = $("guideContainer");
+  const iframe = $("guideIframe");
+  const msg = $("guideMsg");
+  
+  // 设置 iframe 源
+  iframe.src = GUIDE_URL;
+  container.style.display = "block";
+  msg.textContent = "正在加载引导体验...";
+  msg.className = "msg ok";
+  
+  // iframe 加载完成后的回调
+  iframe.onload = () => {
+    msg.textContent = "引导体验已加载（注意：与脑电数据无联动）";
+  };
+  
+  // iframe 加载失败的处理
+  iframe.onerror = () => {
+    msg.textContent = "加载失败，请检查网络连接";
+    msg.className = "msg err";
+  };
+};
+
+$("btnUnloadGuide").onclick = () => {
+  const container = $("guideContainer");
+  const iframe = $("guideIframe");
+  const msg = $("guideMsg");
+  
+  // 清空 iframe 源并隐藏容器
+  iframe.src = "";
+  container.style.display = "none";
+  msg.textContent = "";
+};
 
 // ── 初始化 ──
 $("histSceneFilter").onchange = renderReports;
