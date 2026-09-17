@@ -16,6 +16,14 @@ import os
 import tempfile
 from collections import Counter
 
+# 2026-09-18：GBK 控制台打印 ✅ 会 UnicodeEncodeError（同 console_server 同类缺陷），
+# 统一兜底为 replace，避免"校验本身通过但脚本崩溃"的误读。
+try:
+    sys.stdout.reconfigure(errors="replace")
+    sys.stderr.reconfigure(errors="replace")
+except Exception:
+    pass
+
 # 脚本运行时才注入 DOM 的 id（模板字符串里），静态扫描视为存在
 DYNAMIC_IDS = {
     "hiP", "hiT",       # 历史页每行入库选择器（前缀拼接）
