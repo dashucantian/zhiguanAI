@@ -221,3 +221,10 @@ output/20260910_VR标准模板三重分析/*
 !output/20260914_W1两项待裁定核查/
 output/20260914_W1两项待裁定核查/*
 !output/20260914_W1两项待裁定核查/*.py
+
+# === 2026-09-18 证据文件入库例外（W3，被 KZ-019/Case-M02 引为依据）===
+# 缘由：fog_math_check.py 是《S2空间呼吸规格》幅度反解工具，
+#       mandala_metrics_check.mjs 是 KZ-019 依据栏与 Case-M02 的实算脚本，
+#       二者被文档引为可复算证据，却被 /_analysis_tmp/*.py|*.mjs 排除致 clone 后依据即失。
+!_analysis_tmp/fog_math_check.py
+!_analysis_tmp/mandala_metrics_check.mjs
