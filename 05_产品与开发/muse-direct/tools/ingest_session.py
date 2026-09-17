@@ -112,7 +112,7 @@ def main():
                     help="不合格数据：不进 02_raw，落盘到隔离区并在登记表记 "
                          "quarantined（--type test 默认隔离）")
     ap.add_argument("--scene", default=None, choices=["monitor", "closedloop"],
-                    help="采集场景标记（缺省读 npz meta.scene）")
+                    help="采集场景标记（npz meta.scene 优先；本参数仅对无 meta.scene 的旧文件作回退）")
     ap.add_argument("--pre-state", default=None, dest="pre_state",
                     help="事前状态自评（写入 session_note）")
     ap.add_argument("--post-state", default=None, dest="post_state",
@@ -130,9 +130,15 @@ def main():
         meta = d["meta"].item()
         has_ts = "timestamps" in d.files
         timestamps = d["timestamps"] if has_ts else None
+        # S1 修复（2026-09-18，依 D40「存盘永远原始不实→旁路存 eeg_pre_filter」）：
+        # 滤波前原始列若有必须随档归档——因果滤波不可逆，丢在暂存区即永久丢失。
+        has_pre = "eeg_pre_filter" in d.files
+        pre_arr = d["eeg_pre_filter"] if has_pre else None
 
-    # ---- 场景标记：命令行优先，其次读 npz meta.scene ----
-    scene = args.scene or str(meta.get("scene", "")) or "unknown"
+    # ---- 场景标记：npz meta.scene 优先，--scene 仅作回退（与模块 docstring 一致；
+    #      2026-09-18 修复此前"命令行优先"与 docstring 相反的实现） ----
+    meta_scene = str(meta.get("scene", "") or "").strip()
+    scene = meta_scene or args.scene or "unknown"
     # ---- 隔离判定：显式 --quarantine 或 --type test（链路测试默认隔离） ----
     quarantine = bool(args.quarantine or args.type == "test")
 
@@ -195,8 +201,11 @@ def main():
     start_epoch = start_local.timestamp()
     epoch_normalized = "none"
     if not has_ts:
-        # 无时间戳数组：按标称采样率线性回填（纪元秒）
-        timestamps = start_epoch + np.arange(samples) / NOMINAL_SFREQ
+        # 无时间戳数组：按标称采样率线性回填（纪元秒）。
+        # 口径-2 修复（2026-09-18）：采样率取 meta.sfreq（Muse 256 / NeuraDock 250），
+        # 不再写死 256——否则多设备会话的合成时间轴整体压缩 2.4%（1 小时约 85 秒）。
+        nominal_sfreq = float(meta.get("sfreq", NOMINAL_SFREQ))
+        timestamps = start_epoch + np.arange(samples) / nominal_sfreq
         backfilled = "linear_interpolation"
     else:
         timestamps = np.asarray(timestamps, dtype=np.float64)
@@ -207,9 +216,20 @@ def main():
             epoch_normalized = "from_relative"
         # 幂等保护：已是纪元秒的数组原样保留
 
-    # ---- 写 02_raw ----
+    # ---- 写 02_raw（S1 修复：eeg_pre_filter 若有必随档，防"eeg_raw 名实不符"复发）----
     dest.mkdir(parents=True, exist_ok=False)
-    np.savez(dest / "eeg_raw.npz", eeg=eeg, timestamps=timestamps, meta=meta)
+    if has_pre:
+        np.savez(dest / "eeg_raw.npz", eeg=eeg, eeg_pre_filter=pre_arr,
+                 timestamps=timestamps, meta=meta)
+    else:
+        # 源无滤波前列：若 meta 自称 pre_filter_available=True 即属失实，
+        # 如实订正为 False 后再归档（数据诚实性优先，不静默保留失实声明）。
+        if (isinstance(meta.get("signal_chain"), dict)
+                and meta["signal_chain"].get("pre_filter_available")):
+            meta["signal_chain"]["pre_filter_available"] = False
+            meta["signal_chain"]["note"] = (
+                "源 npz 无 eeg_pre_filter 列，归档时如实标注为不可用（2026-09-18 口径）")
+        np.savez(dest / "eeg_raw.npz", eeg=eeg, timestamps=timestamps, meta=meta)
     if report_path and report_path.exists():
         shutil.copy2(report_path, dest / "report.html")
 
@@ -234,6 +254,7 @@ def main():
         "signal_chain": meta.get("signal_chain") or {
             "chain_tag": "v12_bp_1_40", "pre_filter_available": False,
             "note": "旧版采集端未写链标注，按历史实测统一推定（见 2026-09-08 讨论稿第八节）。"},
+        "pre_filter_archived": bool(has_pre),
         "battery_level": "unknown",
         "os_platform": "Windows 11",
         "collection_tool": "muse-direct@2026-09-01",

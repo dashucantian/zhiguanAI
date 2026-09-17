@@ -600,13 +600,24 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 async function api(path, opt) {
-  const res = await fetch(path, opt);
-  if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail || detail; } catch (e) {}
-    throw new Error(detail);
+  // 2026-09-18：加 15s 超时（AbortController），防请求永久悬挂导致按钮/界面假死
+  opt = opt || {};
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(path, Object.assign({}, opt, { signal: ctrl.signal }));
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (e) {}
+      throw new Error(detail);
+    }
+    return res.json();
+  } catch (e) {
+    if (e.name === "AbortError") throw new Error("请求超时（15 秒无响应）");
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json();
 }
 
 // ── 页内确认模态与 toast（2026-09-05 验收整改：替代原生 confirm/alert）──
@@ -669,6 +680,7 @@ function waveChannels(wave) {
   return keys.length ? keys : MON_CH;
 }
 let monEs = null, monRunning = false, monLastError = "";
+let monStartBusy = false;   // 2026-09-18：启动按钮 in-flight 守卫（防双击/轮询回写重复启动）
 // ── 推流看门狗状态（2026-09-13 故障根治）──
 // 原 `monEs.onerror = () => {}` 吞掉一切错误且全文件零重连逻辑：SSE 一旦
 // 断流（睡眠/切网/代理空闲超时/服务端饥饿），界面就永久停在"正在连接数据源…"、
@@ -985,8 +997,12 @@ function channelQuality(data) {
 }
 
 // 右侧仪表面板：通道读数（质量点+RMS μV）、频段读数、体征全套
+// （2026-09-18 XSS 修复：通道/频段/档案/登记表等全部改 DOM 构造＋textContent，
+//   不再把数据拼进 innerHTML）
 function updateLabPanel(wave, bands, vit, ev) {
-  $("monChReads").innerHTML = waveChannels(wave).map(ch => {
+  const chWrap = $("monChReads");
+  chWrap.textContent = "";
+  waveChannels(wave).forEach(ch => {
     const q = channelQuality(wave && wave[ch]);
     const d = wave && wave[ch];
     let rms = null;
@@ -994,12 +1010,32 @@ function updateLabPanel(wave, bands, vit, ev) {
       let s = 0; for (const v of d) s += v * v;
       rms = Math.sqrt(s / d.length);
     }
-    return `<div class="lp-row"><span><span class="chdot ${q || ""}"></span>${ch}</span>`
-      + `<span>${rms != null ? rms.toFixed(1) + " μV" : "-"}</span></div>`;
-  }).join("");
-  $("monBandReads").innerHTML = BAND_META.map(([key, label]) =>
-    `<div class="lp-row"><span>${label.slice(2).trim()}</span>`
-    + `<span>${unitOr(bands && bands[key], 1, "dB")}</span></div>`).join("");
+    const row = document.createElement("div");
+    row.className = "lp-row";
+    const left = document.createElement("span");
+    const dot = document.createElement("span");
+    dot.className = "chdot " + (q || "");
+    left.appendChild(dot);
+    left.appendChild(document.createTextNode(ch));
+    const right = document.createElement("span");
+    right.textContent = rms != null ? rms.toFixed(1) + " μV" : "-";
+    row.appendChild(left);
+    row.appendChild(right);
+    chWrap.appendChild(row);
+  });
+  const bandWrap = $("monBandReads");
+  bandWrap.textContent = "";
+  BAND_META.forEach(([key, label]) => {
+    const row = document.createElement("div");
+    row.className = "lp-row";
+    const left = document.createElement("span");
+    left.textContent = label.slice(2).trim();
+    const right = document.createElement("span");
+    right.textContent = unitOr(bands && bands[key], 1, "dB");
+    row.appendChild(left);
+    row.appendChild(right);
+    bandWrap.appendChild(row);
+  });
   $("monState").textContent = (ev.state || "-").split(" ")[0] || "-";
   $("monHr").textContent = numOr(vit.hr, 0) === "-" ? "-" : numOr(vit.hr, 0) + " 次/分";
   $("monRmssd").textContent = unitOr(vit.rmssd, 0, "ms");
@@ -1171,67 +1207,73 @@ function applyWsMode() {
 $("wsMode").onchange = applyWsMode;
 
 $("monStart").onclick = async () => {
-  const wsMode = $("wsMode").value;
-  const mode = $("monMode").value;
-  const common = {
-    simulate: mode === "simulate",
-    adapter: mode === "bled112" ? "bled112"
-      : mode === "neuradock" ? "neuradock" : "bleak",
-    serial_port: mode === "bled112"
-      ? ($("monPort").value.trim() || null)
-      : mode === "neuradock"
-        ? ($("monNd").value.trim() || "127.0.0.1:9600") : null,
-    address: $("monAddress").value.trim() || null,
-    participant: $("monParticipant").value || null,
-    session_type: $("monSessionType").value,
-    pre_state: $("monPreState").value.trim() || null,
-    contact_quality: $("monContact").value,
-    note: $("monNote").value.trim() || null,
-  };
-  if (!common.simulate && !common.participant) {
-    return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
-  }
-  if (wsMode === "loop") {
-    // ── 闭环反馈模式 ──
-    const b = $("inBaseline").value ? +$("inBaseline").value : null;
-    const d = $("inDuration").value ? +$("inDuration").value : null;
-    if (b != null && b < 30) return monMsg("基线秒数不能小于 30（配置校验要求）", "err");
-    if (d != null && d < 60) return monMsg("总时长不能小于 60 秒（配置校验要求）", "err");
-    if (b != null && d != null && d <= b) return monMsg("总时长必须大于基线秒数", "err");
-    const payload = Object.assign({}, common, {
-      config_path: $("inConfigFile").value || null,
-      baseline: b, duration: d,
-      tag: $("inTag").value.trim() || null });
+  if (monStartBusy) return;   // 2026-09-18：in-flight 守卫，防双击/轮询回写造成重复启动
+  monStartBusy = true;
+  try {
+    const wsMode = $("wsMode").value;
+    const mode = $("monMode").value;
+    const common = {
+      simulate: mode === "simulate",
+      adapter: mode === "bled112" ? "bled112"
+        : mode === "neuradock" ? "neuradock" : "bleak",
+      serial_port: mode === "bled112"
+        ? ($("monPort").value.trim() || null)
+        : mode === "neuradock"
+          ? ($("monNd").value.trim() || "127.0.0.1:9600") : null,
+      address: $("monAddress").value.trim() || null,
+      participant: $("monParticipant").value || null,
+      session_type: $("monSessionType").value,
+      pre_state: $("monPreState").value.trim() || null,
+      contact_quality: $("monContact").value,
+      note: $("monNote").value.trim() || null,
+    };
+    if (!common.simulate && !common.participant) {
+      return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
+    }
+    if (wsMode === "loop") {
+      // ── 闭环反馈模式 ──
+      const b = $("inBaseline").value ? +$("inBaseline").value : null;
+      const d = $("inDuration").value ? +$("inDuration").value : null;
+      if (b != null && b < 30) return monMsg("基线秒数不能小于 30（配置校验要求）", "err");
+      if (d != null && d < 60) return monMsg("总时长不能小于 60 秒（配置校验要求）", "err");
+      if (b != null && d != null && d <= b) return monMsg("总时长必须大于基线秒数", "err");
+      const payload = Object.assign({}, common, {
+        config_path: $("inConfigFile").value || null,
+        baseline: b, duration: d,
+        tag: $("inTag").value.trim() || null });
+      try {
+        $("monStart").disabled = true;
+        await api("/api/experiment/start", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload) });
+        $("monStop").disabled = false;
+        $("expSummaryCard").style.display = "none";
+        connectStream();
+        monMsg("实验已启动，等待数据…", "ok");
+      } catch (e) {
+        $("monStart").disabled = false;
+        monMsg("启动失败：" + e.message, "err");
+      }
+      return;
+    }
+    // ── 纯监测模式 ──
     try {
       $("monStart").disabled = true;
-      await api("/api/experiment/start", {
+      await api("/api/monitor/start", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload) });
+        body: JSON.stringify(common) });
+      monRunning = true;
       $("monStop").disabled = false;
-      $("expSummaryCard").style.display = "none";
-      connectStream();
-      monMsg("实验已启动，等待数据…", "ok");
+      $("monSave").disabled = false;
+      setPhase("监测中", "monitor");
+      connectMonitorStream();
+      monMsg("正在连接数据源…", "ok");
     } catch (e) {
       $("monStart").disabled = false;
       monMsg("启动失败：" + e.message, "err");
     }
-    return;
-  }
-  // ── 纯监测模式 ──
-  try {
-    $("monStart").disabled = true;
-    await api("/api/monitor/start", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(common) });
-    monRunning = true;
-    $("monStop").disabled = false;
-    $("monSave").disabled = false;
-    setPhase("监测中", "monitor");
-    connectMonitorStream();
-    monMsg("正在连接数据源…", "ok");
-  } catch (e) {
-    $("monStart").disabled = false;
-    monMsg("启动失败：" + e.message, "err");
+  } finally {
+    monStartBusy = false;
   }
 };
 
@@ -1287,27 +1329,71 @@ async function loadProfiles() {
 function renderProfileTable() {
   const body = $("profileBody");
   if (!body) return;
+  body.textContent = "";
   if (!profiles.profiles.length) {
-    body.innerHTML = "<tr><td colspan=5>尚无测试者档案，可在下方添加；也可直接使用 P001</td></tr>";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.textContent = "尚无测试者档案，可在下方添加；也可直接使用 P001";
+    tr.appendChild(td);
+    body.appendChild(tr);
     return;
   }
-  body.innerHTML = profiles.profiles.map(p =>
-    `<tr><td>${p.id}</td><td>${p.name || ""}</td><td>${p.note || ""}</td>` +
-    `<td>${profiles.default_participant === p.id ? "✅ 默认" :
-          `<button class="btn ghost" style="padding:2px 10px;font-size:12px;" onclick="setDefault('${p.id}')">设为默认</button>`}</td>` +
-    `<td><button class="btn ghost" style="padding:2px 10px;font-size:12px;color:var(--warn);border-color:var(--warn);" onclick="removeProfile('${p.id}')">移除</button></td></tr>`
-  ).join("");
+  profiles.profiles.forEach(p => {
+    const tr = document.createElement("tr");
+    [p.id, p.name || "", p.note || ""].forEach(v => {
+      const td = document.createElement("td");
+      td.textContent = v;
+      tr.appendChild(td);
+    });
+    const defTd = document.createElement("td");
+    if (profiles.default_participant === p.id) {
+      defTd.textContent = "✅ 默认";
+    } else {
+      const b = document.createElement("button");
+      b.className = "btn ghost";
+      b.style.cssText = "padding:2px 10px;font-size:12px;";
+      b.textContent = "设为默认";
+      b.addEventListener("click", () => setDefault(p.id));
+      defTd.appendChild(b);
+    }
+    tr.appendChild(defTd);
+    const rmTd = document.createElement("td");
+    const rm = document.createElement("button");
+    rm.className = "btn ghost";
+    rm.style.cssText = "padding:2px 10px;font-size:12px;"
+      + "color:var(--warn);border-color:var(--warn);";
+    rm.textContent = "移除";
+    rm.addEventListener("click", () => removeProfile(p.id));
+    rmTd.appendChild(rm);
+    tr.appendChild(rmTd);
+    body.appendChild(tr);
+  });
 }
 function fillParticipantSelects() {
-  const opts = profiles.profiles.length
-    ? profiles.profiles.map(p =>
-        `<option value="${p.id}">${p.id}${p.name ? " · " + p.name : ""}</option>`).join("")
-    : `<option value="P001">P001（未建档，可直接使用）</option>`;
   for (const id of ["monParticipant", "inParticipant", "preParticipant"]) {
     const sel = $(id);
     if (!sel) continue;
-    sel.innerHTML = (id === "monParticipant"
-      ? `<option value="">（不登记测试者）</option>` : "") + opts;
+    sel.textContent = "";
+    if (id === "monParticipant") {
+      const o0 = document.createElement("option");
+      o0.value = "";
+      o0.textContent = "（不登记测试者）";
+      sel.appendChild(o0);
+    }
+    if (profiles.profiles.length) {
+      profiles.profiles.forEach(p => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.id + (p.name ? " · " + p.name : "");
+        sel.appendChild(o);
+      });
+    } else {
+      const o = document.createElement("option");
+      o.value = "P001";
+      o.textContent = "P001（未建档，可直接使用）";
+      sel.appendChild(o);
+    }
     if (profiles.default_participant) {
       for (const o of sel.options) if (o.value === profiles.default_participant) sel.value = o.value;
     }
@@ -1360,17 +1446,40 @@ async function loadRegistry() {
   try {
     const r = await api("/api/registry");
     const body = $("registryBody");
-    if (!r.rows.length) { body.innerHTML = "<tr><td colspan=6>登记表为空</td></tr>"; return; }
-    const statusBadge = s => s === "planned"
-      ? `<span class="badge warn">planned 待采集</span>`
-      : s === "quarantined"
-        ? `<span class="badge err">quarantined 隔离</span>`
-        : `<span class="badge ok">${s}</span>`;
-    body.innerHTML = r.rows.map(row =>
-      `<tr><td>${row.session_id}</td><td>${row.participant_id}</td>` +
-      `<td>${row.date}</td><td>${row.session_type}</td>` +
-      `<td class="num">${row.duration_seconds || ""}</td><td>${statusBadge(row.status)}</td></tr>`
-    ).join("");
+    body.textContent = "";
+    if (!r.rows.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.textContent = "登记表为空";
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+    const badge = (s, cls, text) => {
+      const sp = document.createElement("span");
+      sp.className = "badge " + cls;
+      sp.textContent = text;
+      return sp;
+    };
+    r.rows.forEach(row => {
+      const tr = document.createElement("tr");
+      [row.session_id, row.participant_id, row.date, row.session_type].forEach(v => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      const tdDur = document.createElement("td");
+      tdDur.className = "num";
+      tdDur.textContent = row.duration_seconds || "";
+      tr.appendChild(tdDur);
+      const tdSt = document.createElement("td");
+      if (row.status === "planned") tdSt.appendChild(badge(row.status, "warn", "planned 待采集"));
+      else if (row.status === "quarantined") tdSt.appendChild(badge(row.status, "err", "quarantined 隔离"));
+      else tdSt.appendChild(badge(row.status, "ok", row.status));
+      tr.appendChild(tdSt);
+      body.appendChild(tr);
+    });
   } catch (e) { console.error(e); }
 }
 $("btnPreregister").onclick = async () => {
@@ -1396,10 +1505,25 @@ async function loadQuarantine() {
   try {
     const r = await api("/api/quarantine");
     const body = $("quarantineBody");
-    if (!r.items.length) { body.innerHTML = "<tr><td colspan=3>隔离区为空</td></tr>"; return; }
-    body.innerHTML = r.items.map(it =>
-      `<tr><td>${it.session_id}</td><td>${it.mtime}</td><td>${it.reason || ""}</td></tr>`
-    ).join("");
+    body.textContent = "";
+    if (!r.items.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 3;
+      td.textContent = "隔离区为空";
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+    r.items.forEach(it => {
+      const tr = document.createElement("tr");
+      [it.session_id, it.mtime, it.reason || ""].forEach(v => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    });
   } catch (e) { console.error(e); }
 }
 
@@ -1417,13 +1541,35 @@ function showQcBox(qc) {
   if (!qc) { box.style.display = "none"; return; }
   const ok = qc.recommend === "ingest";
   box.style.display = "";
+  box.textContent = "";
   const m = qc.metrics || {};
-  box.innerHTML =
-    `<span class="badge ${ok ? "ok" : "warn"}">质检建议：${ok ? "正式入库" : "隔离区落盘"}</span> ` +
-    `<span class="stat">时长 <b>${m.duration ?? "-"}s</b> · 有效采样 <b>${m.effective_hz ?? "-"} Hz</b> · ` +
-    `丢包率 <b>${m.packet_loss_rate != null ? (m.packet_loss_rate * 100).toFixed(1) + "%" : "-"}</b> · ` +
-    `干净数据 <b>${m.clean_ratio != null ? (m.clean_ratio * 100).toFixed(0) + "%" : "-"}</b></span>` +
-    (qc.reasons.length ? qc.reasons.map(r => `<div class="reason">⚠ ${r}</div>`).join("") : "");
+  const badge = document.createElement("span");
+  badge.className = "badge " + (ok ? "ok" : "warn");
+  badge.textContent = "质检建议：" + (ok ? "正式入库" : "隔离区落盘");
+  box.appendChild(badge);
+  box.appendChild(document.createTextNode(" "));
+  const stat = document.createElement("span");
+  stat.className = "stat";
+  const kv = (k, v) => {
+    const b = document.createElement("b");
+    b.textContent = v;
+    stat.appendChild(document.createTextNode(k));
+    stat.appendChild(b);
+  };
+  kv("时长 ", (m.duration ?? "-") + "s");
+  stat.appendChild(document.createTextNode(" · 有效采样 "));
+  kv("", (m.effective_hz ?? "-") + " Hz");
+  stat.appendChild(document.createTextNode(" · 丢包率 "));
+  kv("", m.packet_loss_rate != null ? (m.packet_loss_rate * 100).toFixed(1) + "%" : "-");
+  stat.appendChild(document.createTextNode(" · 干净数据 "));
+  kv("", m.clean_ratio != null ? (m.clean_ratio * 100).toFixed(0) + "%" : "-");
+  box.appendChild(stat);
+  (qc.reasons || []).forEach(r => {
+    const div = document.createElement("div");
+    div.className = "reason";
+    div.textContent = "⚠ " + r;
+    box.appendChild(div);
+  });
 }
 
 // ── 预登记匹配下拉（planned 行） ──
@@ -1433,10 +1579,18 @@ async function refreshSidOptions() {
   try {
     const r = await api("/api/registry");
     const planned = r.rows.filter(x => x.status === "planned");
-    sel.innerHTML = `<option value="">（不用预登记，补登记模式）</option>` +
-      planned.map(x =>
-        `<option value="${x.session_id}">${x.session_id}（${x.participant_id}/${x.session_type}）</option>`).join("");
-  } catch (e) { sel.innerHTML = ""; }
+    sel.textContent = "";
+    const o0 = document.createElement("option");
+    o0.value = "";
+    o0.textContent = "（不用预登记，补登记模式）";
+    sel.appendChild(o0);
+    planned.forEach(x => {
+      const o = document.createElement("option");
+      o.value = x.session_id;
+      o.textContent = `${x.session_id}（${x.participant_id}/${x.session_type}）`;
+      sel.appendChild(o);
+    });
+  } catch (e) { sel.textContent = ""; }
 }
 
 // ── 一键入库 ──
@@ -1466,7 +1620,8 @@ $("monIngestRun").onclick = async () => {
         session_type: sessionType,
         sid: $("monSidSelect").value || null,
         quarantine,
-        scene: "monitor",
+        // 场景不在此硬编码（2026-09-18 修）：npz meta.scene 为权威（ingest 端
+        // meta 优先、--scene 仅回退），否则闭环会话会被误标为 monitor。
         note: $("monNote").value.trim() || null,
         pre_state: $("monPreState").value.trim() || null,
         post_state: $("monPostState").value.trim() || null,
@@ -1508,6 +1663,7 @@ $("monManageProfiles").onclick = () => {
 const chart = $("chart"), ctx = chart.getContext("2d");
 let pts = [], baselineDb = null, baselineEndAt = null, es = null;
 let nRewardTicks = 0, nLoopTicks = 0, volMaxRef = 0.35, expLastError = "";
+let expRunning = false;   // 2026-09-18：实验推流断流提示用（start 置真、end 置假）
 
 function showExpSummary(ev) {
   const card = $("expSummaryCard");
@@ -1593,11 +1749,18 @@ function connectStream() {
     const ev = JSON.parse(e.data);
     handleEvent(ev);
   };
-  es.onerror = () => {};
+  // 2026-09-18：补齐 09-13 只修了监测流的漏项——实验推流不再静默吞错。
+  // EventSource 会自行重连；仅在实验运行期间断流时如实提示，避免界面假死无告警。
+  es.onerror = () => {
+    if (expRunning) {
+      monMsg("⚠️ 实验推流中断，浏览器自动重连中…", "warn");
+    }
+  };
 }
 
 function handleEvent(ev) {
   if (ev.type === "start") {
+    expRunning = true;
     pts = []; baselineDb = null; baselineEndAt = null;
     nRewardTicks = 0; nLoopTicks = 0;
     $("logBody").innerHTML = "";
@@ -1655,6 +1818,7 @@ function handleEvent(ev) {
     expLastError = ev.text;
     monMsg("错误：" + ev.text, "err");
   } else if (ev.type === "end") {
+    expRunning = false;
     setPhase("已结束", "");
     $("monStart").disabled = false; $("monStop").disabled = true;
     $("monSave").disabled = true;
@@ -1673,10 +1837,18 @@ function handleEvent(ev) {
 function appendLog(ev) {
   const tr = document.createElement("tr");
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-  tr.innerHTML = `<td>${time}</td><td>${ev.phase}</td>` +
-    `<td class="num">${numOr(ev.alpha, 1)}</td>` +
-    `<td class="num">${ev.beat}</td><td class="num">${ev.vol}</td>` +
-    `<td>${ev.note || ""}</td>`;
+  const mk = (text, cls) => {
+    const td = document.createElement("td");
+    if (cls) td.className = cls;
+    td.textContent = text;
+    return td;
+  };
+  tr.appendChild(mk(time));
+  tr.appendChild(mk(ev.phase));
+  tr.appendChild(mk(numOr(ev.alpha, 1), "num"));
+  tr.appendChild(mk(ev.beat, "num"));
+  tr.appendChild(mk(ev.vol, "num"));
+  tr.appendChild(mk(ev.note || ""));
   const body = $("logBody");
   body.insertBefore(tr, body.firstChild);
   while (body.children.length > 200) body.removeChild(body.lastChild);
@@ -1794,47 +1966,114 @@ $("btnCfgSave").onclick = async () => {
 };
 
 // ── 历史数据（场景筛选 + 质检徽章 + 一键入库） ──
+// （2026-09-18 XSS/竞态修复：徽章与行全部 DOM 构造；入库按钮按闭包绑定行对象，
+//   不再用索引别名 `_visibleReports[i]`——重渲染后点到旧索引会入库错误的报告）
 let reportsCache = [];
 
+function badgeEl(cls, text) {
+  const sp = document.createElement("span");
+  sp.className = "badge " + cls;
+  sp.textContent = text;
+  return sp;
+}
 function sceneBadge(scene) {
-  if (scene === "monitor") return '<span class="badge scene-mon">监测采集</span>';
-  if (scene === "closedloop") return '<span class="badge scene-loop">闭环实验</span>';
-  return '<span class="badge dim">未标记</span>';
+  if (scene === "monitor") return badgeEl("scene-mon", "监测采集");
+  if (scene === "closedloop") return badgeEl("scene-loop", "闭环实验");
+  return badgeEl("dim", "未标记");
 }
 function qcBadge(qc) {
-  if (!qc) return '<span class="badge dim">-</span>';
+  if (!qc) return badgeEl("dim", "-");
   return qc.recommend === "ingest"
-    ? '<span class="badge ok">建议入库</span>'
-    : '<span class="badge warn">建议隔离</span>';
+    ? badgeEl("ok", "建议入库")
+    : badgeEl("warn", "建议隔离");
 }
 
 function renderReports() {
   const filter = $("histSceneFilter").value;
   const rows = reportsCache.filter(r => filter === "all" || r.scene === filter);
-  const pOpts = (profiles.profiles.length
-    ? profiles.profiles.map(p => `<option value="${p.id}">${p.id}</option>`)
-    : `<option value="P001">P001</option>`).join("");
-  $("reportBody").innerHTML = rows.map((r, i) =>
-    `<tr><td>${r.name}</td><td>${sceneBadge(r.scene)}</td><td>${qcBadge(r.qc)}</td>` +
-    `<td>${r.mtime}</td><td class="num">${(r.size / 1024).toFixed(0)} KB</td>` +
-    `<td><a href="/api/file?path=report/${encodeURIComponent(r.name)}" target="_blank">打开报告</a>` +
-    (r.npz ? ` · <a href="/api/file?path=report/${encodeURIComponent(r.npz)}" target="_blank">下载数据</a>` : "") +
-    (r.npz_path ? ` <span style="white-space:nowrap;">` +
-      `<select id="hiP${i}" style="width:64px;">${pOpts}</select>` +
-      `<select id="hiT${i}" style="width:76px;"><option>baseline</option><option>training</option><option>sleep</option><option>custom</option><option>test</option></select>` +
-      `<button class="btn ghost" style="padding:2px 8px;font-size:12px;" onclick="ingestFromHistory(${i})">入库</button></span>` : "") +
-    `</td></tr>`
-  ).join("") || "<tr><td colspan=6>暂无报告</td></tr>";
-  window._visibleReports = rows;
+  const body = $("reportBody");
+  body.textContent = "";
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.textContent = "暂无报告";
+    tr.appendChild(td);
+    body.appendChild(tr);
+    return;
+  }
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    const tdName = document.createElement("td");
+    tdName.textContent = r.name;
+    const tdScene = document.createElement("td");
+    tdScene.appendChild(sceneBadge(r.scene));
+    const tdQc = document.createElement("td");
+    tdQc.appendChild(qcBadge(r.qc));
+    const tdMtime = document.createElement("td");
+    tdMtime.textContent = r.mtime;
+    const tdSize = document.createElement("td");
+    tdSize.className = "num";
+    tdSize.textContent = (r.size / 1024).toFixed(0) + " KB";
+    const tdAct = document.createElement("td");
+    const aReport = document.createElement("a");
+    aReport.href = "/api/file?path=report/" + encodeURIComponent(r.name);
+    aReport.target = "_blank";
+    aReport.textContent = "打开报告";
+    tdAct.appendChild(aReport);
+    if (r.npz) {
+      tdAct.appendChild(document.createTextNode(" · "));
+      const aNpz = document.createElement("a");
+      aNpz.href = "/api/file?path=report/" + encodeURIComponent(r.npz);
+      aNpz.target = "_blank";
+      aNpz.textContent = "下载数据";
+      tdAct.appendChild(aNpz);
+    }
+    if (r.npz_path) {
+      const span = document.createElement("span");
+      span.style.whiteSpace = "nowrap";
+      tdAct.appendChild(document.createTextNode(" "));
+      const pSel = document.createElement("select");
+      pSel.style.width = "64px";
+      (profiles.profiles.length ? profiles.profiles : [{ id: "P001" }]).forEach(p => {
+        const o = document.createElement("option");
+        o.value = p.id;
+        o.textContent = p.id;
+        pSel.appendChild(o);
+      });
+      const tSel = document.createElement("select");
+      tSel.style.width = "76px";
+      ["baseline", "training", "sleep", "custom", "test"].forEach(t => {
+        const o = document.createElement("option");
+        o.textContent = t;
+        tSel.appendChild(o);
+      });
+      const btn = document.createElement("button");
+      btn.className = "btn ghost";
+      btn.style.cssText = "padding:2px 8px;font-size:12px;";
+      btn.textContent = "入库";
+      btn.addEventListener("click", () => ingestFromHistory(r, pSel, tSel));
+      span.appendChild(pSel);
+      span.appendChild(tSel);
+      span.appendChild(btn);
+      tdAct.appendChild(span);
+    }
+    tr.appendChild(tdName);
+    tr.appendChild(tdScene);
+    tr.appendChild(tdQc);
+    tr.appendChild(tdMtime);
+    tr.appendChild(tdSize);
+    tr.appendChild(tdAct);
+    body.appendChild(tr);
+  });
 }
 
-window.ingestFromHistory = async (i) => {
-  const r = window._visibleReports[i];
+window.ingestFromHistory = async (r, pSel, tSel) => {
   if (!r) return;
   const qc = r.qc || { recommend: "ingest" };
   const quarantine = qc.recommend === "quarantine";
-  const participant = $("hiP" + i).value;
-  const sessionType = $("hiT" + i).value;
+  const participant = pSel.value;
+  const sessionType = tSel.value;
   if (!await askConfirm("确认入库",
       `对 ${r.name} 执行${quarantine ? "隔离区落盘" : "正式入库"}？\n` +
       `测试者：${participant} · 类型：${sessionType}`)) return;
@@ -1848,6 +2087,7 @@ window.ingestFromHistory = async (i) => {
         npz: r.npz_path, report: r.report_path,
         participant, session_type: sessionType,
         quarantine,
+        // meta.scene 为权威（ingest 端已改 meta 优先）；仅对无 meta.scene 的老文件起回退作用
         scene: r.scene !== "unknown" ? r.scene : null,
       }) });
     out.textContent = (res.ok ? "✅ 完成：\n" : "❌ 失败：\n") + res.output;
@@ -1864,11 +2104,34 @@ async function loadHistory() {
     const [rep, exp] = await Promise.all([api("/api/reports"), api("/api/experiments")]);
     reportsCache = rep.reports;
     renderReports();
-    $("expBody").innerHTML = exp.experiments.map(g =>
-      `<tr><td>${g.mtime}</td><td>` + g.files.map(f =>
-        `<a href="/api/file?path=${encodeURIComponent(f)}" target="_blank" ` +
-        `style="margin-right:10px;">${f.slice(16)}</a>`).join("") + `</td></tr>`
-    ).join("") || "<tr><td colspan=2>暂无实验记录</td></tr>";
+    const body = $("expBody");
+    body.textContent = "";
+    if (!exp.experiments.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 2;
+      td.textContent = "暂无实验记录";
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+    exp.experiments.forEach(g => {
+      const tr = document.createElement("tr");
+      const tdMtime = document.createElement("td");
+      tdMtime.textContent = g.mtime;
+      tr.appendChild(tdMtime);
+      const tdFiles = document.createElement("td");
+      g.files.forEach(f => {
+        const a = document.createElement("a");
+        a.href = "/api/file?path=" + encodeURIComponent(f);
+        a.target = "_blank";
+        a.style.marginRight = "10px";
+        a.textContent = f.slice(16);
+        tdFiles.appendChild(a);
+      });
+      tr.appendChild(tdFiles);
+      body.appendChild(tr);
+    });
   } catch (e) { console.error(e); }
 }
 

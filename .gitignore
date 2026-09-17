@@ -72,7 +72,7 @@ Thumbs.db
 # 项目特定
 Zen-EEG/
 experiments/
-output/
+output/*
 *.html
 *.json
 *.bat
@@ -212,3 +212,12 @@ _*.java
 /test_console_e2e.py
 /verify_recording.py
 /.git_迁移前指针文件_留存.txt
+# === 2026-09-18 验收脚本入库例外（W3，法师授权；三步法：例外目录→再排除目录内全部→只放开 *.py）===
+# 缘由：这些脚本被 SOP 与 Case-M 当协作标配引用，但被 output/ 排除致 clone 后不可复现
+# ⚠️ 只放开 .py；同目录 png/json/tmp/npz 等测试产物与截图仍排除（截图可能含真机会话标识，L3 风险）
+!output/20260910_VR标准模板三重分析/
+output/20260910_VR标准模板三重分析/*
+!output/20260910_VR标准模板三重分析/*.py
+!output/20260914_W1两项待裁定核查/
+output/20260914_W1两项待裁定核查/*
+!output/20260914_W1两项待裁定核查/*.py

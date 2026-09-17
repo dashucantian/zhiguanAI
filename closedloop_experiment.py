@@ -384,6 +384,17 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                 else:
                     if not ctrl.has_baseline:
                         base = ctrl.finalize_baseline()
+                        # 2026-09-18 稳健性修复：基线期零样本时不再崩 TypeError，
+                        # 改为显式报错并结束（如实暴露"数据积累不足/频段计算未就绪"，
+                        # 判据错误不得靠放宽标准掩盖——本会实测闭源自测在机器高负载下
+                        # 复现过一次：喂数线程被拖慢致频段从未产出）
+                        if base is None:
+                            msg = ("基线期未产出任何频段样本（数据积累不足或频段计算未就绪），"
+                                   "闭环无法启动，已安全退出")
+                            log_event(we, msg)
+                            print(msg)
+                            emit({"type": "error", "text": msg})
+                            break
                         log_event(we, f"基线期结束，Alpha 基线 = {base:.1f} dB，进入闭环期")
                         print(f"\n【闭环期】基线已锁定: Alpha = {base:.1f} dB，"
                               f"闭环控制启动！")

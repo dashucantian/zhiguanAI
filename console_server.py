@@ -171,7 +171,10 @@ def qc_assess(npz_path, report_path):
                 "reasons": [f"无法读取 npz：{ex}"], "metrics": metrics}
 
     eff = samples / duration if duration > 0 else 0.0
-    loss = round(1.0 - eff / 256.0, 4)
+    # 口径-2 修复（2026-09-18）：丢包率按会话实际采样率计算（Muse 256 / NeuraDock 250），
+    # 不再写死 256——否则 NeuraDock 会话自带 +2.3% 系统偏差。
+    nominal_sfreq = float(meta.get("sfreq", 256.0))
+    loss = round(1.0 - eff / nominal_sfreq, 4)
     metrics.update({"samples": samples, "duration": round(duration, 1),
                     "effective_hz": round(eff, 2),
                     "packet_loss_rate": loss})
@@ -269,6 +272,7 @@ class ReplaySource:
         try:
             d = np.load(self.npz_path, allow_pickle=True)
             eeg = np.asarray(d["eeg"], dtype=np.float64)
+            meta = d["meta"].item() if "meta" in d.files else {}
         except Exception as ex:                        # noqa: BLE001
             self.last_error = f"回放文件读取失败: {type(ex).__name__}: {ex}"
             return False
@@ -277,6 +281,9 @@ class ReplaySource:
             return False
         self._eeg = eeg[:, :4]
         self.n_total = int(self._eeg.shape[0])
+        # 口径-2 修复（2026-09-18）：回放节拍与时长按 npz meta 采样率，
+        # 不再写死 Muse 256——NeuraDock 250Hz 会话回放节奏/时长才与真实一致。
+        self.sfreq = float(meta.get("sfreq", 256.0))
         return True
 
     def start(self):
@@ -297,9 +304,10 @@ class ReplaySource:
 
     def _run(self):
         import numpy as np
-        from muse_local_server import CHANNELS, SFREQ
+        from muse_local_server import CHANNELS
         n_ch = len(CHANNELS)
-        dt = self.BATCH_SAMPLES / SFREQ / self.speed
+        sfreq = getattr(self, "sfreq", 256.0)
+        dt = self.BATCH_SAMPLES / sfreq / self.speed
         i = 0
         n = self.n_total
         while self.running and i < n:
@@ -679,7 +687,7 @@ class MonitorSession:
                 self.status = "recording"
                 self._emit({"type": "message",
                             "text": f"📼 离线回放已启动（{self.receiver.n_total} 样本，"
-                                    f"约 {self.receiver.n_total / 256.0:.0f} 秒）"})
+                                    f"约 {self.receiver.n_total / getattr(self.receiver, 'sfreq', 256.0):.0f} 秒）"})
             elif simulate:
                 self.receiver = MonitorSimulator(self.app)
                 self.receiver.start()
