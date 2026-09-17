@@ -189,3 +189,26 @@ _*.java
 
 # 【AI 咨询与归档记录】99_归档 整目录暂不纳入
 99_归档/
+
+# === 2026-09-18 迁移后补：临时产物与第三方克隆排除（W3） ===
+/openmuse-repo/
+/.dsh_research/
+/_analysis_tmp/*.py
+/_analysis_tmp/*.mjs
+/_analysis_tmp/*.txt
+/_analysis_tmp/commit_package_draft.md
+/_tmp_*.py
+/_w4_eval_*.py
+/TestPreset.java
+/app_*.png
+/sine_*.png
+/dump_preset.js
+/gen_presets*.js
+/test_preset*.js
+/compare_configs.py
+/config_variant_*.json
+/regen_report_zh.py
+/openloop_experiment.py
+/test_console_e2e.py
+/verify_recording.py
+/.git_迁移前指针文件_留存.txt

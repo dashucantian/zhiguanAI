@@ -39,6 +39,18 @@ import threading
 import subprocess
 from datetime import datetime
 
+# 控制台编码兜底（2026-09-17 AI-005）
+# Windows 中文控制台默认 GBK，而启动横幅含 GBK 无映射字符（U+21B3「↳」等）→
+# print 抛 UnicodeEncodeError，进程**在打印横幅阶段就退出**，服务根本没起来，
+# 而报错看起来像崩溃、不像编码问题（实测：从非 UTF-8 终端启动必崩）。
+# 把 stdout/stderr 的错误处理降级为 replace：生僻字符显示为 ?，服务照常启动。
+# 另：如需完整显示，可用 `set PYTHONIOENCODING=utf-8` 或 `python -X utf8` 启动。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="replace")
+    except Exception:
+        pass
+
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)

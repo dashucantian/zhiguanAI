@@ -138,9 +138,14 @@ camera.position.set(...spec.cam);   // 立姿眼高，与修习者同高
 
 /* ── 金线曼荼罗生成器（程序化，全部几何合并为少量 draw call）──
    三层纵深（v0.3 §四原则6"缓慢即昂贵"的空间表达：深度即安静）：
-     内环 · 近身（z=-1.6，眼高前方）：八叶玫瑰线＋双细环——所缘雏形
-     中环 · 主坛（z=-6，直立）：十六叶玫瑰线＋三同心环＋32辐条——坛城主体
-     外环 · 大地（y=0.02，平铺脚下）：大玫瑰线＋双环——立于坛城之中
+     内环 · 近身所缘（s1：y=1.15／z=-1.3＝胸腹高前方）：八叶玫瑰线（k=4）＋双细环
+     中环 · 主坛城（s1：y=2.1／z=-6＝直立）：十六叶玫瑰线（k=8）＋三同心环＋32辐条
+     外环 · 大地坛城（s1：y=0.02，平铺脚下）：大玫瑰线＋双环——立于坛城之中
+   〔2026-09-17 AI-005 校正〕原文写"内环 z=-1.6／眼高前方"，是 09-16 自查修正
+   （Case-M01 §3.2）之前的过期值；真值 z=-1.3／胸腹高 y=1.15。各层具体数值随
+   变体而变，以 VARIANTS 注册表为准。⚠️ 大地层实际为 k=8＝十六瓣，与
+   Case-M01 §二"八叶暗金"及 verify_mandala_s1.py 的 8 瓣断言不符——三者不一致，
+   待法师裁定；本注释只如实标注，不擅自改判。
    玫瑰线 r=cos(kθ)：k 偶数时 2k 瓣；八叶＝k=4，十六叶＝k=8 */
 function rosePoints(k, radius, segments, z){
   const pts = [];
@@ -255,7 +260,37 @@ addEventListener('mousemove', e=>{
   targetYaw = ((e.clientX/innerWidth) - 0.5) * 0.21;   // ±6°
 });
 
-/* 诊断钩子：供无头验收脚本读取场景构成（同 vr_feedback __vrDiag 先例） */
+/* 诊断钩子：供无头验收脚本读取场景构成（同 vr_feedback __vrDiag 先例）
+   〔2026-09-17 AI-005 修〕两种口径分开报，不再混用：
+     layers = **花瓣数**（2k）——verify_mandala_s1.py 判据"8/16/8 瓣"用的就是它；
+     k      = 玫瑰线参数（k 偶数 → 2k 瓣）。
+   原钩子（ef97132）写死 {inner:8, middle:16, ground:8}；变体化重构（1d09139）
+   改成报 k（4/8/8），字段含义被静默改掉而判据脚本未动 → 该脚本必然误报失败。
+   现由注册表实算，两套口径同时给出，杜绝"钩子自述与几何不符"。
+   ⚠️ 附带发现（如实标注，不擅自改判）：s1 大地层实为 k=8＝十六瓣，而
+   Case-M01 §二 记作"八叶暗金"、判据脚本亦断言 8——三者不符，待法师裁定。 */
+const petalsOf = c => (c ? c.k * 2 : null);
+/* 纵深可测量化：把"三层纵深"从说法变成数字（无头验收可断言，不依赖人眼）。
+   angRadiusDeg＝该层最外圈在层深度上的等效张角（对正对相机的立层成立）；
+   fogTransmittance＝FogExp2 在该深度的剩余可见度 exp(-(ρd)²)。
+   ⚠️ 大地层是平铺的，"距离"取层原点距离，等效张角仅供层间比较。 */
+function depthMetrics(cfg){
+  if(!cfg) return null;
+  const p = cfg.pos || [0, (cfg.y !== undefined ? cfg.y : 0), 0];
+  const dx = p[0] - spec.cam[0], dy = p[1] - spec.cam[1], dz = p[2] - spec.cam[2];
+  const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  let rOut = cfg.r;
+  for(const rr of (cfg.rings || [])) rOut = Math.max(rOut, rr);
+  if(cfg.spokes) rOut = Math.max(rOut, cfg.spokes[1]);
+  return {
+    pos: [+p[0].toFixed(3), +p[1].toFixed(3), +p[2].toFixed(3)],
+    dist: +dist.toFixed(3),
+    rOut: +rOut.toFixed(3),
+    angRadiusDeg: +(Math.atan2(rOut, dist) * 180 / Math.PI).toFixed(1),
+    elevDeg: +(Math.atan2(dy, Math.sqrt(dx*dx + dz*dz)) * 180 / Math.PI).toFixed(1),
+    fogTransmittance: +Math.exp(-Math.pow(spec.fog * dist, 2)).toFixed(3),
+  };
+}
 window.__mandalaDiag = {
   stage: 'S1',
   variant: VARIANT_KEY,
@@ -263,9 +298,19 @@ window.__mandalaDiag = {
   fog: spec.fog,
   cam: spec.cam,
   layers: {
-    inner:  spec.inner  ? spec.inner.k  : null,   // 玫瑰线瓣数（k；2k 瓣图样）
+    inner:  petalsOf(spec.inner),
+    middle: petalsOf(spec.middle),
+    ground: petalsOf(spec.ground),
+  },
+  k: {
+    inner:  spec.inner  ? spec.inner.k  : null,
     middle: spec.middle ? spec.middle.k : null,
     ground: spec.ground ? spec.ground.k : null,
+  },
+  depth: {
+    inner:  depthMetrics(spec.inner),
+    middle: depthMetrics(spec.middle),
+    ground: depthMetrics(spec.ground),
   },
   drawCallsScene: scene.children.length,
   center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
@@ -273,9 +318,12 @@ window.__mandalaDiag = {
   static: true,
 };
 
-/* HUD 标注当前变体（桌面预览对比时肉眼可辨） */
+/* HUD 标注当前变体（桌面预览对比时肉眼可辨）
+   〔2026-09-17 AI-005 修〕原为 '曼荼罗场域 · S1 · ' + label，而 label 自带
+   "S1 基准 ·…"，实际渲染成"曼荼罗场域 · S1 · S1 基准 · 三层纵深"（S1 重复）。
+   去掉前缀里的 S1，保留 label 的完整题名。 */
 document.getElementById('hud').textContent =
-  '曼荼罗场域 · S1 · ' + spec.label;
+  '曼荼罗场域 · ' + spec.label;
 
 /* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色） */
 document.getElementById('load').style.display = 'none';
