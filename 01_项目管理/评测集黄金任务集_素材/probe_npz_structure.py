@@ -19,7 +19,7 @@ import glob
 import os
 import json
 
-BASE = r"C:\Users\tiand\OneDrive\Zen-EEG"
+BASE = r"D:\Project\Zen-EEG"  # 2026-09-19 数据工厂随项目迁 D 盘（原 C:\...\OneDrive\Zen-EEG）
 
 raw_paths = sorted(glob.glob(os.path.join(BASE, "02_raw", "*", "eeg_raw.npz")))
 quar_paths = sorted(glob.glob(os.path.join(

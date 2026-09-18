@@ -20,7 +20,7 @@ from scipy.signal import welch
 import glob
 import os
 
-BASE = r"C:\Users\tiand\OneDrive\Zen-EEG"
+BASE = r"D:\Project\Zen-EEG"  # 2026-09-19 数据工厂随项目迁 D 盘（原 C:\...\OneDrive\Zen-EEG）
 SFREQ = 256.0
 BANDS = {"Delta": (0.5, 4), "Theta": (4, 8), "Alpha": (8, 12),
          "Beta": (12, 30), "Gamma": (30, 45)}

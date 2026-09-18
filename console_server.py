@@ -76,9 +76,9 @@ REPORT_DIR = os.path.join(REPO_DIR, "report")
 INGEST_TOOL = os.path.join(SCRIPT_DIR, "05_产品与开发", "muse-direct",
                            "tools", "ingest_session.py")
 
-# ── 本机档案与数据工厂位置（2026-09-03） ──────────────────────────────────
+# ── 本机档案与数据工厂位置（2026-09-03；2026-09-19 随项目迁 D 盘同步改址） ──
 PROFILES_PATH = os.path.join(SCRIPT_DIR, "console_profiles.json")
-ZEN_ROOT = r"C:\Users\tiand\OneDrive\Zen-EEG"
+ZEN_ROOT = r"D:\Project\Zen-EEG"
 REGISTRY_CSV = os.path.join(ZEN_ROOT, "01_registry", "session_registry.csv")
 SESSION_TYPES = ["baseline", "training", "sleep", "custom", "test"]
 

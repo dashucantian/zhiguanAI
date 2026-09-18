@@ -198,7 +198,8 @@ _*.java
 /_analysis_tmp/*.txt
 /_analysis_tmp/commit_package_draft.md
 /_tmp_*.py
-/_w4_eval_*.py
+/_w4_eval_check.py
+# 〔2026-09-19 法师裁定〕_w4_eval_run.py 系评测集运行工具，放开入库（clone 后可复现）；check 系"用完即删"留证脚本，维持排除
 /TestPreset.java
 /app_*.png
 /sine_*.png
@@ -207,10 +208,9 @@ _*.java
 /test_preset*.js
 /compare_configs.py
 /config_variant_*.json
-/regen_report_zh.py
+# 〔2026-09-19 法师裁定〕regen_report_zh.py / verify_recording.py 系仍在使用的工具，移出排除清单（原 09-18 误归类临时产物）
 /openloop_experiment.py
 /test_console_e2e.py
-/verify_recording.py
 /.git_迁移前指针文件_留存.txt
 # === 2026-09-18 验收脚本入库例外（W3，法师授权；三步法：例外目录→再排除目录内全部→只放开 *.py）===
 # 缘由：这些脚本被 SOP 与 Case-M 当协作标配引用，但被 output/ 排除致 clone 后不可复现
@@ -228,3 +228,10 @@ output/20260914_W1两项待裁定核查/*
 #       二者被文档引为可复算证据，却被 /_analysis_tmp/*.py|*.mjs 排除致 clone 后依据即失。
 !_analysis_tmp/fog_math_check.py
 !_analysis_tmp/mandala_metrics_check.mjs
+
+# === 2026-09-19 模型管理目录入库（法师裁定"无问题即入库"；W1 执行）===
+# 缘由：09-14 曾裁定"归 W4、本次不入库"；09-19 法师改判"没问题就入库"。逐张核验后 13 个文件
+#       （模型参数截图/公开定价页/分析稿/调参分工）无敏感信息入库；
+# ⚠️ 系统配置.png 含 Windows 设备 ID＋产品 ID＋机器名（硬件唯一标识，可关联物理机），
+#    与 09-18 那次拦下 49 张截图同判据（本仓库有 GitHub 远程，入库即进历史、push 后不可撤回）→ 扣住不入库，待法师定
+01_项目管理/模型管理/系统配置.png

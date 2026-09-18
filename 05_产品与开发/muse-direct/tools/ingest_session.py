@@ -49,7 +49,7 @@ from pathlib import Path
 
 import numpy as np
 
-ZEN_ROOT = Path(r"C:\Users\tiand\OneDrive\Zen-EEG")
+ZEN_ROOT = Path(r"D:\Project\Zen-EEG")  # 2026-09-19 随项目迁 D 盘同步改址（与 console_server.py 同源）
 REGISTRY = ZEN_ROOT / "01_registry" / "session_registry.csv"
 RAW_ROOT = ZEN_ROOT / "02_raw"
 QC_ROOT = ZEN_ROOT / "03_quality_control"

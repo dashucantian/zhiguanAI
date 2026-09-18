@@ -26,7 +26,7 @@ import os
 import json
 import csv
 
-BASE = r"C:\Users\tiand\OneDrive\Zen-EEG"
+BASE = r"D:\Project\Zen-EEG"  # 2026-09-19 数据工厂随项目迁 D 盘（原 C:\...\OneDrive\Zen-EEG）
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 BANDS = {
