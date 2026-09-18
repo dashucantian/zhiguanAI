@@ -1272,6 +1272,12 @@ def _resolve_replay_path(name: str) -> str:
 @app.post("/api/monitor/start")
 def monitor_start(payload: MonitorStartPayload):
     _assert_no_other_session(MONITOR)
+    # 2026-09-19 现场故障修复：已有监测会话时返回 409＋明确原因，
+    # 不再让 RuntimeError 冒成 "Internal Server Error"（法师实测遇到）
+    if MONITOR.is_running():
+        raise HTTPException(
+            status_code=409,
+            detail="已有监测会话正在运行（可先『停止并保存』，或刷新页面后看实时波形）")
     replay_path = None
     if payload.replay_npz:
         replay_path = _resolve_replay_path(payload.replay_npz)

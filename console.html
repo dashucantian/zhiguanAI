@@ -1306,6 +1306,13 @@ $("monStart").onclick = async () => {
     } catch (e) {
       $("monStart").disabled = false;
       monMsg("启动失败：" + e.message, "err");
+      // 2026-09-19 现场故障修复：若因"已有会话在运行"而失败，界面须自愈——
+      // 接上既有推流并刷新状态，而不是停在"报错且无波形"的死界面
+      if (/已有监测会话|已有实验/.test(e.message)) {
+        connectMonitorStream();
+        pollStatus();
+        monMsg("检测到后台已有会话在运行，已接上实时推流", "ok");
+      }
     }
   } finally {
     monStartBusy = false;
