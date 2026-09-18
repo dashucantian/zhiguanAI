@@ -96,7 +96,7 @@ const VARIANTS = {
     cam: [0, 1.6, 3.2], fog: 0.022,
     inner:  {k:4, r:0.55, seg:720,  rings:[0.62,0.30],                color:'goldNear', op:0.85, pos:[0,1.15,-1.3]},
     middle: {k:8, r:2.6,  seg:1440, rings:[2.8,1.9,0.9], spokes:[2.8,3.35,32], color:'goldMid', op:0.80, pos:[0,2.1,-6]},
-    ground: {k:8, r:9.0,  seg:1440, rings:[9.6,5.2],                   color:'goldFar',  op:0.55, y:0.02},
+    ground: {k:4, r:9.0,  seg:1440, rings:[9.6,5.2],                   color:'goldFar',  op:0.55, y:0.02},  /* 2026-09-19 法师裁定 A1 甲：大地层十六瓣→八瓣（k=8→4） */
     orb: {r:0.045, color:'center', glow:0.9, followInner:true},
   },
   v2abyss: {
@@ -104,7 +104,7 @@ const VARIANTS = {
     cam: [0, 1.6, 2.0], fog: 0.030,
     inner:  null,
     middle: {k:8, r:2.2,  seg:1440, rings:[2.4,1.5,0.7], spokes:[2.4,2.9,24], color:'goldMid', op:0.60, pos:[0,1.7,-11]},
-    ground: {k:8, r:13.0, seg:2160, rings:[14.0,7.2,4.0], spokes:[14.0,15.6,48], color:'goldNear', op:0.80, y:0.02},
+    ground: {k:4, r:13.0, seg:2160, rings:[14.0,7.2,4.0], spokes:[14.0,15.6,48], color:'goldNear', op:0.80, y:0.02},  /* 2026-09-19 裁定 A1 甲同源：大地层 k=8→4 */
     orb: {r:0.05, color:'center', glow:1.1, pos:[0,1.45,-2.6]},
   },
   v3immersion: {
@@ -186,9 +186,10 @@ camera.position.set(...spec.cam);   // 立姿眼高，与修习者同高
      外环 · 大地坛城（s1：y=0.02，平铺脚下）：大玫瑰线＋双环——立于坛城之中
    〔2026-09-17 AI-005 校正〕原文写"内环 z=-1.6／眼高前方"，是 09-16 自查修正
    （Case-M01 §3.2）之前的过期值；真值 z=-1.3／胸腹高 y=1.15。各层具体数值随
-   变体而变，以 VARIANTS 注册表为准。⚠️ 大地层实际为 k=8＝十六瓣，与
-   Case-M01 §二"八叶暗金"及 verify_mandala_s1.py 的 8 瓣断言不符——三者不一致，
-   待法师裁定；本注释只如实标注，不擅自改判。
+   变体而变，以 VARIANTS 注册表为准。〔2026-09-19 法师裁定 A1 甲后订正〕大地层
+   已由 k=8（十六瓣）改为 **k=4（八瓣）**（s1 与 v2abyss 两处，注释见 VARIANTS），
+   与 Case-M01 §二"八叶暗金"及 verify_mandala_s1.py 的 8 瓣断言恢复一致——此前的
+   "三者不一致待裁定"已随裁定闭合（KZ-019 处置状态见台账）。
    玫瑰线 r=cos(kθ)：k 偶数时 2k 瓣；八叶＝k=4，十六叶＝k=8 */
 function rosePoints(k, radius, segments, z){
   const pts = [];
@@ -310,8 +311,8 @@ addEventListener('mousemove', e=>{
    原钩子（ef97132）写死 {inner:8, middle:16, ground:8}；变体化重构（1d09139）
    改成报 k（4/8/8），字段含义被静默改掉而判据脚本未动 → 该脚本必然误报失败。
    现由注册表实算，两套口径同时给出，杜绝"钩子自述与几何不符"。
-   ⚠️ 附带发现（如实标注，不擅自改判）：s1 大地层实为 k=8＝十六瓣，而
-   Case-M01 §二 记作"八叶暗金"、判据脚本亦断言 8——三者不符，待法师裁定。 */
+   〔2026-09-19 法师裁定 A1 甲后订正〕s1 大地层已改 k=4＝八瓣（v2abyss 同），
+   与 Case-M01"八叶暗金"及判据脚本断言 8 恢复一致；本注释保留历史说明不改写。 */
 const petalsOf = c => (c ? c.k * 2 : null);
 /* 纵深可测量化：把"三层纵深"从说法变成数字（无头验收可断言，不依赖人眼）。
    angRadiusDeg＝该层最外圈在层深度上的等效张角（对正对相机的立层成立）；

@@ -159,7 +159,7 @@ def main():
     with open(REGISTRY, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     fieldnames = ["session_id", "participant_id", "date", "session_type",
-                  "duration_seconds", "status"]
+                  "duration_seconds", "status", "manifest_path"]
 
     pre_row = None
     if args.sid:
@@ -334,10 +334,17 @@ def main():
         json.dumps(qc, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ---- 更新登记表：隔离数据记 quarantined；--sid 模式回填预登记行 ----
+    # 2026-09-19 裁定（P1 §八-1 乙方案）：新增 manifest_path 指针列；
+    # 契约随档成功才填，未随档如实留空
+    rel_manifest = ""
+    if contract_carried:
+        rel_manifest = (("03_quality_control/quarantine/" if quarantine
+                         else "02_raw/") + session_id + "/session_manifest.json")
     final_status = "quarantined" if quarantine else "finished"
     if args.sid:
         pre_row["duration_seconds"] = int(round(duration))
         pre_row["status"] = final_status
+        pre_row["manifest_path"] = rel_manifest
     else:
         rows.append({
             "session_id": session_id,
@@ -346,9 +353,10 @@ def main():
             "session_type": args.type,
             "duration_seconds": int(round(duration)),
             "status": final_status,
+            "manifest_path": rel_manifest,
         })
     with open(REGISTRY, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 

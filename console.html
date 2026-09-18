@@ -332,7 +332,7 @@
         <div id="monChReads" class="lp-rows"></div>
         <h3>最新频段能量</h3>
         <div id="monBandReads" class="lp-rows"></div>
-        <h3>大脑状态</h3>
+        <h3>信号特征分类（未经校准）</h3>
         <div class="lp-state" id="monState">-</div>
         <div class="lp-sub">频段能量：实时</div>
         <h3>心率 / 心率变异性</h3>
@@ -405,7 +405,7 @@
       <div class="metric"><div class="v" id="mBaseline">-</div><div class="k">基线 (dB)</div></div>
       <div class="metric"><div class="v" id="mVol">-</div><div class="k">指令音量 (0–1)</div></div>
       <div class="metric"><div class="v" id="mBeat">-</div><div class="k">节拍 (Hz)</div></div>
-      <div class="metric"><div class="v" id="mState">-</div><div class="k">大脑状态</div></div>
+      <div class="metric"><div class="v" id="mState">-</div><div class="k">信号特征分类（未经校准）</div></div>
       <div class="metric"><div class="v" id="mElapsed">-</div><div class="k">已进行 (s)</div></div>
       <div class="metric"><div class="v" id="mReward">-</div><div class="k">奖励态占比 (%)</div></div>
     </div>
@@ -681,6 +681,7 @@ function waveChannels(wave) {
 }
 let monEs = null, monRunning = false, monLastError = "";
 let monStartBusy = false;   // 2026-09-18：启动按钮 in-flight 守卫（防双击/轮询回写重复启动）
+let qualityBad = false;     // 2026-09-19 裁定 P1§八-5：质量门控失败→状态标签弃权（不可判定）
 // ── 推流看门狗状态（2026-09-13 故障根治）──
 // 原 `monEs.onerror = () => {}` 吞掉一切错误且全文件零重连逻辑：SSE 一旦
 // 断流（睡眠/切网/代理空闲超时/服务端饥饿），界面就永久停在"正在连接数据源…"、
@@ -1036,7 +1037,17 @@ function updateLabPanel(wave, bands, vit, ev) {
     row.appendChild(right);
     bandWrap.appendChild(row);
   });
-  $("monState").textContent = (ev.state || "-").split(" ")[0] || "-";
+  // 2026-09-19 法师裁定（P1 设计稿 §八-5）：显示词改"信号特征分类（未经校准）"；
+  // 质量门控失败即弃权显示"不可判定"（关口D：弃权是一等值，不渲染确定结论）
+  let stateText = "-";
+  if (qualityBad) {
+    stateText = "不可判定";
+  } else {
+    stateText = (ev.state || "-").split(" ")[0] || "-";
+  }
+  $("monState").textContent = stateText;
+  const mStateEl = $("mState");
+  if (mStateEl) mStateEl.textContent = stateText;
   $("monHr").textContent = numOr(vit.hr, 0) === "-" ? "-" : numOr(vit.hr, 0) + " 次/分";
   $("monRmssd").textContent = unitOr(vit.rmssd, 0, "ms");
   $("monSdnn").textContent = unitOr(vit.sdnn, 0, "ms");
@@ -1060,9 +1071,10 @@ function updateQualityBanner(ev) {
   const wave = ev && ev.wave;
   const chs = waveChannels(wave);
   const withData = chs.filter(ch => wave && wave[ch] && wave[ch].length);
-  if (!withData.length) { el.className = "qbanner"; el.textContent = ""; return; }
+  if (!withData.length) { el.className = "qbanner"; el.textContent = ""; qualityBad = false; return; }
   const bad = withData.filter(ch => channelQuality(wave[ch]) === "bad");
   const ratio = bad.length / withData.length;
+  qualityBad = ratio >= 0.5;   // 弃权档联动（P1§八-5）
   if (ratio >= 0.5) {
     el.className = "qbanner err";
     el.textContent = `⚠ 信号质量差（${bad.length}/${withData.length} 通道异常：${bad.join("、")}）——频段与状态指标暂不可信，请检查电极接触`;

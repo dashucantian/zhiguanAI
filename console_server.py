@@ -115,10 +115,12 @@ def _read_registry_rows():
 
 
 def _write_registry_rows(rows):
+    # 2026-09-19 法师裁定（P1 设计稿 §八-1 乙方案）：registry 维持原 6 列、
+    # 仅新增 manifest_path 指针列（聚合查询走 manifest，不在 CSV 扩数据列）
     fieldnames = ["session_id", "participant_id", "date", "session_type",
-                  "duration_seconds", "status"]
+                  "duration_seconds", "status", "manifest_path"]
     with open(REGISTRY_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
