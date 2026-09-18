@@ -1,0 +1,115 @@
+〔2026-09-14 法师裁定 F1 甲〕本文件原"窗口1–4"是按**模型能力**分的，与《AI代理身份登记》§三bis 按**任务域**分的 W1–W4 撞名。裁定：模型分工改称 **M1–M4（Model slot）**，任务窗口保留 W1–W4，两维正交并存。原文全部保留，仅加 M 标签。
+Session 格式随之改为 `W<任务窗口>/M<模型槽>-<模型简写>-<日期>-<序号>`（详身份登记表 §四 V3）。
+⚠️ M1–M4 均为本地模型槽；云端模型（qwen3.8-max、GPT-5.6）不在表内，Session 暂用 V2 格式、模型以 trailer `Model` 字段为准。
+
+M1（原窗口1）
+Qwen3.6 A3B
+（主聊天）
+
+M2（原窗口2）
+Qwen3.8
+（代码）
+
+M2（原窗口3）
+Qwen3.8
+（资料整理）
+〔说明〕与 M2 同为 Qwen3.8，故并入 M2、不单列 M3（详身份登记表 §四）
+
+M4（原窗口4）
+Ornith
+（复核和复杂推理）
+======================
+
+主力模型
+Qwen3.6 35B A3B - Q4_K_M
+
+================
+Context = 32768
+
+Temperature = 0.25
+
+TopK = 40
+
+TopP = 0.92
+
+MinP = 0.05
+
+Repeat Penalty = 1.05
+
+Reasoning Budget = 2048
+
+Concurrent = 2
+
+MTP = 开
+
+
+Qwen3.8 27B Q4_K_M
+===============
+Context
+32768
+
+Temperature
+0.2
+
+Top K
+40
+
+Top P
+0.9
+
+Min P
+0.05
+
+Repeat Penalty
+1.08
+
+Thinking
+ON
+
+Reasoning Budget
+1024
+
+Concurrent Prediction
+2
+
+Flash Attention
+ON
+
+Unified KV Cache
+ON
+
+GPU Offload
+MAX
+
+
+Ornith 35B
+-------------------
+Context
+16384
+
+Temperature
+0.15
+
+Top K
+40
+
+Top P
+0.9
+
+Repeat Penalty
+1.1
+
+Thinking
+ON
+
+Reasoning Budget
+2048
+
+Concurrent Prediction
+2
+
+Flash Attention
+ON
+
+GPU Offload
+MAX
