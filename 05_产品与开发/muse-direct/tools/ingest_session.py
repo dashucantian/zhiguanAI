@@ -233,6 +233,21 @@ def main():
     if report_path and report_path.exists():
         shutil.copy2(report_path, dest / "report.html")
 
+    # ---- P1a 会话契约（2026-09-18）：采集端两份契约随档搬运并定稿 ----
+    # 老会话无契约则如实跳过（device_info 记 contract_carried=false，不虚标）。
+    contract_carried = False
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+        from session_contract import carry_contract
+        res = carry_contract(npz_path, str(dest), session_id,
+                             operator=args.operator)
+        contract_carried = bool(res.get("carried"))
+        if res.get("errors"):
+            print("警告：会话契约校验未过，未随档（数据照常入库）："
+                  + "；".join(res["errors"]))
+    except Exception as ex:
+        print(f"警告：会话契约搬运失败（不影响入库）：{type(ex).__name__}: {ex}")
+
     start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     device_info = {
         "session_id": session_id,
@@ -255,6 +270,7 @@ def main():
             "chain_tag": "v12_bp_1_40", "pre_filter_available": False,
             "note": "旧版采集端未写链标注，按历史实测统一推定（见 2026-09-08 讨论稿第八节）。"},
         "pre_filter_archived": bool(has_pre),
+        "contract_carried": contract_carried,
         "battery_level": "unknown",
         "os_platform": "Windows 11",
         "collection_tool": "muse-direct@2026-09-01",

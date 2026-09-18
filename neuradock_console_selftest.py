@@ -119,6 +119,15 @@ def main():
                 os.remove(saved["npz"])   # 自测产物即删
             except OSError as e:
                 print(f"NOTE: 自测 npz 延迟删除失败（稍后手工清理）: {e}")
+            # P1a 会话契约（2026-09-18）：save_bin 会随 npz 落盘两份契约文件，
+            # 一并显式清理（文件名由 npz 名精确推导，无通配，守红线7）
+            for _suffix in (".session_manifest.json", ".session_events.jsonl"):
+                _cp = os.path.splitext(saved["npz"])[0] + _suffix
+                if os.path.exists(_cp):
+                    try:
+                        os.remove(_cp)
+                    except OSError:
+                        pass
             rp = saved.get("report")
             if rp and os.path.exists(rp):
                 try:

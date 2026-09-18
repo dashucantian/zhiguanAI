@@ -649,6 +649,20 @@ class MonitorSession:
                 "qc": qc,
             }
             self._emit({"type": "saved", **self.saved})
+            # P1a 会话契约（2026-09-18）：qc_done 事件追加到事件流；
+            # 契约是附属物，失败静默不影响保存主流程
+            try:
+                from session_contract import append_event, events_path_for
+                append_event(events_path_for(data_path), "qc_done",
+                             "system", "derived",
+                             {"recommend": qc.get("recommend"),
+                              "clean_ratio": (qc.get("metrics") or {})
+                              .get("clean_ratio"),
+                              "packet_loss_rate": (qc.get("metrics") or {})
+                              .get("packet_loss_rate")},
+                             "监测路径质检完成")
+            except Exception:
+                pass
         return self.saved
 
     def _build_ingest_cmd(self, data_path, report_path, qc=None):
@@ -873,6 +887,16 @@ class MonitorSession:
                     self._do_save()
                 except Exception as ex:
                     self._emit({"type": "error", "text": f"保存失败: {ex}"})
+            # P1a 会话契约（2026-09-18）：closed 事件在会话真正收尾时追加
+            try:
+                from session_contract import append_event, events_path_for
+                if self.saved and self.saved.get("npz"):
+                    append_event(events_path_for(self.saved["npz"]),
+                                 "closed", "operator", "measured",
+                                 {"saved": bool(self.saved.get("npz"))},
+                                 "监测会话结束")
+            except Exception:
+                pass
             self.status = "idle"
             self._emit({"type": "end", "ok": True,
                         "saved": self.saved})
@@ -948,6 +972,24 @@ class ExperimentSession:
                             contact_quality=info.get("contact_quality", "")),
                         "again": False, "qc": qc,
                     })
+                    # P1a 会话契约（2026-09-18）：闭环路径在 end 时刻追加
+                    # qc_done + closed（本函数只在实验结束事件时被调用）。
+                    try:
+                        from session_contract import append_event, \
+                            events_path_for
+                        ep = events_path_for(data_path)
+                        append_event(ep, "qc_done", "system", "derived",
+                                     {"recommend": qc.get("recommend"),
+                                      "clean_ratio": (qc.get("metrics") or {})
+                                      .get("clean_ratio"),
+                                      "packet_loss_rate": (qc.get("metrics")
+                                                           or {}).get(
+                                          "packet_loss_rate")},
+                                     "闭环路径质检完成")
+                        append_event(ep, "closed", "operator", "measured",
+                                     {"saved": True}, "闭环实验结束")
+                    except Exception:
+                        pass
                 except Exception as ex:
                     self.broadcaster.publish({"type": "message",
                                      "text": f"入库卡片生成失败：{ex}"})

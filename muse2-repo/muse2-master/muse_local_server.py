@@ -744,6 +744,39 @@ class DataBuffer:
         else:
             print("Report skipped: missing scipy/report_generator dependencies")
 
+        # ── P1a 会话契约（2026-09-18，设计稿 20260918_P1…_v1.1）──
+        # 采集端暂存期落盘 manifest + events（created/started/saved 三事件）。
+        # 契约是附属物：任何失败都不得中断保存主流程（环一可靠性优先）。
+        try:
+            from session_contract import (write_manifest, init_events,
+                                          make_event)
+            scene = str(meta.get("scene") or "")
+            participant = str(meta.get("participant") or "")
+            write_manifest(data_path, meta, report_ok,
+                           participant_id=participant, scene=scene,
+                           protocol="采集端暂存（P1a）")
+            init_events(data_path, [
+                make_event("created", "system", "ruled",
+                           {"scene": scene}, "会话数据落盘"),
+                make_event("started", "operator", "measured",
+                           {"device": self.device, "sfreq": self.sfreq},
+                           "数据源随保存记录"),
+                make_event("saved", "system", "measured",
+                           {"npz": os.path.basename(data_path),
+                            "report": (os.path.basename(report_ok)
+                                       if report_ok else "")}),
+            ])
+        except ImportError:
+            if not getattr(self, "_contract_warned", False):
+                self._contract_warned = True
+                print("[warn] session_contract 不可导入（根目录不在 sys.path），"
+                      "本会话未写契约（不影响保存）")
+        except Exception as ex:
+            if not getattr(self, "_contract_warned", False):
+                self._contract_warned = True
+                print(f"[warn] 会话契约写入失败（不影响保存）："
+                      f"{type(ex).__name__}: {ex}")
+
         self._saved_data_path = data_path
         self._saved_report_path = report_ok
         return data_path, report_ok
