@@ -1822,6 +1822,211 @@ def list_quarantine():
     return {"items": items, "root": quarantine_root}
 
 
+# ── P1b/P1c 会话契约读写接口＋实践驾驶舱聚合（2026-09-19 D45/D46 后施工）──
+
+ZEN_RAW_ROOT = os.path.join(ZEN_ROOT, "02_raw")
+ZEN_QC_ROOT = os.path.join(ZEN_ROOT, "03_quality_control")
+ZEN_ANNOTATION_ROOT = os.path.join(ZEN_ROOT, "05_annotation")
+ZEN_MODELS_ROOT = os.path.join(ZEN_ROOT, "08_models")
+
+
+def _resolve_session_dir(sid):
+    """把会话标识解析为目录：ZEN-* 走数据工厂，local_* 走暂存区。
+    返回 (dir_path, kind) 或 (None, reason)。"""
+    if sid.startswith("ZEN-"):
+        for root in (ZEN_RAW_ROOT,
+                     os.path.join(ZEN_QC_ROOT, "quarantine")):
+            d = os.path.join(root, sid)
+            if os.path.isdir(d):
+                return d, "archived"
+        return None, "归档目录不存在"
+    if sid.startswith("local_"):
+        d = REPORT_DIR
+        return d, "staging"
+    return None, "非法会话标识"
+
+
+@app.get("/api/session/list")
+def session_list():
+    """会话清单：登记表行（归档）＋暂存区本地会话（未入库）。"""
+    rows = _read_registry_rows()
+    archived = []
+    for r in rows:
+        archived.append({
+            "session_id": r.get("session_id", ""),
+            "participant": r.get("participant_id", ""),
+            "date": r.get("date", ""),
+            "type": r.get("session_type", ""),
+            "duration": r.get("duration_seconds", ""),
+            "status": r.get("status", ""),
+            "manifest_path": r.get("manifest_path", ""),
+        })
+    staged = []
+    if os.path.isdir(REPORT_DIR):
+        for name in sorted(os.listdir(REPORT_DIR)):
+            if name.startswith("local_") and name.endswith(".npz"):
+                stem = name[:-4]
+                staged.append({
+                    "session_id": stem,
+                    "npz": name,
+                    "manifest": (os.path.exists(
+                        os.path.join(REPORT_DIR,
+                                     stem + ".session_manifest.json"))),
+                    "events": (os.path.exists(
+                        os.path.join(REPORT_DIR,
+                                     stem + ".session_events.jsonl"))),
+                })
+    return {"archived": archived, "staged": staged}
+
+
+@app.get("/api/session/{sid}/manifest")
+def session_manifest(sid: str):
+    d, err = _resolve_session_dir(sid)
+    if d is None:
+        raise HTTPException(status_code=404, detail=err)
+    name = ("session_manifest.json" if sid.startswith("ZEN-")
+            else sid + ".session_manifest.json")
+    p = os.path.join(d, name)
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404,
+                            detail=f"该会话无 manifest（{name}）")
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.get("/api/session/{sid}/events")
+def session_events(sid: str):
+    d, err = _resolve_session_dir(sid)
+    if d is None:
+        raise HTTPException(status_code=404, detail=err)
+    name = ("session_events.jsonl" if sid.startswith("ZEN-")
+            else sid + ".session_events.jsonl")
+    p = os.path.join(d, name)
+    if not os.path.exists(p):
+        raise HTTPException(status_code=404,
+                            detail=f"该会话无事件流（{name}）")
+    events = []
+    with open(p, "r", encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                events.append(json.loads(line))
+    return {"session_id": sid, "events": events}
+
+
+def _dashboard_data():
+    """实践驾驶舱六卡（样本/质量/标注/模型/伦理/进度）——纯读聚合，
+    每个数字带来源会话清单，可点进源文件（P1c 原型口径）。"""
+    rows = _read_registry_rows()
+    archived_ids = [r.get("session_id", "") for r in rows]
+    quarantined = [r for r in rows if r.get("status") == "quarantined"]
+
+    # 质量：读各归档会话 qc.json 的 clean_ratio（缺 qc.json 如实计数）
+    clean_ratios = []
+    missing_qc = 0
+    for sid in archived_ids:
+        p = os.path.join(ZEN_QC_ROOT, sid, "qc.json")
+        if not os.path.exists(p):
+            p = os.path.join(ZEN_QC_ROOT, "quarantine", sid, "qc.json")
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    qc = json.load(f)
+                if qc.get("clean_ratio") is not None:
+                    clean_ratios.append(float(qc["clean_ratio"]))
+            except Exception:
+                pass
+        else:
+            missing_qc += 1
+
+    # 标注/模型：目录级统计（目录尚空＝如实为零）
+    annotation_dirs = [d for d in os.listdir(ZEN_ANNOTATION_ROOT)
+                       if d.startswith("ZEN-")] \
+        if os.path.isdir(ZEN_ANNOTATION_ROOT) else []
+    model_files = os.listdir(ZEN_MODELS_ROOT) \
+        if os.path.isdir(ZEN_MODELS_ROOT) else []
+
+    # 伦理：manifest 的 consent_version（回填＝"缺失（回填…）"）
+    consent_ok = consent_missing = 0
+    for sid in archived_ids:
+        for root in (ZEN_RAW_ROOT, os.path.join(ZEN_QC_ROOT, "quarantine")):
+            p = os.path.join(root, sid, "session_manifest.json")
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        m = json.load(f)
+                    if m.get("consent_version", "").startswith("缺失"):
+                        consent_missing += 1
+                    elif m.get("consent_version"):
+                        consent_ok += 1
+                except Exception:
+                    pass
+                break
+
+    # 进度：暂存区未入库会话数（npz 无对应 Zen-ID 者）
+    staged_npz = [n for n in os.listdir(REPORT_DIR)
+                  if n.startswith("local_") and n.endswith(".npz")] \
+        if os.path.isdir(REPORT_DIR) else []
+    # 登记表 6 列 → 会话数；staged 未入库＝暂存 npz 数（近似口径，标注"暂存口径"）
+    staged_uningested = len(staged_npz)
+
+    return {
+        "cards": {
+            "samples": {
+                "title": "样本", "unit": "会话",
+                "count": len(rows),
+                "sub": f"参与者 {len(set(r.get('participant_id','') for r in rows))} 人",
+                "items": [{"id": r.get("session_id", ""),
+                           "text": f"{r.get('date','')} {r.get('session_type','')} "
+                                   f"{r.get('duration_seconds','')}s",
+                           "status": r.get("status", "")} for r in rows[-5:]],
+            },
+            "quality": {
+                "title": "质量", "unit": "条",
+                "count": len(clean_ratios),
+                "sub": (f"平均干净比例 {sum(clean_ratios)/len(clean_ratios)*100:.0f}%"
+                        if clean_ratios else "尚无 clean_ratio 数据"),
+                "items": [{"id": r["session_id"],
+                           "text": "隔离" if r.get("status") == "quarantined"
+                           else "通过", "status": r.get("status", "")}
+                          for r in quarantined[-5:]],
+                "missing_qc": missing_qc,
+            },
+            "annotation": {
+                "title": "标注", "unit": "会话",
+                "count": len(annotation_dirs),
+                "sub": f"待标注 {len(rows) - len(annotation_dirs)} 会话",
+                "items": [{"id": d, "text": d, "status": ""}
+                          for d in annotation_dirs[-5:]],
+            },
+            "models": {
+                "title": "模型", "unit": "件",
+                "count": len(model_files),
+                "sub": "08_models 目录文件数（未开始建模为如实零）",
+                "items": [],
+            },
+            "ethics": {
+                "title": "伦理", "unit": "会话",
+                "count": consent_ok,
+                "sub": f"consent 已记录 {consent_ok}／缺失 {consent_missing}",
+                "items": [],
+            },
+            "progress": {
+                "title": "进度", "unit": "份",
+                "count": staged_uningested,
+                "sub": "暂存区未入库 npz（暂存口径，待入库处置）",
+                "items": [],
+            },
+        },
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@app.get("/api/dashboard")
+def dashboard():
+    """实践驾驶舱六卡（D45 命名；P1c 原型：纯读聚合，数字可点进源会话）。"""
+    return _dashboard_data()
+
+
 # ── 前端页面 ────────────────────────────────────────────────────────────────
 
 

@@ -145,6 +145,16 @@
     border-radius: 2px; margin-right: 7px; background: #444; }
   .lp-row .chdot.good { background: #43d675; }
   .lp-row .chdot.bad { background: var(--warn); }
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 12px; margin-top: 10px; }
+  .dash-card { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; }
+  .dash-card-title { font-size: 13px; color: var(--accent); font-weight: 700; }
+  .dash-card-count { font-size: 26px; font-weight: 700; color: #ddd; margin: 4px 0; }
+  .dash-card-sub { font-size: 11px; color: #556; margin: 2px 0; }
+  .dash-item { font-size: 12px; margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+  .dash-item a { color: #8a9ab8; text-decoration: none; }
+  .dash-item a:hover { text-decoration: underline; }
   .lp-state { color: var(--accent); font-size: 20px; font-weight: 700;
     font-family: Consolas, monospace; letter-spacing: 1px; }
   .lp-sub { color: #556; font-size: 11px; margin-top: 2px; }
@@ -193,6 +203,8 @@
        「显则」是项目自有词、属 M2 规则层，非修行五相，故配置管理不挂五相。 -->
   <button class="tab-btn active" data-tab="monitor">采集工作台
     <span class="tab-sub">入 · 照 · 运</span></button>
+  <button class="tab-btn" data-tab="dashboard">实践驾驶舱
+    <span class="tab-sub">照 · 复盘（P1c 原型）</span></button>
   <button class="tab-btn" data-tab="config">配置管理
     <span class="tab-sub">显则 · 规则台账</span></button>
   <button class="tab-btn" data-tab="history">历史数据
@@ -439,6 +451,16 @@
   </div><!-- /wsEngine -->
 </section>
 
+<!-- ═══ 实践驾驶舱（P1c 原型，2026-09-19 D45/D46；纯读聚合，数字可点进源会话）═══ -->
+<section id="tab-dashboard" class="tab">
+  <div class="card">
+    <h2>实践驾驶舱 · 六卡原型</h2>
+    <div class="hint">样本／质量／标注／模型／伦理／进度——数据来自登记表＋manifest＋qc.json＋目录扫描（纯读，不写任何数据）。每个数字均可点进源会话。</div>
+    <div id="dashCards" class="dash-grid"></div>
+    <div id="dashMsg" class="msg" style="display:none;"></div>
+  </div>
+</section>
+
 <!-- ═══ 配置管理 ═══ -->
 <section id="tab-config" class="tab">
   <div class="card">
@@ -596,6 +618,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     if (btn.dataset.tab === "history") loadHistory();
     if (btn.dataset.tab === "config" && !$("cfgEditor").value) loadConfigList();
     if (btn.dataset.tab === "govern") loadGovern();
+    if (btn.dataset.tab === "dashboard") renderDashboard();
   };
 });
 
@@ -1544,6 +1567,85 @@ function loadGovern() {
   loadProfiles();
   loadRegistry();
   loadQuarantine();
+}
+
+// ── 实践驾驶舱六卡（P1c 原型，2026-09-19 D45/D46）──
+// 纯读聚合：/api/dashboard 返回六卡；每个数字可点进源会话（manifest/events 只读接口）。
+async function renderDashboard() {
+  const wrap = $("dashCards");
+  const msg = $("dashMsg");
+  if (!wrap) return;
+  msg.style.display = "none";
+  try {
+    const d = await api("/api/dashboard");
+    wrap.textContent = "";
+    Object.values(d.cards).forEach(card => {
+      const c = document.createElement("div");
+      c.className = "dash-card";
+      const h = document.createElement("div");
+      h.className = "dash-card-title";
+      h.textContent = card.title;
+      c.appendChild(h);
+      const n = document.createElement("div");
+      n.className = "dash-card-count";
+      n.textContent = card.count + " " + card.unit;
+      c.appendChild(n);
+      const s = document.createElement("div");
+      s.className = "dash-card-sub";
+      s.textContent = card.sub || "";
+      c.appendChild(s);
+      if (card.missing_qc != null) {
+        const q = document.createElement("div");
+        q.className = "dash-card-sub";
+        q.textContent = "缺 qc.json：" + card.missing_qc + " 会话（如实计数）";
+        c.appendChild(q);
+      }
+      (card.items || []).forEach(it => {
+        const row = document.createElement("div");
+        row.className = "dash-item";
+        const a = document.createElement("a");
+        a.href = "#";
+        a.textContent = it.id + " " + (it.text || "");
+        a.addEventListener("click", ev => {
+          ev.preventDefault();
+          openSession(it.id);
+        });
+        row.appendChild(a);
+        if (it.status) {
+          const b = document.createElement("span");
+          b.className = "badge " + (it.status === "quarantined" ? "err" : "ok");
+          b.textContent = it.status;
+          row.appendChild(b);
+        }
+        c.appendChild(row);
+      });
+      wrap.appendChild(c);
+    });
+  } catch (e) {
+    msg.textContent = "驾驶舱加载失败：" + e.message;
+    msg.className = "msg err";
+    msg.style.display = "";
+  }
+}
+
+function openSession(sid) {
+  // 点进源会话：依次试 manifest → events → 归档报告，全部只读
+  api("/api/session/" + encodeURIComponent(sid) + "/manifest").then(m => {
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write("<pre>" + JSON.stringify(m, null, 2)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</pre>");
+  }).catch(() => {
+    api("/api/session/" + encodeURIComponent(sid) + "/events").then(ev => {
+      const win = window.open("", "_blank");
+      if (!win) return;
+      const txt = (ev.events || []).map(e => JSON.stringify(e)).join("\n");
+      win.document.write("<pre>" + txt.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;") + "</pre>");
+    }).catch(() => {
+      window.open("/api/file?path=report/" + encodeURIComponent(sid + ".report.html"), "_blank");
+    });
+  });
 }
 
 // ── 质检结论显示 ──
