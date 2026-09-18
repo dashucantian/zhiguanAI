@@ -83,6 +83,12 @@ const PALETTE = {
                "立于大坛之沿，远望金殿"
    · v3-immersion 单坛沉浸：一具近前大十六叶坛＋浓雾收尽周边——
                视野极减，注意力无处可去
+   · v4-lotuspond 莲池观（09-19 Qwen3.6 设计＋W1 整合）：立于莲池之畔，
+               水面浮金——浅雾通透、大地暖金占比高，与 v2abyss 的深渊压迫对比
+   · v5-stupa   塔影仰观（同上）：仰观巨塔、金线自天而降——近距浓雾大坛，
+               敬畏与崇高（几何语义修订中，见注册表内审查记录）
+   · v6-void    虚空（同上）：天地之间只剩自己与一点光——极小主坛＋极浓雾＋
+               远相机，空旷孤独（ground op=0.25 系法师批准特例）
    S1 纪律对所有变体同等生效：静态、无粒子、无 bloom、无数据流。 */
 const VARIANTS = {
   s1: {
@@ -108,6 +114,43 @@ const VARIANTS = {
     middle: {k:8, r:3.1, seg:1440, rings:[3.4,2.3,1.2], spokes:[3.4,3.9,40], color:'goldMid', op:0.92, pos:[0,1.7,-3.4]},
     ground: {k:4, r:6.0, seg:720,  rings:[6.6],                          color:'goldFar',  op:0.35, y:0.02},
     orb: {r:0.06, color:'center', glow:1.3, pos:[0,1.7,-3.4]},
+  },
+  v4lotuspond: {
+    label: 'V4 · 莲池观',
+    cam: [0, 1.6, 2.5], fog: 0.025,
+    inner:  {k:4, r:0.55, seg:720,  rings:[0.62,0.30],                color:'goldNear', op:0.85, pos:[0,1.15,-1.3]},
+    middle: {k:8, r:2.4,  seg:1440, rings:[2.6,1.7,0.8], spokes:[2.6,3.1,28], color:'goldFar', op:0.55, pos:[0,1.8,-9]},
+    ground: {k:4, r:11.0, seg:1440, rings:[12.0,6.0], spokes:[12.0,13.5,36], color:'goldNear', op:0.70, y:0.02},
+    orb: {r:0.055, color:'center', glow:1.0, followInner:true},
+    /* 〔W1 审查 09-19〕设计师自标"金色 ~1.0%"与"大地暖金占比高"存在张力：大地环
+       r=12~13.5 是画面最大结构、加色混合亮金，实际占比很可能远超 1.0%。W1 不代改
+       配色（美学归设计师＋法师 Pico 终审），问题已回派设计师复核。 */
+  },
+  v5stupa: {
+    label: 'V5 · 塔影仰观',
+    cam: [0, 1.6, 1.5], fog: 0.045,
+    inner:  null,
+    middle: {k:8, r:4.2,  seg:2160, rings:[4.6,3.0,1.5], spokes:[4.6,5.2,48], color:'goldFar', op:0.75, pos:[0,2.8,-2.8]},
+    ground: {k:4, r:5.0,  seg:1440, rings:[5.5,3.0], spokes:[5.5,6.2,24], color:'goldFar', op:0.45, y:0.02},
+    orb: {r:0.07, color:'center', glow:1.2, pos:[0,2.8,-2.8]},
+    /* W1 审查记录（09-19，独立复算）：主坛环面为竖直 XY 平面（rosePoints 原向，
+       层未旋转），圆心 y=2.8 高于眼线 1.2m、仰角 +15°、角半径 49.4°（16 叶）——
+       "仰观巨塔"在几何上成立；但坛体顶缘达 y≈8m、距相机仅 4.5m，压迫感是否过界、
+       与 v3immersion（33° 角半径）的区分度是否足够，已回派设计师确认。 */
+  },
+  v6void: {
+    label: 'V6 · 虚空',
+    cam: [0, 1.6, 5.0], fog: 0.060,
+    inner:  null,
+    middle: {k:4, r:1.8,  seg:720,  rings:[2.0,1.1], spokes:[2.0,2.3,16], color:'goldFar', op:0.35, pos:[0,1.5,-14]},
+    ground: {k:4, r:7.0,  seg:720,  rings:[7.6],                          color:'goldFar', op:0.25, y:0.02},
+    orb: {r:0.08, color:'center', glow:1.5, pos:[0,1.5,-14]},
+    /* ground op=0.25 低于 SOP 约束下限 0.3 → 法师 2026-09-19 批准特例
+       （"虚空感需要极淡"，登记于此，SOP 约束表本身不擅自改）。
+       W1 独立复算预警（09-19 订正：初稿曾误写透过率 0.4%，实算 exp(-(0.06·19)²)=0.273）：
+       主坛距相机 19m → 雾透过率 27.3%、×op0.35 后可见度代理仅 0.095（近预警线 0.05）、
+       角半径 6.9°；地面环透过率 90.6% 但 op=0.25→可见度 0.226。金色占比可能逼近
+       像素判据 0.3% 下限，光点角半径仅 0.24°——"一点光"的语义成立，实测见分晓。 */
   },
 };
 const VARIANT_KEY = (new URLSearchParams(location.search).get('variant') || 's1').toLowerCase().replace(/-/g,'');
