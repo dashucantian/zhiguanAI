@@ -757,6 +757,15 @@ class MonitorSession:
                     connect_error = "连接超时：30 秒内未连上头环"
                 if connect_error:
                     self.receiver.stop()
+                    # 2026-09-19 现场修复：把可操作提示并入最终错误文本——此前提示
+                    # 只走 message 事件，会被随后的"监测结束·最后一次错误"覆盖，
+                    # 法师在界面上只看到裸的 ConnectionRefused，无从知道该做什么。
+                    if adapter == "neuradock" and "ConnectionRefused" in connect_error:
+                        connect_error += (
+                            "\n请依次检查：①NeuraDock 官方软件已启动；②在软件里点击"
+                            "「打开数据服务」；③软件显示的 IP:端口与本页「数据服务地址」"
+                            "一致（默认 127.0.0.1:9600）；④若只是演练，可先运行项目根目录"
+                            "的 NeuraDock模拟器.bat。")
                     self._emit({"type": "error", "text": connect_error})
                     self._emit({"type": "end", "ok": False,
                                 "error": connect_error})
