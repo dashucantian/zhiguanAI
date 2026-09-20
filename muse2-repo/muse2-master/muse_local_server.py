@@ -700,7 +700,11 @@ class DataBuffer:
             # Fallback: synthesize epoch timestamps from session_start at nominal rate
             start_epoch = self.session_start if self.session_start else time.time()
             ts_arr = start_epoch + np.arange(n) / self.sfreq
+            ts_source = "synthesized"
+        else:
+            ts_source = "measured"
         duration_val = float(ts_arr[-1] - ts_arr[0]) if ts_arr.size > 1 else self.duration_seconds()
+
         # L1 链标注三分支（诚实优先）：
         #  ① 接收器显式声明的链（如旧 GUI passthrough）② 真机带通链+pre_filter 可回退
         #  ③ 无副本的会话（模拟器/回放）——不冒充带通参数，如实标注不可靠
@@ -712,8 +716,24 @@ class DataBuffer:
             chain = {"chain_tag": "no_prefilter_copy",
                      "note": "本会话未保存滤波前原始副本（模拟器/回放/旧版数据）；"
                              "eeg 列信号链不可靠，不建议正式入库。"}
+
+        # ── P0-9（2026-09-20）时间语义修正 ────────────────────────────────
+        # 缺陷 A-7：旧实现用 `datetime.now()` 取 timestamp，而它发生在**保存动作**里
+        # → `meta.timestamp` 与文件名记录的其实是「录制结束（存盘）时刻」，却被字典
+        # V1.2 §3.1 定义为「采集**开始**时刻」，并被 ingest 当作纪元锚点使用，导致
+        # 12/12 的 device_info.collection_start_utc 错标（S08 错 60 分 31 秒）、
+        # S05/S06 的时间轴整体后移一个会话时长。
+        # 修法：起录与结束**分两字段**，不再让一个字段承担两种语义。
+        ended_epoch = time.time()
+        started_epoch = float(self.session_start) if self.session_start else ended_epoch
         meta = {
-            "timestamp": timestamp,
+            "timestamp": timestamp,          # 保留原值（= 存盘时刻），语义见下
+            "timestamp_meaning": "ended_at",  # 如实标注：本字段是结束时刻
+            "recording_started_at": datetime.fromtimestamp(started_epoch).isoformat(),
+            "recording_started_at_epoch": round(started_epoch, 6),
+            "recording_ended_at": datetime.fromtimestamp(ended_epoch).isoformat(),
+            "recording_ended_at_epoch": round(ended_epoch, 6),
+            "timestamp_source": ts_source,    # measured / synthesized
             "sfreq": self.sfreq,
             "channels": self.channels,
             "device": self.device,

@@ -196,9 +196,29 @@ def main():
         sys.exit(1)
 
     # ---- 时间戳（字典 V1.2）：统一为 Unix 纪元秒 ----
-    # meta.timestamp（本地 ISO 8601）换算为起点纪元秒，用于相对时间戳的换算与缺失回填
-    start_local = datetime.fromisoformat(meta["timestamp"])
-    start_epoch = start_local.timestamp()
+    # 缺陷 A-7 修正（P0-9，2026-09-20）：
+    #   旧实现把 meta.timestamp 当作「采集开始时刻」做纪元锚点，而它实际上是
+    #   **存盘（结束）时刻** —— 造成 12/12 的 collection_start_utc 错标
+    #   （S08 错 60 分 31 秒）、S05/S06 的整条时间轴后移一个会话时长。
+    #   现按三级优先取「开始纪元」：
+    #     ① 新采集：meta.recording_started_at_epoch（实测，measure）
+    #     ② 旧真机会话：有真实时间戳时反推 timestamps[0] - duration（derive）
+    #     ③ 兜底：meta.timestamp（fallback；对"相对时间戳"样本是必需的——其
+    #        数组从 0 起，必须有一个把相对量抬到纪元的锚点）
+    ended_local = datetime.fromisoformat(meta["timestamp"])
+    start_epoch = None
+    start_source = "fallback_meta_timestamp"
+    if meta.get("recording_started_at_epoch") is not None:
+        start_epoch = float(meta["recording_started_at_epoch"])
+        start_source = "meta_recording_started_at"
+    elif has_ts and timestamps is not None and len(timestamps):
+        _t0 = float(np.asarray(timestamps, dtype=np.float64)[0])
+        if _t0 > 1e9:      # 已是纪元秒 → 真机实测时间戳，可反推起点
+            start_epoch = _t0 - duration
+            start_source = "derived_from_first_sample"
+    if start_epoch is None:
+        start_epoch = ended_local.timestamp()
+
     epoch_normalized = "none"
     if not has_ts:
         # 无时间戳数组：按标称采样率线性回填（纪元秒）。
@@ -215,6 +235,31 @@ def main():
             timestamps = start_epoch + timestamps
             epoch_normalized = "from_relative"
         # 幂等保护：已是纪元秒的数组原样保留
+
+    # P0-9：时间戳容器校验 + 单调性校验（字典 V1.2 §3.1 明文要求严格单调，
+    # 而旧实现从不校验；另旧实现从不比对长度，见盘查 C-2）
+    if timestamps is not None and len(timestamps):
+        timestamps = np.asarray(timestamps, dtype=np.float64)
+        if timestamps.size != samples:
+            print(f"错误：timestamps 长度 {timestamps.size} 与 meta.samples "
+                  f"{samples} 不一致，中止（字典 V1.2 §3.1 要求逐样本时间戳）。")
+            sys.exit(1)
+        _d = np.diff(timestamps)
+        _bad = int((_d <= 0).sum())
+        if _bad:
+            print(f"错误：timestamps 非严格单调（{_bad} 处非递增），中止"
+                  f"（字典 V1.2 §3.1 明文要求）。请先用 refresh 流程核修后入库。")
+            sys.exit(1)
+
+    # 反推开始时刻的会话：与本会话实测首样本自洽性核验（Gate-B 判据
+    # 「结束−开始 ≈ 样本数/采样率，误差<1s」的入库端版本）
+    start_utc_source = start_source
+    if start_source == "derived_from_first_sample" and timestamps is not None and len(timestamps):
+        span = float(timestamps[-1] - timestamps[0])
+        if abs(span - duration) > 1.0:
+            print(f"警告：时间跨度 {span:.2f}s 与 meta.duration {duration:.2f}s "
+                  f"相差 {abs(span - duration):.2f}s（>1s）——已如实记入 device_info。")
+            start_utc_source = "derived_from_first_sample(span_mismatch)"
 
     # ---- 写 02_raw（S1 修复：eeg_pre_filter 若有必随档，防"eeg_raw 名实不符"复发）----
     dest.mkdir(parents=True, exist_ok=False)
@@ -248,7 +293,6 @@ def main():
     except Exception as ex:
         print(f"警告：会话契约搬运失败（不影响入库）：{type(ex).__name__}: {ex}")
 
-    start_utc = start_local.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     device_info = {
         "session_id": session_id,
         "scene": scene,
@@ -275,7 +319,15 @@ def main():
         "os_platform": "Windows 11",
         "collection_tool": "muse-direct@2026-09-01",
         "brainflow_version": "",
-        "collection_start_utc": start_utc,
+        # P0-9（2026-09-20）：collection_start_utc 改由**开始纪元**生成（字典 §3.2
+        # 定义为"采集开始时刻"）；旧实现用 meta.timestamp（实为存盘结束时刻）→
+        # 12/12 会话错标。start_utc_source 如实标注该时刻是实测、反推还是兜底。
+        "collection_start_utc": datetime.fromtimestamp(
+            start_epoch, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "collection_start_utc_source": start_utc_source,
+        "collection_start_epoch": round(float(start_epoch), 6),
+        "collection_end_utc": ended_local.astimezone(timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"),
         "source_file": npz_path.name,
         "quarantined": quarantine,
     }
@@ -303,6 +355,14 @@ def main():
         _fb_field("post_state", args.post_state),
         f"timestamps_backfilled: {backfilled}",
         f"timestamps_epoch_normalized: {epoch_normalized}",
+        # P0-9（2026-09-20）：如实标注"开始时刻"的来源（实测/反推/兜底）
+        f"collection_start_utc_source: {start_utc_source}",
+        f"collection_start_utc: "
+        f"{datetime.fromtimestamp(start_epoch, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        f"collection_end_utc: "
+        f"{ended_local.astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        "timestamp_meaning_note: 采集端 meta.timestamp 为**存盘(结束)时刻**；"
+        "开始时刻见 collection_start_utc 及其 source（2026-09-20 P0-9 修正）",
         f"notes: 源文件 {npz_path.name}；"
         + ("链路测试录制，不进入研究数据集，仅保留可追溯性。" if args.type == "test" else "")
         + (args.note or ""),
