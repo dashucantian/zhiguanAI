@@ -351,9 +351,14 @@ def extract_report_metrics(report_path):
 
 
 def write_qc_json(npz_path, out_path, thresholds=None, extra=None):
-    """算并落盘 qc.json（原子写：tmp → os.replace）。返回结果 dict。"""
+    """算并落盘 qc.json（原子写：tmp → os.replace）。返回结果 dict。
+
+    落盘内容含 `recommend`／`reasons`——**这是审计追踪的必需项**：
+    `reasons` 说明"为什么建议隔离"，此前只存在于调用方的瞬时变量里、
+    归档后无据可查（2026-09-20 施工中发现并修）。
+    """
     res = assess(npz_path, thresholds=thresholds)
-    doc = {k: v for k, v in res.items() if k in ("recommend", "reasons")}
+    doc = {"recommend": res["recommend"], "reasons": list(res["reasons"])}
     doc.update(res["metrics"])
     doc.update({k: res[k] for k in ("qc_version", "threshold_version",
                                     "thresholds", "generated_by", "generated_at")})

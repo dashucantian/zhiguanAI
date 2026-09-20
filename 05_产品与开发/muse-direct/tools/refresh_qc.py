@@ -91,6 +91,9 @@ def refresh(sid: str, dry_run: bool = False) -> dict:
     new = dict(res["metrics"])
     new.update({k: res[k] for k in ("qc_version", "threshold_version",
                                     "thresholds", "generated_by", "generated_at")})
+    # 审计追踪必需项：为什么建议隔离（此前只存在于瞬时变量，归档后无据可查）
+    new["recommend"] = res["recommend"]
+    new["reasons"] = list(res["reasons"])
     # 保留旧 qc 的位置语义字段（不丢信息）
     for k in ("session_id", "scene", "quarantined", "report_source"):
         if k in old:
