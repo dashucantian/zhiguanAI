@@ -69,6 +69,8 @@ from closedloop_experiment import run_closed_loop, EXP_DIR
 from closedloop_controller import ClosedLoopController
 from experiment_config_loader import (load_experiment_config, validate_config,
                                       save_snapshot, DEFAULT_CONFIG)
+# 质检唯一实现（P0-1，2026-09-20）：判定一律走 qc_pipeline，不从 report.html 取数
+import qc_pipeline
 
 CONFIG_DEFAULT_PATH = os.path.join(SCRIPT_DIR, "experiment_config.json")
 CONFIG_TEMPLATE_PATH = os.path.join(SCRIPT_DIR, "experiment_config_template.json")
@@ -82,10 +84,17 @@ ZEN_ROOT = r"D:\Project\Zen-EEG"
 REGISTRY_CSV = os.path.join(ZEN_ROOT, "01_registry", "session_registry.csv")
 SESSION_TYPES = ["baseline", "training", "sleep", "custom", "test"]
 
-# 质检闸门默认阈值（不合格 → 建议隔离，可人工推翻）
-QC_MIN_DURATION_S = 30.0      # 时长下限
-QC_MAX_PACKET_LOSS = 0.20     # 丢包率上限
-QC_MIN_CLEAN_RATIO = 0.60     # 干净数据比例下限
+# 质检闸门默认阈值（P0-1 后唯一源在 qc_pipeline；此处保留别名仅供既有引用）
+QC_MIN_DURATION_S = qc_pipeline.MIN_DURATION_S      # 时长下限
+QC_MAX_PACKET_LOSS = qc_pipeline.MAX_PACKET_LOSS    # 丢包率上限
+QC_MIN_CLEAN_RATIO = qc_pipeline.MIN_CLEAN_RATIO    # 干净数据比例下限
+
+
+def _cq_state(v):
+    """channel_quality 取值兼容：新格式为 dict{'state':...}，旧格式为字符串。"""
+    if isinstance(v, dict):
+        return v.get("state") or "unknown"
+    return v if isinstance(v, str) else "unknown"
 
 
 def load_profiles():
@@ -139,66 +148,27 @@ def _next_session_number(rows, participant_id):
 
 
 def _extract_report_metrics(report_path):
-    """从 report.html 提取噪声段数/干净比例（与入库脚本同口径）。"""
-    metrics = {}
-    if not report_path or not os.path.exists(report_path):
-        return metrics
-    with open(report_path, "r", encoding="utf-8", errors="ignore") as f:
-        text = f.read()
-    aliases = {"noise_epochs": ("Noise epochs", "噪声段数"),
-               "clean_pct": ("Clean data", "干净数据比例")}
-    for canon, labels in aliases.items():
-        for label in labels:
-            m = re.search(re.escape(label) +
-                          r'</span><br>\s*<span class="value"[^>]*>([^<]+)</span>',
-                          text)
-            if m:
-                metrics[canon] = m.group(1).strip()
-                break
-    return metrics
+    """【2026-09-20 P0-1 降级】仅供报告页展示，**不参与任何判定**。
+
+    此前 qc_assess 用它从 report.html 正则抠 clean_ratio——而报告模板只在
+    检出噪声时才渲染该字段，导致**越干净的会话越取不到干净度**（盘查缺陷 A-1）。
+    判定逻辑已全部迁往 `qc_pipeline.assess`（由 npz 实算）。
+    """
+    return qc_pipeline.extract_report_metrics(report_path)
 
 
-def qc_assess(npz_path, report_path):
-    """质检闸门：返回 {recommend: 'ingest'|'quarantine', reasons:[...], metrics:{}}。"""
-    reasons = []
-    metrics = {}
-    try:
-        import numpy as np
-        with np.load(npz_path, allow_pickle=True) as d:
-            meta = d["meta"].item()
-            samples = int(meta["samples"])
-            duration = float(meta["duration"])
-    except Exception as ex:
-        return {"recommend": "quarantine",
-                "reasons": [f"无法读取 npz：{ex}"], "metrics": metrics}
+def qc_assess(npz_path, report_path=None):
+    """质检闸门（P0-1 后为薄委托层，唯一实现在 `qc_pipeline`）。
 
-    eff = samples / duration if duration > 0 else 0.0
-    # 口径-2 修复（2026-09-18）：丢包率按会话实际采样率计算（Muse 256 / NeuraDock 250），
-    # 不再写死 256——否则 NeuraDock 会话自带 +2.3% 系统偏差。
-    nominal_sfreq = float(meta.get("sfreq", 256.0))
-    loss = round(1.0 - eff / nominal_sfreq, 4)
-    metrics.update({"samples": samples, "duration": round(duration, 1),
-                    "effective_hz": round(eff, 2),
-                    "packet_loss_rate": loss})
-    if duration < QC_MIN_DURATION_S:
-        reasons.append(f"时长 {duration:.0f}s 低于下限 {QC_MIN_DURATION_S:.0f}s")
-    if loss > QC_MAX_PACKET_LOSS:
-        reasons.append(f"丢包率 {loss:.0%} 超过上限 {QC_MAX_PACKET_LOSS:.0%}")
-
-    rm = _extract_report_metrics(report_path)
-    if "clean_pct" in rm:
-        try:
-            clean = float(rm["clean_pct"].rstrip("%")) / 100.0
-            metrics["clean_ratio"] = clean
-            if clean < QC_MIN_CLEAN_RATIO:
-                reasons.append(f"干净数据 {clean:.0%} 低于下限 "
-                               f"{QC_MIN_CLEAN_RATIO:.0%}")
-        except ValueError:
-            pass
-    if "noise_epochs" in rm:
-        metrics["noise_epochs"] = rm["noise_epochs"]
-    return {"recommend": "quarantine" if reasons else "ingest",
-            "reasons": reasons, "metrics": metrics}
+    返回 {recommend, reasons, metrics} 以保持既有调用方接口不变。
+    ``report_path`` 保留仅为兼容调用方签名，**不再参与判定**。
+    走 `assess_cached`：按 (路径, mtime, size, 阈值版本) 缓存——
+    否则 `/api/reports` 会对全部暂存 npz 逐个实算（实测 102 个 ≈12 s，
+    逼近前端 15 s 超时；盘查 C-1）。
+    """
+    res = qc_pipeline.assess_cached(npz_path)
+    return {"recommend": res["recommend"], "reasons": res["reasons"],
+            "metrics": res["metrics"]}
 
 app = FastAPI(title="止观AI 统一控制台")
 

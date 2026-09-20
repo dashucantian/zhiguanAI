@@ -309,29 +309,21 @@ def main():
     ]
     (dest / "session_note.txt").write_text("\n".join(note_lines) + "\n", encoding="utf-8")
 
-    # ---- 写质检记录（正式数据在 03_quality_control，隔离数据在隔离区内） ----
-    metrics = extract_report_metrics(report_path)
-    eff_rate = samples / duration if duration > 0 else 0.0
-    noise = metrics.get("noise_epochs", "")
-    clean = metrics.get("clean_pct", "")
-    clean_ratio = float(clean.rstrip("%")) / 100.0 if clean else None
-    qc = {
-        "session_id": session_id,
-        "scene": scene,
-        "quarantined": quarantine,
-        "effective_sample_rate_hz": round(eff_rate, 2),
-        "packet_loss_rate": round(1.0 - eff_rate / NOMINAL_SFREQ, 4),
-        "noise_epochs": noise,
-        "clean_ratio": clean_ratio,
-        "channel_quality": {ch: "ok" for ch in meta["channels"]},
-        "report_source": "report.html" if report_path else "",
-        "generated_by": "ingest_session@2026-09-03",
-    }
+    # ---- 写质检记录（P0-1，2026-09-20：判定改由 qc_pipeline 从 npz 实算）----
+    # 旧实现用正则从 report.html 抠 clean_ratio，而报告模板只在"检出噪声"时
+    # 才渲染该字段 → 越干净的会话越取不到干净度（盘查缺陷 A-1）；且旧
+    # channel_quality 恒为常量 "ok"（缺陷 C-5）。现判定统一交给 qc_pipeline
+    # （根目录，红线5 单一实现），report.html 不再参与任何判定。
     qc_dir = dest if quarantine else QC_ROOT / session_id
     if qc_dir != dest:
-        qc_dir.mkdir(parents=True, exist_ok=False)
-    (qc_dir / "qc.json").write_text(
-        json.dumps(qc, ensure_ascii=False, indent=2), encoding="utf-8")
+        qc_dir.mkdir(parents=True, exist_ok=True)   # 陈旧空目录不再致命
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+    from qc_pipeline import write_qc_json
+    qc = write_qc_json(
+        str(dest / "eeg_raw.npz"), str(qc_dir / "qc.json"),
+        extra={"session_id": session_id, "scene": scene,
+               "quarantined": quarantine,
+               "report_source": "report.html" if report_path else ""})
 
     # ---- 更新登记表：隔离数据记 quarantined；--sid 模式回填预登记行 ----
     # 2026-09-19 裁定（P1 §八-1 乙方案）：新增 manifest_path 指针列；
@@ -361,8 +353,14 @@ def main():
         w.writerows(rows)
 
     dest_label = "隔离区落盘" if quarantine else "入库完成"
+    # eff 与 clean 取自 qc_pipeline 的结果（P0-1 后判定唯一源；不再本地另算）
+    eff_show = qc.get("effective_hz", 0.0)
+    clean_show = qc.get("clean_ratio")
+    clean_txt = (f"{clean_show:.0%}" if isinstance(clean_show, (int, float))
+                 else "不可判定")
     print(f"{dest_label}：{session_id}（{args.type}, {int(round(duration))}s, "
-          f"scene={scene}, backfilled={backfilled}, eff={eff_rate:.2f}Hz）"
+          f"scene={scene}, backfilled={backfilled}, eff={eff_show:.2f}Hz, "
+          f"clean={clean_txt}, qc={qc.get('qc_version', '?')}）"
           + ("，已记入登记表（status=quarantined），未进入 02_raw 正式数据集"
              if quarantine else ""))
 

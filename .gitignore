@@ -197,6 +197,13 @@ _*.java
 /_analysis_tmp/*.mjs
 /_analysis_tmp/*.txt
 /_analysis_tmp/commit_package_draft.md
+# 〔2026-09-20 P0-1〕质检结果缓存（qc_pipeline.assess_cached 生成，可随时删除重建）
+/.qc_cache/
+# 〔2026-09-20 盘查〕会话契约事件流目前不在任何 ignore 规则内，
+# 而暂存区 report/ 下的 *.session_events.jsonl 会被 git 看见（同目录 npz/html/json 已被排除）。
+# 该文件属暂存期草稿、且可能随数据外流，故排除；入库后的归档副本另行处置。
+*.session_events.jsonl
+*.session_manifest.json
 /_tmp_*.py
 /_w4_eval_check.py
 # 〔2026-09-19 法师裁定〕_w4_eval_run.py 系评测集运行工具，放开入库（clone 后可复现）；check 系"用完即删"留证脚本，维持排除
