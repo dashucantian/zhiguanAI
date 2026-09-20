@@ -189,6 +189,14 @@ class HeadlessApp:
                                      device="neuradock")
         else:
             self.buffer = DataBuffer()
+        # ── P0-4（2026-09-20）增量快照：把"崩溃=整场归零"降为"最多丢一个间隔" ──
+        # 默认 60 s；置 0 可关闭（QC_SNAPSHOT_INTERVAL_S=0）。
+        try:
+            _iv = float(os.environ.get("QC_SNAPSHOT_INTERVAL_S", "60") or 60)
+        except Exception:
+            _iv = 60.0
+        self.buffer.snapshot_interval_s = max(0.0, _iv)
+        self.buffer.snapshot_dir = REPORT_DIR
 
     def after(self, _ms, func):
         try:
@@ -750,6 +758,15 @@ class MonitorSession:
             while not self.stop_event.is_set():
                 buf = self.app.buffer
                 buf.compute_band_power()
+                # P0-4：周期性增量快照（内部自带间隔判断与持锁；失败不打断采集）
+                if buf.snapshot_interval_s > 0:
+                    _sp = buf.snapshot()
+                    if _sp and not getattr(self, "_snap_announced", False):
+                        self._snap_announced = True
+                        self._emit({"type": "message",
+                                    "text": f"🛟 已开始增量快照（每 "
+                                            f"{buf.snapshot_interval_s:.0f}s 一次）："
+                                            f"即使中途崩溃/断电，也最多损失一个间隔"})
                 if n_ticks % self.VITALS_EVERY == 0:
                     try:
                         buf.compute_vitals()

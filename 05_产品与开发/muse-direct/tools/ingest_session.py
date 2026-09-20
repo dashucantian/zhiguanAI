@@ -41,6 +41,7 @@ python ingest_session.py --npz <npz路径> --participant P001 --type test \
 import argparse
 import csv
 import json
+import os
 import re
 import shutil
 import sys
@@ -194,6 +195,20 @@ def main():
         print(f"错误：{dest} 已存在，{'隔离区' if quarantine else '02_raw'}"
               f"不覆盖，中止。")
         sys.exit(1)
+    # ── P0-5（2026-09-20）原子入库：先写暂存目录，校验后 os.rename 到位 ──
+    # 缺陷 A-5（入库端）：旧实现在**最终路径**上逐文件原地写，中途失败会留下半个
+    # 归档；而 `dest.exists()` 守卫会让**此后每一次重试都失败**（该 Zen-ID 被永久
+    # 堵死，必须人工清目录）。现改为：全部文件先写 `staging/`，末尾一次改名。
+    # 失败时把暂存目录改名为 `.failed-<ts>-<sid>/`（**不占 <sid> 名**），使重试可行。
+    staging = dest_root / f".tmp-{session_id}"
+    if staging.exists():
+        _old = dest_root / f".failed-{datetime.now():%Y%m%d_%H%M%S}-{session_id}"
+        try:
+            os.rename(str(staging), str(_old))
+            print(f"提示：上次未完成的暂存目录已改名为 {_old.name}（不占用 Zen-ID，可重试）")
+        except Exception as ex:
+            print(f"错误：暂存目录已存在且无法改名：{staging}（{ex}）", file=sys.stderr)
+            sys.exit(1)
 
     # ---- 时间戳（字典 V1.2）：统一为 Unix 纪元秒 ----
     # 缺陷 A-7 修正（P0-9，2026-09-20）：
@@ -261,22 +276,45 @@ def main():
                   f"相差 {abs(span - duration):.2f}s（>1s）——已如实记入 device_info。")
             start_utc_source = "derived_from_first_sample(span_mismatch)"
 
-    # ---- 写 02_raw（S1 修复：eeg_pre_filter 若有必随档，防"eeg_raw 名实不符"复发）----
-    dest.mkdir(parents=True, exist_ok=False)
-    if has_pre:
-        np.savez(dest / "eeg_raw.npz", eeg=eeg, eeg_pre_filter=pre_arr,
-                 timestamps=timestamps, meta=meta)
-    else:
-        # 源无滤波前列：若 meta 自称 pre_filter_available=True 即属失实，
-        # 如实订正为 False 后再归档（数据诚实性优先，不静默保留失实声明）。
-        if (isinstance(meta.get("signal_chain"), dict)
-                and meta["signal_chain"].get("pre_filter_available")):
-            meta["signal_chain"]["pre_filter_available"] = False
-            meta["signal_chain"]["note"] = (
-                "源 npz 无 eeg_pre_filter 列，归档时如实标注为不可用（2026-09-18 口径）")
-        np.savez(dest / "eeg_raw.npz", eeg=eeg, timestamps=timestamps, meta=meta)
-    if report_path and report_path.exists():
-        shutil.copy2(report_path, dest / "report.html")
+    # ---- 写归档包（P0-5：全部先写 staging/，末尾一次改名到位）----
+    # S1 修复：eeg_pre_filter 若有必随档，防"eeg_raw 名实不符"复发
+    def _abort_keep_id(ex):
+        """P0-5：任何写入/校验/改名失败 → 把暂存目录改名为 .failed-*，
+        **绝不占用 <session_id> 名**，使该 Zen-ID 可重试（旧实现会永久堵死）。"""
+        _old = dest_root / f".failed-{datetime.now():%Y%m%d_%H%M%S}-{session_id}"
+        try:
+            if staging.exists():
+                os.rename(str(staging), str(_old))
+        except Exception:
+            pass
+        print(f"错误：入库未完成，已中止且**未占用 Zen-ID**（暂存目录改名为 "
+              f"{_old.name}，可清理后重试）：{type(ex).__name__}: {ex}",
+              file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        staging.mkdir(parents=True, exist_ok=False)
+    except Exception as ex:
+        print(f"错误：无法创建暂存目录 {staging}：{ex}", file=sys.stderr)
+        sys.exit(1)
+    try:
+        if has_pre:
+            np.savez(staging / "eeg_raw.npz", eeg=eeg, eeg_pre_filter=pre_arr,
+                     timestamps=timestamps, meta=meta)
+        else:
+            # 源无滤波前列：若 meta 自称 pre_filter_available=True 即属失实，
+            # 如实订正为 False 后再归档（数据诚实性优先，不静默保留失实声明）。
+            if (isinstance(meta.get("signal_chain"), dict)
+                    and meta["signal_chain"].get("pre_filter_available")):
+                meta["signal_chain"]["pre_filter_available"] = False
+                meta["signal_chain"]["note"] = (
+                    "源 npz 无 eeg_pre_filter 列，归档时如实标注为不可用（2026-09-18 口径）")
+            np.savez(staging / "eeg_raw.npz", eeg=eeg, timestamps=timestamps, meta=meta)
+        if report_path and report_path.exists():
+            shutil.copy2(report_path, staging / "report.html")
+    except Exception as ex:
+        # 写盘阶段失败（磁盘满/权限/中断）也必须走同一补偿路径
+        _abort_keep_id(ex)
 
     # ---- P1a 会话契约（2026-09-18）：采集端两份契约随档搬运并定稿 ----
     # 老会话无契约则如实跳过（device_info 记 contract_carried=false，不虚标）。
@@ -284,7 +322,7 @@ def main():
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
         from session_contract import carry_contract
-        res = carry_contract(npz_path, str(dest), session_id,
+        res = carry_contract(npz_path, str(staging), session_id,
                              operator=args.operator)
         contract_carried = bool(res.get("carried"))
         if res.get("errors"):
@@ -331,7 +369,7 @@ def main():
         "source_file": npz_path.name,
         "quarantined": quarantine,
     }
-    (dest / "device_info.json").write_text(
+    (staging / "device_info.json").write_text(
         json.dumps(device_info, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _fb_field(name, value):
@@ -367,7 +405,22 @@ def main():
         + ("链路测试录制，不进入研究数据集，仅保留可追溯性。" if args.type == "test" else "")
         + (args.note or ""),
     ]
-    (dest / "session_note.txt").write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+    (staging / "session_note.txt").write_text("\n".join(note_lines) + "\n", encoding="utf-8")
+
+    # ── P0-5：校验归档包完整性后，一次改名到位（原子）────────────────────
+    # 必须校验的项：npz 可读且行数一致；report/device_info 存在。任一不满足即失败，
+    # 且失败时**不占用 Zen-ID**（改名为 .failed-*），使重试可行。
+    try:
+        with np.load(staging / "eeg_raw.npz", allow_pickle=True) as _z:
+            _rows = int(_z["eeg"].shape[0])
+        if _rows != samples:
+            raise ValueError(f"归档 npz 行数 {_rows} != meta.samples {samples}")
+    except Exception as ex:
+        _abort_keep_id(ex)
+    try:
+        os.rename(str(staging), str(dest))
+    except Exception as ex:
+        _abort_keep_id(ex)
 
     # ---- 写质检记录（P0-1，2026-09-20：判定改由 qc_pipeline 从 npz 实算）----
     # 旧实现用正则从 report.html 抠 clean_ratio，而报告模板只在"检出噪声"时

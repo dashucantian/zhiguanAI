@@ -395,6 +395,14 @@ class DataBuffer:
         self.timestamps = []  # per-sample arrival time (Unix epoch seconds, V1.2)
         self._saved_data_path = None   # V1.2 idempotent save marker
         self._saved_report_path = None
+        # ── P0-4（2026-09-20）增量快照 ──────────────────────────────────
+        # 缺陷 A-4：npz 只在会话结束瞬间写一次，中途崩溃/断电/误关窗口 = 整场归零。
+        # 快照是**附属保险**：默认关（默认间隔 0），由调用方按需开启。
+        self.snapshot_interval_s = 0.0   # >0 才启用
+        self.snapshot_dir = None         # 缺省 REPORT_DIR
+        self._snapshot_count = 0
+        self._last_snapshot_t = 0.0
+        self._last_snapshot_path = None
 
     def _append_ts(self, t: float):
         """Append a sample timestamp, enforcing strict monotonic increase."""
@@ -659,6 +667,104 @@ class DataBuffer:
             min_len = min((len(self.eeg_all[ch]) for ch in self.channels), default=0)
         return min(1.0, min_len / max(self._bp_epoch_samples, 1))
 
+    def snapshot(self, force=False):
+        """P0-4 增量快照：把当前缓冲**原子写**成 `<stem>.partial.npz`。
+
+        用途：会话进行中周期性落盘，使崩溃/断电/误关窗口不再等于"整场归零"。
+        设计约束：
+          · **不生成报告、不写契约、不进入库流程**（快照只是保险，不是正式产物）；
+          · 原子写（tmp → os.replace）＋写后 `np.load` 校验，避免留下半份 zip；
+          · 与 `save_bin` 一致地**持锁**取数据（对比历史实现的不持锁是缺陷 B-3）；
+          · 出错只返回 None，**绝不抛异常打断采集**（同契约纪律）。
+        返回：快照路径 / None。
+        """
+        try:
+            if self._saved_data_path is not None:
+                return None                      # 已正式保存，无需再快照
+            if not self.snapshot_dir:
+                return None
+            now = time.time()
+            if not force and self.snapshot_interval_s > 0:
+                if now - self._last_snapshot_t < self.snapshot_interval_s:
+                    return None
+            with self.lock:
+                if not self.eeg_all.get(self.channels[0]):
+                    return None
+                n = min(len(self.eeg_all[ch]) for ch in self.channels)
+                if n <= 0:
+                    return None
+                eeg = np.zeros((n, self.n_ch))
+                for i, ch in enumerate(self.channels):
+                    eeg[:n, i] = self.eeg_all[ch][:n]
+                raw = None
+                if self.has_raw:
+                    m = min((len(self.eeg_raw_all[ch]) for ch in self.channels),
+                            default=0)
+                    if m > 0:
+                        raw = np.zeros((min(n, m), self.n_ch))
+                        for i, ch in enumerate(self.channels):
+                            raw[:raw.shape[0], i] = self.eeg_raw_all[ch][:raw.shape[0]]
+                ts = np.asarray(self.timestamps[:n], dtype=np.float64)
+                started = float(self.session_start) if self.session_start else now
+            if ts.size < n or ts.size == 0:
+                ts = started + np.arange(n) / float(self.sfreq)
+            if self._last_snapshot_path is None:
+                stem = datetime.fromtimestamp(started).strftime("%Y%m%d_%H%M%S")
+                self._last_snapshot_path = os.path.join(
+                    self.snapshot_dir, f"local_{stem}.partial.npz")
+            out = self._last_snapshot_path
+            os.makedirs(os.path.dirname(out), exist_ok=True)
+            meta = {"timestamp": datetime.now().isoformat(),
+                    "timestamp_meaning": "ended_at",
+                    "recording_started_at": datetime.fromtimestamp(started).isoformat(),
+                    "recording_started_at_epoch": round(started, 6),
+                    "snapshot": True,
+                    "snapshot_index": self._snapshot_count + 1,
+                    "sfreq": self.sfreq, "channels": list(self.channels),
+                    "device": self.device, "samples": int(n),
+                    "duration": float(ts[-1] - ts[0]) if ts.size > 1 else 0.0,
+                    "note": "P0-4 增量快照（非正式产物；正式保存成功后应被删除）"}
+            tmp = out + ".tmp.npz"   # 注意：np.savez 对无 .npz 后缀的路径会**自动补 .npz**，
+                                     # 故临时名必须以 .npz 结尾（曾因此处使 os.replace 找不到文件）
+            if raw is not None:
+                np.savez(tmp, eeg=eeg, eeg_pre_filter=raw, timestamps=ts, meta=meta)
+            else:
+                np.savez(tmp, eeg=eeg, timestamps=ts, meta=meta)
+            try:
+                os.replace(tmp, out)
+            except Exception:
+                try:
+                    os.remove(tmp)
+                except Exception:
+                    pass
+                raise
+            # 写后校验：能读回且形状一致才算成功（防半份 zip）
+            with np.load(out, allow_pickle=True) as d:
+                if int(d["eeg"].shape[0]) != int(n):
+                    raise ValueError("快照写后校验失败：行数不一致")
+            self._snapshot_count += 1
+            self._last_snapshot_t = now
+            return out
+        except Exception as ex:
+            try:
+                print(f"[warn] 增量快照失败（不影响采集）：{type(ex).__name__}: {ex}")
+            except Exception:
+                pass
+            return None
+
+    def discard_snapshot(self):
+        """正式保存成功后删除快照（避免与正式产物混淆）。"""
+        p = self._last_snapshot_path
+        if not p:
+            return False
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+            self._last_snapshot_path = None
+            return True
+        except Exception:
+            return False
+
     def save_bin(self, extra_meta=None):
         """Save EEG data as .npz and generate HTML report. Returns (data_path, report_path) or None.
 
@@ -734,6 +840,10 @@ class DataBuffer:
             "recording_ended_at": datetime.fromtimestamp(ended_epoch).isoformat(),
             "recording_ended_at_epoch": round(ended_epoch, 6),
             "timestamp_source": ts_source,    # measured / synthesized
+            # P0-4：快照如实记录（这份数据是否曾在快照里、当年写到哪一步）
+            "snapshot_count": int(self._snapshot_count),
+            "snapshot_last_path": (os.path.basename(self._last_snapshot_path)
+                                   if self._last_snapshot_path else ""),
             "sfreq": self.sfreq,
             "channels": self.channels,
             "device": self.device,
@@ -743,11 +853,41 @@ class DataBuffer:
         }
         if extra_meta:
             meta.update(extra_meta)
+        # ── P0-4：原子落盘（缺陷 A-5）────────────────────────────────────
+        # 旧实现直接 np.savez(最终路径)：无临时文件、无 os.replace、无写后校验，
+        # 崩溃即留下**同名的半个 zip**，而下游会把它当"无 qc"静默放过。
+        # ⚠️ np.savez 对无 .npz 后缀的路径会**自动补 .npz** —— 临时名必须以
+        #    .npz 结尾，否则 os.replace 找不到文件（本轮已实测踩到）。
+        tmp_path = data_path + ".tmp.npz"
         if raw_arr is not None:
-            np.savez(data_path, eeg=eeg_arr, eeg_pre_filter=raw_arr,
+            np.savez(tmp_path, eeg=eeg_arr, eeg_pre_filter=raw_arr,
                      timestamps=ts_arr, meta=meta)
         else:
-            np.savez(data_path, eeg=eeg_arr, timestamps=ts_arr, meta=meta)
+            np.savez(tmp_path, eeg=eeg_arr, timestamps=ts_arr, meta=meta)
+        try:
+            os.replace(tmp_path, data_path)
+        except Exception:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+            raise
+        # 写后校验：读回并核对形状；失败即删掉半份并如实报错（不留假成功）
+        try:
+            with np.load(data_path, allow_pickle=True) as _chk:
+                if int(_chk["eeg"].shape[0]) != int(n):
+                    raise ValueError("eeg 行数与写入前不一致")
+                if "eeg_pre_filter" in _chk.files and raw_arr is not None:
+                    if _chk["eeg_pre_filter"].shape != raw_arr.shape:
+                        raise ValueError("eeg_pre_filter 形状与写入前不一致")
+        except Exception as ex:
+            try:
+                os.remove(data_path)
+            except Exception:
+                pass
+            print(f"[error] 落盘写后校验失败，已删除不完整文件："
+                  f"{type(ex).__name__}: {ex}")
+            return None
         print(f"Data saved: {data_path}")
 
         report_path = os.path.join(REPORT_DIR, f"local_{ts}.report.html")
@@ -799,6 +939,8 @@ class DataBuffer:
 
         self._saved_data_path = data_path
         self._saved_report_path = report_ok
+        # P0-4：正式产物已落地，删除快照以免与正式文件混淆
+        self.discard_snapshot()
         return data_path, report_ok
 
     def _beep_disconnect(self):
