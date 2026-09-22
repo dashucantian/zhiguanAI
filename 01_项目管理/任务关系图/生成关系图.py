@@ -116,7 +116,7 @@ HTML_TMPL = r"""<!DOCTYPE html>
   .glabel{fill:#cbd5e1;font-size:12px;font-weight:600}
   .tnode{cursor:pointer;stroke:#0f172a;stroke-width:1.5}
   .tnode:hover{stroke:#f8fafc;stroke-width:2.5}
-  #tip{position:fixed;max-width:460px;background:#1e293b;border:1px solid #475569;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;display:none;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+  #tip{position:fixed;max-width:460px;max-height:72vh;overflow:auto;background:#1e293b;border:1px solid #475569;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.55;display:none;z-index:20;box-shadow:0 8px 30px rgba(0,0,0,.5)}
   #tip h3{margin:0 0 6px;font-size:14px;color:#fbbf24}
   #tip .k{color:#94a3b8}
   #stat{font-size:12px;color:#94a3b8}
@@ -191,15 +191,19 @@ function render(){
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 function bind(){
+  let cur = null;          // 当前钉住的节点
+  let hideT = null;        // 延迟隐藏定时器（防相邻节点间移动时闪断）
   S.querySelectorAll('.tnode').forEach(n=>{
     const t = DATA.tasks[+n.dataset.i];
-    n.addEventListener('mouseenter',e=>showTip(t,e));
-    n.addEventListener('click',e=>showTip(t,e,true));
-    n.addEventListener('mouseleave',()=>{if(!pin)TIP.style.display='none';});
+    n.addEventListener('mouseenter',e=>{ if(hideT){clearTimeout(hideT);hideT=null;} cur=n; showTip(t,e); });
+    n.addEventListener('mousemove',e=>{ if(cur===n) place(e); });
+    n.addEventListener('mouseleave',()=>{ if(cur===n){ cur=null; hideT=setTimeout(()=>{TIP.style.display='none';},160); } });
   });
-  let pin=false;
-  function showTip(t,e,sticky){
-    if(sticky) pin=!pin;
+  // 鼠标移入卡片本身：保持显示，允许滚动翻看
+  TIP.addEventListener('mouseenter',()=>{ if(hideT){clearTimeout(hideT);hideT=null;} });
+  TIP.addEventListener('mouseleave',()=>{ TIP.style.display='none'; });
+
+  function showTip(t,e){
     TIP.innerHTML = `<h3>${esc(t.zg)} ${esc(t.name)}</h3>`
       + `<div><span class="k">状态：</span>${esc(t.status)}</div>`
       + `<div><span class="k">承担者：</span>${esc(t.owners.join('、'))}</div>`
@@ -207,10 +211,17 @@ function bind(){
       + (t.principles.length?`<div><span class="k">原则：</span>${esc(t.principles.join('、'))}</div>`:'')
       + (t.criteria?`<div><span class="k">验收：</span>${esc(t.criteria)}</div>`:'')
       + (t.files?`<div><span class="k">文件：</span>${esc(t.files)}</div>`:'')
-      + (t.ai?`<div style="margin-top:6px;color:#94a3b8;font-size:12px;max-height:180px;overflow:auto">${esc(t.ai).slice(0,800)}</div>`:'');
+      + (t.ai?`<div style="margin-top:6px;color:#94a3b8;font-size:12px">${esc(t.ai).slice(0,800)}</div>`:'');
     TIP.style.display='block';
-    TIP.style.left=Math.min(e.clientX+14, innerWidth-480)+'px';
-    TIP.style.top=Math.min(e.clientY+14, innerHeight-320)+'px';
+    place(e);
+  }
+  function place(e){
+    const r = TIP.getBoundingClientRect();
+    let x = e.clientX + 14, y = e.clientY + 14;
+    if(x + r.width  > innerWidth  - 8) x = e.clientX - r.width  - 14;   // 右缘翻转
+    if(y + r.height > innerHeight - 8) y = Math.max(60, e.clientY - r.height - 14); // 下缘翻转
+    TIP.style.left = Math.max(8, x) + 'px';
+    TIP.style.top  = Math.max(8, y) + 'px';
   }
 }
 
