@@ -156,30 +156,72 @@ function render(){
   tasks.forEach(t => groupKey(t,mode).forEach(g => (groups[g]=groups[g]||[]).push(t)));
   const gn = Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
   const cx = W()/2, cy = H()/2, r1 = Math.min(W(),H())*0.22;
-  let svg = `<g id="zoom">`;
-  // links + group nodes
+  const MM = Math.min(W(),H());
+
+  // —— 第一轮：算枢纽位置 + 叶初始位置（扇形弧）——
+  const hubs = [], leaves = [];
   gn.forEach((g,i)=>{
     const a = -Math.PI/2 + i*2*Math.PI/gn.length;
     const gx = cx + r1*Math.cos(a), gy = cy + r1*Math.sin(a);
     const list = groups[g];
-    svg += `<line class="link" x1="${cx}" y1="${cy}" x2="${gx}" y2="${gy}"/>`;
-    // leaves on outer arc around group node, fan toward outside
-    const spread = Math.min(1.9, 0.22*list.length);
+    hubs.push({g, gx, gy, list});
+    // 弧半径随组大小外扩 + 弧展开角保证相邻叶弧长≥26px
+    const r2 = r1 + MM*0.16 + list.length*6;
+    const spread = Math.min(Math.PI*0.96, list.length>1 ? (list.length-1)*26/r2 : 0.3);
     list.forEach((t,j)=>{
       const frac = list.length===1? 0 : (j/(list.length-1)-0.5);
       const a2 = a + frac*spread;
-      const r2 = r1 + Math.min(W(),H())*0.16 + (j%3)*22;
-      const tx = cx + r2*Math.cos(a2), ty = cy + r2*Math.sin(a2);
-      const col = DATA.hue[t.status]||'#9ca3af';
-      svg += `<line class="link" x1="${gx}" y1="${gy}" x2="${tx}" y2="${ty}"/>`;
-      svg += `<circle class="tnode" cx="${tx}" cy="${ty}" r="7" fill="${col}" data-i="${t.id}"><title></title></circle>`;
-      if(list.length<=14){
-        svg += `<text x="${tx+10}" y="${ty+4}" font-size="10" fill="#94a3b8">${esc(t.zg||t.name.slice(0,10))}</text>`;
-      }
+      const rr = r2 + (j%3)*22;                       // 三圈错位防同弧相切
+      leaves.push({t, gx, gy, gsize: list.length, ix: cx+rr*Math.cos(a2), iy: cy+rr*Math.sin(a2)});
     });
-    svg += `<g class="gnode" data-g="${esc(g)}"><circle cx="${gx}" cy="${gy}" r="16" fill="#334155" stroke="#64748b"/>`;
-    svg += `<text x="${gx}" y="${gy+4}" text-anchor="middle" font-size="9" fill="#fbbf24">${list.length}</text>`;
-    svg += `<text class="glabel" x="${gx}" y="${gy-24}" text-anchor="middle">${esc(g.length>12? g.slice(0,12)+'…':g)}</text></g>`;
+  });
+
+  // —— 第二轮：防重叠松弛（推开<28px 的点对；每轮同步收边界/避中心，防收拢再重叠）——
+  const clamp = (L)=>{
+    L.ix = Math.max(14, Math.min(W()-14, L.ix));
+    L.iy = Math.max(14, Math.min(H()-14, L.iy));
+    const dc = Math.hypot(L.ix-cx, L.iy-cy);
+    if(dc < r1*0.55){ const k=(r1*0.55)/(dc||1); L.ix = cx+(L.ix-cx)*k; L.iy = cy+(L.iy-cy)*k; }
+  };
+  for(let it=0; it<90; it++){
+    for(let i=0;i<leaves.length;i++){
+      const A = leaves[i];
+      for(let k=i+1;k<leaves.length;k++){
+        const B = leaves[k];
+        let dx = B.ix-A.ix, dy = B.iy-A.iy;
+        let d = Math.hypot(dx,dy);
+        if(d < 0.5){ dx = (i-k)*0.7+0.3; dy = 0.9; d = Math.hypot(dx,dy); }  // 完全重合时给确定性扰动
+        if(d < 28){
+          const push = (28-d)/2, ux = dx/d, uy = dy/d;
+          A.ix -= ux*push; A.iy -= uy*push;
+          B.ix += ux*push; B.iy += uy*push;
+        }
+      }
+    }
+    leaves.forEach(clamp);
+  }
+  leaves.forEach(L=>{ L.x = L.ix; L.y = L.iy; });
+
+  // —— 第三轮：绘制 ——
+  let svg = `<g id="zoom">`;
+  hubs.forEach(h=>{
+    svg += `<line class="link" x1="${cx}" y1="${cy}" x2="${h.gx}" y2="${h.gy}"/>`;
+  });
+  leaves.forEach(L=>{
+    const col = DATA.hue[L.t.status]||'#9ca3af';
+    svg += `<line class="link" x1="${L.gx}" y1="${L.gy}" x2="${L.x}" y2="${L.y}"/>`;
+  });
+  leaves.forEach(L=>{
+    const col = DATA.hue[L.t.status]||'#9ca3af';
+    svg += `<circle class="tnode" cx="${L.x}" cy="${L.y}" r="7" fill="${col}" data-i="${L.t.id}"/>`;
+    if(L.gsize<=14){   // 标签只给小组画，防字堆字
+      svg += `<text x="${L.x+10}" y="${L.y+4}" font-size="10" fill="#94a3b8" pointer-events="none">${esc(L.t.zg||L.t.name.slice(0,10))}</text>`;
+    }
+  });
+  hubs.forEach(h=>{
+    svg += `<g class="gnode"><circle cx="${h.gx}" cy="${h.gy}" r="16" fill="#334155" stroke="#64748b"/>`;
+    svg += `<text x="${h.gx}" y="${h.gy+4}" text-anchor="middle" font-size="9" fill="#fbbf24">${h.list.length}</text>`;
+    svg += `<text class="glabel" x="${h.gx}" y="${h.gy-24}" text-anchor="middle">${esc(h.g.length>12? h.g.slice(0,12)+'…':h.g)}</text></g>`;
   });
   svg += `<circle cx="${cx}" cy="${cy}" r="30" fill="#7c3aed" stroke="#a78bfa" stroke-width="2"/>`;
   svg += `<text x="${cx}" y="${cy+4}" text-anchor="middle" font-size="11" fill="#fff" font-weight="700">止观AI</text></g>`;
