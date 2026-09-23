@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>止观AI · 甘特与流程</title>
+<style>
+ body{margin:0;font-family:"Microsoft YaHei",system-ui,sans-serif;background:#0f172a;color:#e2e8f0;font-size:13px}
+ #bar{position:fixed;top:0;left:0;right:0;height:44px;background:#1e293b;display:flex;align-items:center;gap:12px;padding:0 14px;z-index:9;border-bottom:1px solid #334155}
+ #bar b{font-size:14px}
+ .tab{background:#0f172a;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:5px 14px;cursor:pointer}
+ .tab.on{background:#7c3aed;border-color:#7c3aed}
+ h2{font-size:14px;margin:14px 0 6px;color:#a78bfa}
+ .wrap{margin-top:56px;padding:0 16px 40px}
+ svg{background:#0b1220;border:1px solid #1e293b;border-radius:8px}
+ .lane{fill:#111a2e}
+ .laneline{stroke:#334155;stroke-width:1}
+ .stitle{fill:#94a3b8;font-size:12px;font-weight:700}
+ .bar{cursor:pointer;stroke:#0f172a}
+ .bar:hover{stroke:#f8fafc}
+ .blabel{fill:#e2e8f0;font-size:11px;pointer-events:none}
+ .today{stroke:#f43f5e;stroke-width:2;stroke-dasharray:4 3}
+ .axtxt{fill:#64748b;font-size:10px}
+ .edge{stroke:#64748b;stroke-width:1.4;fill:none;marker-end:url(#arr)}
+ #tip{position:fixed;max-width:420px;max-height:70vh;overflow:auto;background:#1e293b;border:1px solid #475569;border-radius:8px;padding:10px 12px;display:none;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+ #note{color:#94a3b8;font-size:12px;margin:6px 2px}
+</style></head><body>
+<div id="bar"><b>止观AI · 视图族（F2）</b>
+ <button class="tab on" id="tG">甘特图</button><button class="tab" id="tF">状态流程图</button>
+ <span id="note"></span></div>
+<div class="wrap" id="root"></div>
+<div id="tip"></div>
+<script>
+const T = {"tasks": [{"rid": "recvupdjd0pZiJ", "name": "A1 本地模型换 MoE 架构（Qwen3-30B-A3B）并开 MTP 推测解码", "zg": "ZG-001", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 0}, {"rid": "recvupdjd0qdOi", "name": "A2 调整可分配显存上限（系统内操作，无需进BIOS）", "zg": "ZG-002", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 1}, {"rid": "recvupdjd0NQp1", "name": "A3 首个 VR 视觉场景（WebXR 零安装路线）", "zg": "ZG-003", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 2}, {"rid": "recvupdjd0GIhi", "name": "A4 脑电数据出口扩展 WebSocket", "zg": "ZG-004", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 3}, {"rid": "recvupdjd0G0kp", "name": "A5 微信问清 NeuraDock 三问", "zg": "ZG-005", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 4}, {"rid": "recvupdjd0pGZ6", "name": "A6 Pico 真机经 HTTPS 进入 VR", "zg": "ZG-006", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 5}, {"rid": "recvupdjd0r25W", "name": "A7 首份真机脑电数据资产", "zg": "ZG-007", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 6}, {"rid": "recvupdjd0YXc0", "name": "B1 VR端解析 Alpha/Theta 频段功率", "zg": "ZG-008", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 7}, {"rid": "recvupdjd03efx", "name": "B2 Shader 参数映射设计与调校", "zg": "ZG-009", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 8}, {"rid": "recvupdjd0BCag", "name": "B3 用录制的EEG数据回放测试映射逻辑", "zg": "ZG-010", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 9}, {"rid": "recvupdjd00mdx", "name": "B4 佩戴实测与体验调校", "zg": "ZG-011", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 10}, {"rid": "recvupdjd0L4JH", "name": "B5 听觉通道并入 VR 场景", "zg": "ZG-012", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 11}, {"rid": "recvupdjd0CT3v", "name": "B6 蓝牙连接稳定性排查", "zg": "ZG-013", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 12}, {"rid": "recvupdjd0iPhB", "name": "C1 本地推理服务部署（llama.cpp/Ollama）＋REST API", "zg": "ZG-014", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 13}, {"rid": "recvupdjd01zKX", "name": "C2 VR端与大模型桥接（HTTP异步非阻塞）", "zg": "ZG-015", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 14}, {"rid": "recvupdjd0ixB9", "name": "C3 禅修引导提示词模板与语料约束", "zg": "ZG-016", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 15}, {"rid": "recvupdjd0up8T", "name": "C4 输出审查机制", "zg": "ZG-017", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 16}, {"rid": "recvupdjd0OXWZ", "name": "C5 会话总结与长期趋势分析（离线）", "zg": "ZG-018", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 17}, {"rid": "recvupdjd0k9RV", "name": "D1 NeuraDock 采购决策（基础采购模式，1-2套）", "zg": "ZG-019", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 18}, {"rid": "recvupdjd0PwNQ", "name": "D2 NeuraDock 接入既有采集层", "zg": "ZG-020", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 19}, {"rid": "recvupdjd04tK7", "name": "D3 枕顶区与Muse前额区数据对比测试", "zg": "ZG-021", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 20}, {"rid": "recvupdjd0RmGg", "name": "D4 数据标注规范对接 Zen-EEG 体系", "zg": "ZG-022", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 21}, {"rid": "recvupdjd0Iqru", "name": "D5 小群体验证硬件选型（OpenBCI Ganglion）", "zg": "ZG-023", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 22}, {"rid": "recvupdorqwHxv", "name": "E1 BrainBit 采购", "zg": "ZG-024", "status": "已搁置", "start": null, "end": null, "dep": [], "dep_names": "", "i": 23}, {"rid": "recvupdorqJzDv", "name": "E2 Muse SDK 商业授权洽谈", "zg": "ZG-025", "status": "已搁置", "start": null, "end": null, "dep": [], "dep_names": "", "i": 24}, {"rid": "recvupdorqXHvR", "name": "E3 生成式3D资产量产（TRELLIS/TripoSR）", "zg": "ZG-026", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 25}, {"rid": "recvupdorqXa3E", "name": "E4 Meta Habitat 引入", "zg": "ZG-027", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 26}, {"rid": "recvupdorqIrTN", "name": "E5 小样本多人测试", "zg": "ZG-028", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 27}, {"rid": "recvupdorqeEHr", "name": "N1 素材抢救：补写工作日志005（09-05深夜至09-06 VR攻坚）", "zg": "ZG-029", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 28}, {"rid": "recvupdorqxUOk", "name": "N2 建立案例库目录与说明", "zg": "ZG-030", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 29}, {"rid": "recvupdorqMIEM", "name": "N3 首批8张决策判语卡", "zg": "ZG-031", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 30}, {"rid": "recvupdorqktKZ", "name": "N4 首批5张踩坑档案卡", "zg": "ZG-032", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 31}, {"rid": "recvupdorqvjWv", "name": "N5 复现路径1份", "zg": "ZG-033", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 32}, {"rid": "recvupdorq3Sux", "name": "N6 《行者无疆》第二、三章预写", "zg": "ZG-034", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 33}, {"rid": "recvupdorqBf5G", "name": "N7 建立发布队列目录（三态）", "zg": "ZG-035", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 34}, {"rid": "recvupdorqig0y", "name": "N8 GitHub 开源仓建立", "zg": "ZG-036", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 35}, {"rid": "recvupdorqzEO7", "name": "N9 社区回流机制（实践记录模板＋案例众筹）", "zg": "ZG-037", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 36}, {"rid": "recvupdorqYBHN", "name": "V1 实测飞书写入权限", "zg": "ZG-038", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 37}, {"rid": "recvupdorqKrjt", "name": "V2 建「止观AI 任务看板」并录入全部任务", "zg": "ZG-039", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 38}, {"rid": "recvupdorqfk46", "name": "V3 旧协同方案原地标注「已被V2取代」", "zg": "ZG-040", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 39}, {"rid": "recvupdorquYv2", "name": "V4 配置定时巡检（周汇总＋两日待审提醒）", "zg": "ZG-041", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 40}, {"rid": "recvupdorqiSdC", "name": "V5 git 引入与 .gitignore 规划", "zg": "ZG-042", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 41}, {"rid": "recvupdorqkstm", "name": "V6 「秘书」角色命名", "zg": "ZG-043", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 42}, {"rid": "recvupdorqAp8U", "name": "V7 团队8人进表方式", "zg": "ZG-044", "status": "待法师决策", "start": null, "end": null, "dep": [], "dep_names": "", "i": 43}, {"rid": "recvupdorq6L1L", "name": "V8 《行者无疆》第一章待法师补充信息", "zg": "ZG-045", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 44}, {"rid": "recvuE8CaCCzLO", "name": "B7 校准块并入采集流程（训练前静息块估计个体Alpha峰频，Alpha=IAPF±2Hz、Theta=4Hz~IAPF−3Hz；算法版本入meta，定期重校准）", "zg": "ZG-046", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 45}, {"rid": "recvuE8CaCfVQf", "name": "B8 眨眼/伪迹剔除改逐通道自适应阈值双轨（在线试次级标记＋FASTER/RELAX离线复算，弃固定μV阈值）", "zg": "ZG-047", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 46}, {"rid": "recvuE8CaCTvKK", "name": "C6 冷启动模板（老练习者数据预训练＋EA/TSA域对齐，新练习者首日出反馈后增量个人化）", "zg": "ZG-048", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 47}, {"rid": "recvuE8CaCbBUP", "name": "N10 宣发红线入发布审查清单（禁功效句、反馈叙事统一『镜子』口径、判语011三规则并入数据治理文献分级）", "zg": "ZG-049", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 48}, {"rid": "recvuIwsMwbcKB", "name": "B9 临界慢化三指标进分类器探索（恢复时间/方差/lag-1自相关；仅离线复盘与求助提示用途，禁入实时反馈映射）", "zg": "ZG-050", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 49}, {"rid": "recvuIwsMwFf2u", "name": "N11 「脑电跟禅修的关系」颗粒度大白话表（夜会行动项7；《递归的生命》对齐方案为输入，不引入新术语）", "zg": "ZG-051", "status": "进行中", "start": null, "end": null, "dep": [], "dep_names": "", "i": 50}, {"rid": "recvuIwsMwfrCa", "name": "N12 自主性捕获伦理红线入审查（反馈系统不得优化练习者自设目标以外的任何目标——禁留存/参与度/成瘾性优化）", "zg": "ZG-052", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 51}, {"rid": "recvuK6SnvX31b", "name": "M0 灵魂假设书定稿（含双词汇表自知持用纪律、子假设H1~H5、证伪与修订条件四条）", "zg": "ZG-053", "status": "进行中", "start": 1790092800000, "end": 1790092800000, "dep": [], "dep_names": "", "i": 52}, {"rid": "recvuK6SnvGfEl", "name": "M0 项目词汇命名映射表（自有词隐态/显则/生成/印证/自知＋四方对照＋同名异词归一）", "zg": "ZG-054", "status": "已完成", "start": null, "end": null, "dep": [], "dep_names": "", "i": 53}, {"rid": "recvuK6SnvKT6x", "name": "M2 规则台账机制首版（每条映射曲线/阈值/分类器/提示词登记版本号、设立依据、生效时间、修订史）", "zg": "ZG-055", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 54}, {"rid": "recvuK6SnvAKm0", "name": "M3 差异记录（每会话「显则预期了什么 vs 隐态实际呈现什么」差异写入npz meta）", "zg": "ZG-056", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 55}, {"rid": "recvuK6Snv8GXu", "name": "M4 印证矩阵v1（建构轴＝入照运融出五相；先跑入/照/运三相，D3双设备对比为首例）", "zg": "ZG-057", "status": "待法师审定", "start": null, "end": null, "dep": [], "dep_names": "", "i": 56}, {"rid": "recvuK6Snvepvv", "name": "M5 视图损失标注＋红线闸门固化（009/012/013三判语接入生成时刻、印证解释、对外表述三处）", "zg": "ZG-058", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 57}, {"rid": "recvuKqVh8uzqB", "name": "ZG-059 架构命名写入（五相/自有词进console页签副标题、VR分区、新模块docstring、npz meta新增可选phase字段）", "zg": "ZG-059", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 58}, {"rid": "recvuKqVh8uDCG", "name": "ZG-060 日用环一阶段·日用记录字段表定稿（睡眠/活动/练习/环境/自评/事件六类，含可空可拒答不设完整度考核纪律）", "zg": "ZG-060", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 59}, {"rid": "recvuKqVh81vFO", "name": "ZG-061 日用环一阶段·控制台「数据治理」页签新增「日用记录」子模块＋npz meta增daily_context字段（jsonl按Zen-ID关联，不塞npz客观流）", "zg": "ZG-061", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 60}, {"rid": "recvuKqVh8Q7pT", "name": "ZG-062 日用环一阶段·增量效度自检首跑（控制日用基线后EEG指标是否仍有信息量，H3首检，用已入库数据零成本）", "zg": "ZG-062", "status": "待启动", "start": null, "end": null, "dep": [], "dep_names": "", "i": 61}]};
+const HUE = {"待启动":"#9ca3af","进行中":"#3b82f6","待法师审定":"#f59e0b","待法师决策":"#ef4444","已完成":"#22c55e","已搁置":"#6b7280"};
+const LANES = ["待启动","进行中","待法师决策","待法师审定","已完成","已搁置"];
+const root=document.getElementById('root'), TIP=document.getElementById('tip'), NOTE=document.getElementById('note');
+const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const dstr=ms=>{const d=new Date(ms);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+
+function bindTips(node,t){
+  node.addEventListener('mouseenter',e=>{
+    TIP.innerHTML=`<b style="color:#fbbf24">${esc(t.zg)}</b> ${esc(t.name)}<br>状态：${esc(t.status)}`
+      +(t.start?`<br>计划：${dstr(t.start)} → ${t.end?dstr(t.end):'未填'}`:'<br>计划：未填')
+      +(t.dep_names?`<br>依赖：${esc(t.dep_names)}`:'');
+    TIP.style.display='block'; place(e);
+  });
+  node.addEventListener('mousemove',place);
+  node.addEventListener('mouseleave',()=>TIP.style.display='none');
+}
+function place(e){const r=TIP.getBoundingClientRect();let x=e.clientX+12,y=e.clientY+12;
+ if(x+r.width>innerWidth-8)x=e.clientX-r.width-12; if(y+r.height>innerHeight-8)y=Math.max(50,e.clientY-r.height-12);
+ TIP.style.left=x+'px'; TIP.style.top=y+'px';}
+
+function gantt(){
+  const has=T.tasks.filter(t=>t.start&&t.end&&t.end>=t.start).sort((a,b)=>a.start-b.start);
+  const no=T.tasks.length-has.length;
+  NOTE.textContent=`有排期 ${has.length} 条 · 未填计划 ${no} 条（不硬画）`;
+  if(!has.length){root.innerHTML='<p style="color:#94a3b8">尚无任何任务填了「计划开始＋计划截止」。在看板卡片填日期后重跑生成器即可见。当前示例：ZG-053。</p>';return;}
+  const min=Math.min(...has.map(t=>t.start)), max=Math.max(...has.map(t=>t.end));
+  const day=86400000, pad=(max-min)*0.06+day;
+  const x0=170,W=Math.min(innerWidth-60,1000),H=has.length*34+70;
+  const X=ms=>x0+(ms-min+pad)/((max-min)+2*pad)*(W-x0-20);
+  let s=`<svg width="${W}" height="${H}">`;
+  // 周刻度
+  for(let k=0;k<=14;k++){const ms=min-pad+((max-min)+2*pad)*k/14; s+=`<line x1="${X(ms)}" y1="34" x2="${X(ms)}" y2="${H-10}" class="laneline" opacity="0.25"/><text x="${X(ms)}" y="${H-2}" class="axtxt" text-anchor="middle">${dstr(ms).slice(5)}</text>`;}
+  const now=Date.now();
+  if(now>=min-pad&&now<=max+pad) s+=`<line x1="${X(now)}" y1="30" x2="${X(now)}" y2="${H-10}" class="today"/><text x="${X(now)+3}" y="26" fill="#f43f5e" font-size="10">今日</text>`;
+  has.forEach((t,i)=>{
+    const y=44+i*34, x=X(t.start), w=Math.max(4,X(t.end)-X(t.start));
+    s+=`<text x="6" y="${y+13}" class="blabel">${esc(t.zg)}</text>`;
+    s+=`<text x="${x0-4}" y="${y+13}" text-anchor="end" class="blabel">${esc(t.name.slice(0,10))}${t.name.length>10?'…':''}</text>`;
+    s+=`<rect class="bar" x="${x}" y="${y}" width="${w}" height="20" rx="4" fill="${HUE[t.status]||'#9ca3af'}" data-i="${t.i}"/>`;
+    s+=`<text x="${x+w+6}" y="${y+14}" class="axtxt">${dstr(t.start).slice(5)}~${dstr(t.end).slice(5)}</text>`;
+  });
+  s+='</svg>'; root.innerHTML='<h2>甘特（计划起止）</h2>'+s;
+  root.querySelectorAll('.bar').forEach(b=>bindTips(b,T.tasks[+b.dataset.i]));
+}
+
+function flow(){
+  NOTE.textContent='泳道＝状态六列 · 箭头＝依赖（指向本任务为"它挡着我"）· 点击色块看详情';
+  const W=Math.min(innerWidth-40,1200);
+  const byL={}; LANES.forEach(l=>byL[l]=[]);
+  T.tasks.forEach(t=>{(byL[t.status]=byL[t.status]||[]).push(t);});
+  const maxN=Math.max(...LANES.map(l=>(byL[l]||[]).length));
+  const colw=W/LANES.length, rowh=34, Hh=maxN*rowh+70;
+  let s=`<svg width="${W}" height="${Hh}"><defs><marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#64748b"/></marker></defs>`;
+  const pos={};
+  LANES.forEach((l,ci)=>{
+    const cx=ci*colw+colw/2;
+    s+=`<text x="${cx}" y="22" class="stitle" text-anchor="middle">${l}（${(byL[l]||[]).length}）</text>`;
+    s+=`<line x1="${ci*colw}" y1="30" x2="${ci*colw}" y2="${Hh-6}" class="laneline"/>`;
+    (byL[l]||[]).forEach((t,ri)=>{
+      const x=cx-10,y=44+ri*rowh; pos[t.rid]={x,y};
+      s+=`<circle class="bar" cx="${x}" cy="${y}" r="7" fill="${HUE[t.status]||'#9ca3af'}" data-i="${t.i}"/>`;
+      s+=`<text x="${x+12}" y="${y+4}" class="blabel">${esc(t.zg||t.name.slice(0,8))}</text>`;
+    });
+  });
+  // 依赖边：dep 列存"对侧任务"（=本任务被其对侧阻塞？法师填的是挡着我的任务）→ 画 对侧→本 箭头
+  T.tasks.forEach(t=>t.dep.forEach(dd=>{const a=pos[dd],b=pos[t.rid];if(a&&b){
+    const dy=b.y-a.y, cx1=a.x+30, cx2=b.x-30;
+    s+=`<path class="edge" d="M${a.x+9},${a.y} C ${cx1},${a.y+dy/2} ${cx2},${b.y-dy/2} ${b.x-9},${b.y}"/>`;}else if(b&&!a){
+    s+=`<text x="${b.x+12}" y="${b.y+14}" fill="#f43f5e" font-size="9">依赖出图外</text>`;}}));
+  s+='</svg>';
+  root.innerHTML='<h2>状态流程图（泳道＋依赖）</h2>'+s;
+  root.querySelectorAll('.bar').forEach(b=>bindTips(b,T.tasks[+b.dataset.i]));
+}
+
+const pack={tasks:T.tasks, hasPlan:T.tasks.some(t=>t.start&&t.end)};
+let view='G';
+document.getElementById('tG').onclick=()=>{view='G';document.getElementById('tG').classList.add('on');document.getElementById('tF').classList.remove('on');gantt();};
+document.getElementById('tF').onclick=()=>{view='F';document.getElementById('tF').classList.add('on');document.getElementById('tG').classList.remove('on');flow();};
+gantt();
+</script></body></html>
