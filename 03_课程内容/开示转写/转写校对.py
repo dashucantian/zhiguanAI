@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_IN = os.path.join(HERE, "20260919PM183158-大圆满前行-宗国法师.md")
 GLOSSARY = os.path.join(HERE, "佛教术语表.md")
 API = "http://127.0.0.1:1234/v1/chat/completions"
-LINE_RE = re.compile(r"^-\s+`\[(\d{2}:\d{2}:\d{2})\]`\s+(.*)$")
+LINE_RE = re.compile(r"^-\s+`\[?(\d{2}:\d{2}:\d{2})\]?`\s+(.*)$")  # 方括号可选：兼容 whisper 与 funasr 两代稿
 BATCH = 12
 EXTRA_SUSPECT = ["﹑", "　"]
 
