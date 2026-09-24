@@ -248,27 +248,19 @@
   <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">服务连接中…</span></span>
 </header>
 <nav>
-  <!-- 副标题演进：原为架构命名 ZG-059 B1~B4（2026-09-14 挂五相字），经两步收口——
-       (1) 2026-09-24 裁定②（日志057）五相彻底退出采集侧，采集工作台撤「入·照·运」；
-       (2) 2026-09-24 R4-a（日志064·法师裁 A2/A3）其余页签副标题**改写为功能名**，
-           五相字全部撤下；「显则·规则台账」系项目自有词属 M2 非五相，A3 裁定保留。
-       data-tab 标识符一律不动（JS 切换与 querySelector 均依赖它）。 -->
+  <!-- R4-b（2026-09-24 法师批 B2/B3）：六页签物理合并为三组——采集工作台｜实验回顾（总览六卡＋报告与质检＋档案与入库）｜系统管理（配置＋引导体验）。
+       原 ZG-059 副标题经 R4-a 功能名化后并入按钮；data-tab/section id 一律不动（JS 与懒加载依赖），入库后端零改动（红线）。
+       副标题演进：裁定②（09-24）撤采集侧五相字 → R4-a A2 其余改功能名 → R4-b 三组归并。 -->
   <button class="tab-btn active" data-tab="monitor">采集工作台</button>
-  <button class="tab-btn" data-tab="dashboard">实验回顾
-    <span class="tab-sub">总览 · 六卡（P1c）</span></button>
-  <button class="tab-btn" data-tab="config">配置管理
-    <span class="tab-sub">显则 · 规则台账</span></button>
-  <button class="tab-btn" data-tab="history">历史数据
-    <span class="tab-sub">报告 · 质检</span></button>
-  <button class="tab-btn" data-tab="govern">数据治理
-    <span class="tab-sub">档案 · 入库</span></button>
-  <button class="tab-btn" data-tab="guide">引导体验
-    <span class="tab-sub">外部 · 参考</span></button>
+  <button class="tab-btn" data-tab="review">实验回顾
+    <span class="tab-sub">总览 · 报告 · 治理</span></button>
+  <button class="tab-btn" data-tab="system">系统管理
+    <span class="tab-sub">显则 · 引导</span></button>
 </nav>
 <main>
 
 <!-- ═══ 监测采集 ═══ -->
-<section id="tab-monitor" class="tab active">
+<section id="tab-monitor" class="tab active" data-grp="monitor">
   <div class="card">
     <h2>会话登记</h2>
     <div class="row">
@@ -522,7 +514,7 @@
 </section>
 
 <!-- ═══ 实验回顾（原「实践驾驶舱」P1c 原型，2026-09-19 D45/D46；2026-09-24 R4-a 裁定①改名；纯读聚合，数字可点进源会话）═══ -->
-<section id="tab-dashboard" class="tab">
+<section id="tab-dashboard" class="tab" data-grp="review">
   <div class="card">
     <h2>实验回顾 · 六卡原型</h2>
     <div class="hint">样本／质量／标注／模型／伦理／进度——数据来自登记表＋manifest＋qc.json＋目录扫描（纯读，不写任何数据）。每个数字均可点进源会话。</div>
@@ -532,7 +524,7 @@
 </section>
 
 <!-- ═══ 配置管理 ═══ -->
-<section id="tab-config" class="tab">
+<section id="tab-config" class="tab" data-grp="system">
   <div class="card">
     <h2>配置编辑器</h2>
     <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
@@ -555,7 +547,7 @@
 </section>
 
 <!-- ═══ 历史数据 ═══ -->
-<section id="tab-history" class="tab">
+<section id="tab-history" class="tab" data-grp="review">
   <div class="card">
     <h2>脑电分析报告（监测会话与闭环实验共用，含场景与质检）</h2>
     <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
@@ -583,7 +575,7 @@
 </section>
 
 <!-- ═══ 数据治理 ═══ -->
-<section id="tab-govern" class="tab">
+<section id="tab-govern" class="tab" data-grp="review">
   <div class="card">
     <h2>本机测试者档案（默认可选，多人多份）</h2>
     <div class="hint" style="margin-top:0;">一次登记后本机默认复用，无需重复登记；可随时新增其他测试者或取消默认。档案存于本机 <b>console_profiles.json</b>，不随数据外传。</div>
@@ -656,7 +648,7 @@
 </section>
 
 <!-- ═══ 引导体验（他山之石）═══ -->
-<section id="tab-guide" class="tab">
+<section id="tab-guide" class="tab" data-grp="system">
   <div class="card">
     <h2>引导体验 · 他山之石</h2>
     <div class="hint" style="margin-top:0;">
@@ -761,17 +753,17 @@
 "use strict";
 const $ = id => document.getElementById(id);
 
-// ── 标签页切换 ──
+// ── 标签页切换（R4-b：三组，每组可含多个堆叠 section，按 data-grp 批量激活）──
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     btn.classList.add("active");
-    $("tab-" + btn.dataset.tab).classList.add("active");
-    if (btn.dataset.tab === "history") loadHistory();
-    if (btn.dataset.tab === "config" && !$("cfgEditor").value) loadConfigList();
-    if (btn.dataset.tab === "govern") loadGovern();
-    if (btn.dataset.tab === "dashboard") renderDashboard();
+    const g = btn.dataset.tab;
+    document.querySelectorAll('.tab[data-grp="' + g + '"]').forEach(s => s.classList.add("active"));
+    if (g === "review") { renderDashboard(); loadHistory(); loadGovern(); }
+    if (g === "system" && !$("cfgEditor").value) loadConfigList();
+    window.scrollTo(0, 0);
   };
 });
 
@@ -2169,11 +2161,10 @@ $("monWaveToggle").onclick = () => {
 
 // ── 管理档案入口（监测页） ──
 $("monManageProfiles").onclick = () => {
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-  document.querySelector('[data-tab="govern"]').classList.add("active");
-  $("tab-govern").classList.add("active");
-  loadGovern();
+  // R4-b：档案并入「实验回顾」组——点组按钮走统一懒加载，再滚到治理段
+  document.querySelector('[data-tab="review"]').click();
+  const g = $("tab-govern");
+  if (g) setTimeout(() => g.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
 };
 
 // ═══ 闭环反馈引擎（并入采集台，2026-09-08）═══
