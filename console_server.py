@@ -920,6 +920,8 @@ class ExperimentSession:
         self.mode = None
         self.tag = None
         self.last_result = None
+        # 闭环保存后的自评补记锚点（2026-09-25 D2 裁定；与 MonitorSession.saved 同构）
+        self.saved = None      # {"npz": ..., "report": ...}
 
     def is_running(self):
         return self.thread is not None and self.thread.is_alive()
@@ -947,6 +949,7 @@ class ExperimentSession:
             self.mode = "真机蓝牙"
         self.tag = cfg["experiment"]["tag"]
         self.session_info = dict(session_info or {})
+        self.saved = None   # 新会话开始，清上一次补记锚点
 
         def worker():
             def _emit_saved_card(ev):
@@ -956,6 +959,8 @@ class ExperimentSession:
                 report_path = ev.get("report_path")
                 if not (data_path and os.path.exists(data_path)):
                     return
+                # 先记锚点再算质检：补记口不依赖入库卡是否生成成功
+                self.saved = {"npz": data_path, "report": report_path}
                 try:
                     qc = qc_assess(data_path, report_path)
                     info = self.session_info
@@ -1034,6 +1039,7 @@ class ExperimentSession:
                            if self.started_at else None),
             "mode": self.mode,
             "tag": self.tag,
+            "saved": self.saved,
             "last_result": self.last_result,
         }
 
@@ -1535,6 +1541,27 @@ def stop_experiment(payload: Optional[dict] = None):
     if not SESSION.stop():
         raise HTTPException(status_code=409, detail="当前没有正在运行的实验")
     return {"ok": True, "message": "已发送停止指令，实验将在当前决策周期后结束"}
+
+
+@app.post("/api/experiment/self_report")
+def experiment_self_report(payload: MonitorStopPayload):
+    """闭环 crash/断连自动保存后的自评补记（2026-09-25 D2 裁定，监测侧对等口）。
+
+    npz meta 已写盘、不改写（契约附属物＋原子性）；只把这条自评**追加进事件流**
+    （P2 只追加）。落盘时 `_append_experience_events` 已如实记"跳过＝未自评"，
+    补记事件在其后到达，复盘以最后一条 self_report 为准——事件流是行为账本，
+    如实保留"当时没交、后来补了"的语义。
+    """
+    saved = SESSION.saved or {}
+    npz = saved.get("npz")
+    if not npz:
+        raise HTTPException(status_code=409, detail="没有可补交自评的已保存实验会话")
+    from session_contract import append_event, events_path_for
+    ok = append_event(
+        events_path_for(npz), "experience", "subject", "self_report",
+        dict(payload.self_report or {"skipped": True}),
+        "实验后自评（闭环 crash/断连自动保存后补交）")
+    return {"ok": bool(ok), "appended": bool(ok)}
 
 
 @app.get("/api/experiment/status")
