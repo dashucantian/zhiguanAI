@@ -44,6 +44,27 @@
     border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px;
     font-size: 13px; }
   .field input:focus { outline: none; border-color: var(--accent); }
+  /* 点选芯片组（2026-09-24 登记/自评重设计：去默认值，未选即 null） */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: var(--panel2); color: var(--text); cursor: pointer;
+    border: 1px solid var(--border); border-radius: 14px; padding: 5px 14px;
+    font-size: 13px; }
+  .chip.sel { border-color: var(--accent); color: var(--accent);
+    background: rgba(108, 152, 193, .12); font-weight: bold; }
+  .sr-req { color: var(--warn); font-size: 11px; margin-left: 4px; }
+  .sr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.62);
+    z-index: 98; display: none; align-items: center; justify-content: center; }
+  .sr-box { background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 26px; max-width: 560px; width: 92%;
+    max-height: 90vh; overflow-y: auto; }
+  .sr-box h2 { font-size: 16px; margin-bottom: 4px; }
+  .sr-box .field { margin-top: 14px; }
+  .sr-box textarea { background: #0d0d18; color: var(--text);
+    border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px;
+    font-size: 13px; min-height: 44px; resize: vertical; }
+  details.fold summary { font-size: 12px; color: var(--dim); cursor: pointer;
+    margin-top: 8px; }
+  details.fold input { margin-top: 6px; }
   button.btn { background: var(--accent); color: #06202c; border: none;
     border-radius: 5px; padding: 9px 22px; font-size: 14px; font-weight: bold;
     cursor: pointer; }
@@ -200,9 +221,11 @@
 <nav>
   <!-- 副标题为架构命名 ZG-059 B1~B4（2026-09-14 法师裁定）：只加显示层标注，
        data-tab 标识符一律不动（JS 切换与 querySelector 均依赖它）。
-       「显则」是项目自有词、属 M2 规则层，非修行五相，故配置管理不挂五相。 -->
-  <button class="tab-btn active" data-tab="monitor">采集工作台
-    <span class="tab-sub">入 · 照 · 运</span></button>
+       「显则」是项目自有词、属 M2 规则层，非修行五相，故配置管理不挂五相。
+       2026-09-24 改判（日志057 裁定②）：五相彻底退出采集侧——采集工作台
+       显式撤下「入 · 照 · 运」标注（ZG-059 B1 对该页签的裁定作废）；
+       五相仅存在于分析/解释层，其余页签副标题待 R4 一并处理。 -->
+  <button class="tab-btn active" data-tab="monitor">采集工作台</button>
   <button class="tab-btn" data-tab="dashboard">实践驾驶舱
     <span class="tab-sub">照 · 复盘（P1c 原型）</span></button>
   <button class="tab-btn" data-tab="config">配置管理
@@ -219,7 +242,7 @@
 <!-- ═══ 监测采集 ═══ -->
 <section id="tab-monitor" class="tab active">
   <div class="card">
-    <h2>会话登记与反馈</h2>
+    <h2>会话登记</h2>
     <div class="row">
       <div class="field">
         <label>测试者（本机默认可选，多人多份）</label>
@@ -235,25 +258,42 @@
         </select>
       </div>
       <div class="field">
-        <label>事前自评（身心状态）</label>
-        <input id="monPreState" placeholder="如：平静、刚静坐后…">
-      </div>
-      <div class="field">
-        <label>接触质量初评</label>
-        <select id="monContact">
-          <option value="good">良好</option>
-          <option value="medium">一般</option>
-          <option value="bad">差（需调整电极）</option>
+        <label>场景/意图</label>
+        <select id="monIntent">
+          <option value="坐禅">坐禅</option>
+          <option value="行禅">行禅</option>
+          <option value="日常">日常</option>
+          <option value="实验">实验</option>
         </select>
       </div>
-      <div class="field">
-        <label>备注</label>
-        <input id="monNote" placeholder="环境、事件等">
+    </div>
+    <div class="row">
+      <div class="field" style="min-width:auto;">
+        <label>当下状态<span class="sr-req">必选 · 无默认</span></label>
+        <div class="chips" id="monStateChips">
+          <button type="button" class="chip" data-val="清醒">清醒</button>
+          <button type="button" class="chip" data-val="微困">微困</button>
+          <button type="button" class="chip" data-val="疲惫">疲惫</button>
+          <button type="button" class="chip" data-val="平静">平静</button>
+          <button type="button" class="chip" data-val="起伏">起伏</button>
+        </div>
+      </div>
+      <div class="field" style="min-width:auto;">
+        <label>接触快检<span class="sr-req">必选 · 无默认</span></label>
+        <div class="chips" id="monContactChips">
+          <button type="button" class="chip" data-val="good">良好</button>
+          <button type="button" class="chip" data-val="medium">一般</button>
+          <button type="button" class="chip" data-val="bad">需调整</button>
+        </div>
       </div>
     </div>
+    <details class="fold">
+      <summary>补充说明（可选）</summary>
+      <input id="monNote" placeholder="环境、事件等">
+    </details>
     <div class="toolbar">
       <button class="btn ghost" id="monManageProfiles">👤 管理本机档案</button>
-      <span class="hint" style="margin:0;">登记信息随数据写入 npz 并自动带入入库流程；档案在「数据治理」页签维护。</span>
+      <span class="hint" style="margin:0;">登记信息随数据写入 npz 并自动带入入库流程；状态/接触未选不冒充真值（如实记 null）；档案在「数据治理」页签维护。</span>
     </div>
   </div>
 
@@ -397,18 +437,8 @@
           <option value="quarantine">隔离区落盘</option>
         </select>
       </div>
-      <div class="field">
-        <label>事后自评（身心状态）</label>
-        <input id="monPostState" placeholder="如：更放松、无不适…">
-      </div>
-      <div class="field">
-        <label>接触质量终评</label>
-        <select id="monContactFinal">
-          <option value="good">良好</option>
-          <option value="medium">一般</option>
-          <option value="bad">差</option>
-        </select>
-      </div>
+      <!-- 事后自评/接触终评已移至"停止时弹出的自评卡"（2026-09-24 裁定7：
+           必弹可跳过；结束当下回忆最准，且避免旧文本框虚标 good） -->
     </div>
     <textarea class="cmdbox" id="monIngestCmd" readonly></textarea>
     <div class="toolbar">
@@ -615,6 +645,68 @@
 </section>
 
 </main>
+
+<!-- ═══ 采集后自评卡（2026-09-24 重设计；停止采集后必弹、可跳过＝如实记"未自评"）═══
+     措辞经法师 09-24 裁定定稿：水面（身心受）/天色（清晰度）；档位只显词不显数。
+     「这一坐的相」五相映射行按裁定⑤留到 R4，本卡不带。镜子不评判：无分数无排名。 -->
+<div class="sr-overlay" id="srOverlay">
+  <div class="sr-box">
+    <h2>这一坐，身体与心还记得什么</h2>
+    <span class="hint">点选即可，约 20 秒；不想说就按「这次先跳过」——跳过也会被如实记下。</span>
+    <div class="field">
+      <label>身心受 · 水面（颠簸 ↔ 澄明）</label>
+      <div class="chips" id="srValence">
+        <button type="button" class="chip" data-val="0" data-word="颠簸">颠簸</button>
+        <button type="button" class="chip" data-val="1" data-word="起浪">起浪</button>
+        <button type="button" class="chip" data-val="2" data-word="微澜">微澜</button>
+        <button type="button" class="chip" data-val="3" data-word="平水">平水</button>
+        <button type="button" class="chip" data-val="4" data-word="澄明">澄明</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>清晰度 · 天色（昏沉 ↔ 澄澈）</label>
+      <div class="chips" id="srClarity">
+        <button type="button" class="chip" data-val="0" data-word="昏沉">昏沉</button>
+        <button type="button" class="chip" data-val="1" data-word="阴翳">阴翳</button>
+        <button type="button" class="chip" data-val="2" data-word="微明">微明</button>
+        <button type="button" class="chip" data-val="3" data-word="晴明">晴明</button>
+        <button type="button" class="chip" data-val="4" data-word="澄澈">澄澈</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>注意力品质（可多选）</label>
+      <div class="chips" id="srAttention">
+        <button type="button" class="chip" data-val="安定">安定</button>
+        <button type="button" class="chip" data-val="散乱">散乱</button>
+        <button type="button" class="chip" data-val="昏沉">昏沉</button>
+        <button type="button" class="chip" data-val="浮动">浮动</button>
+        <button type="button" class="chip" data-val="投入">投入</button>
+        <button type="button" class="chip" data-val="空白">空白</button>
+      </div>
+    </div>
+    <div class="field">
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="srAdverseOn" style="min-width:auto;"> 有不适反应
+      </label>
+      <div class="chips" id="srAdverseTags" style="display:none;">
+        <button type="button" class="chip" data-val="头痛">头痛</button>
+        <button type="button" class="chip" data-val="眼胀">眼胀</button>
+        <button type="button" class="chip" data-val="耳鸣">耳鸣</button>
+        <button type="button" class="chip" data-val="情绪">情绪</button>
+        <button type="button" class="chip" data-val="其他">其他</button>
+      </div>
+    </div>
+    <details class="fold" id="srSentenceFold">
+      <summary>此刻一句（可选，言语道断可不写）</summary>
+      <textarea id="srSentence" maxlength="200"></textarea>
+    </details>
+    <div class="toolbar" style="justify-content:flex-end;margin-top:16px;">
+      <button class="btn ghost" id="srSkip">这次先跳过</button>
+      <button class="btn" id="srOk">记下</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
@@ -687,6 +779,124 @@ function askConfirm(title, bodyText) {
     document.body.appendChild(mask);
   });
 }
+
+// ── 点选芯片组（登记 & 自评共用，2026-09-24 交互重设计）──
+// 无默认值：初始一律未选；未选读出 null（数据诚实裁定6，杜绝虚标 good）。
+function bindChips(el, { multi = false } = {}) {
+  const get = () => {
+    const s = el.querySelectorAll(".chip.sel");
+    if (!multi) return s[0] ? s[0].dataset.val : null;
+    return [...s].map(b => b.dataset.val);
+  };
+  el.querySelectorAll(".chip").forEach(b => {
+    b.onclick = () => {
+      if (multi) {
+        b.classList.toggle("sel");
+      } else {
+        const on = b.classList.contains("sel");
+        el.querySelectorAll(".chip.sel").forEach(x => x.classList.remove("sel"));
+        if (!on) b.classList.add("sel");   // 再点一下可取消，不留误点残留
+      }
+    };
+  });
+  return { get,
+           clear: () => el.querySelectorAll(".chip.sel")
+                        .forEach(x => x.classList.remove("sel")) };
+}
+const selWord = el => {
+  const s = el.querySelector(".chip.sel");
+  return s ? (s.dataset.word || s.dataset.val) : null;
+};
+
+// ── 事前登记：状态/接触两组芯片（必选，start 前把关）──
+const regStateChips = bindChips($("monStateChips"));
+const regContactChips = bindChips($("monContactChips"));
+// 场景意图"记忆上次"（讨论稿 §三：默认=记忆）；仅 UI 偏好，非数据默认。
+(() => {
+  try {
+    const last = localStorage.getItem("zg.intent");
+    if (last && [...$("monIntent").options].some(o => o.value === last))
+      $("monIntent").value = last;
+  } catch (e) {}
+})();
+$("monIntent").onchange = e => {
+  try { localStorage.setItem("zg.intent", e.target.value); } catch (x) {}
+};
+
+// ── 采集后自评卡：停止后必弹、可跳过（裁定7；跳过=如实记"未自评"）──
+const srV = bindChips($("srValence"));
+const srC = bindChips($("srClarity"));
+const srA = bindChips($("srAttention"), { multi: true });
+const srAdv = bindChips($("srAdverseTags"), { multi: true });
+$("srAdverseOn").onchange = e => {
+  $("srAdverseTags").style.display = e.target.checked ? "" : "none";
+};
+let srPending = null;
+function openSelfReport() {
+  srV.clear(); srC.clear(); srA.clear(); srAdv.clear();   // 每次从空开始，不沿袭上一坐
+  $("srAdverseOn").checked = false;
+  $("srAdverseTags").style.display = "none";
+  $("srSentence").value = "";
+  $("srSentenceFold").open = false;
+  $("srOverlay").style.display = "flex";
+  return new Promise(res => { srPending = res; });
+}
+function srFinish(v) {
+  $("srOverlay").style.display = "none";
+  const r = srPending; srPending = null;
+  if (r) r(v);
+}
+$("srSkip").onclick = () => srFinish({ skipped: true });
+$("srOk").onclick = () => {
+  const v = srV.get(), c = srC.get();
+  srFinish({
+    skipped: false,
+    valence: v === null ? null : +v, valence_word: selWord($("srValence")),
+    clarity: c === null ? null : +c, clarity_word: selWord($("srClarity")),
+    attention: srA.get(),
+    adverse: { on: $("srAdverseOn").checked, tags: srAdv.get() },
+    sentence: $("srSentence").value.trim() || null,
+  });
+};
+
+// 自评 → 登记表 post_state 列摘要（与服务端 _self_report_summary 同规则）
+function srSummary(sr) {
+  if (!sr || sr.skipped) return "未自评";
+  const p = [];
+  if (sr.valence !== null && sr.valence !== undefined)
+    p.push("水面=" + (sr.valence_word || sr.valence));
+  if (sr.clarity !== null && sr.clarity !== undefined)
+    p.push("天色=" + (sr.clarity_word || sr.clarity));
+  if (sr.attention && sr.attention.length) p.push("注意力=" + sr.attention.join(","));
+  if (sr.adverse && sr.adverse.on)
+    p.push("不适=" + ((sr.adverse.tags || []).join(",") || "未细列"));
+  if (sr.sentence) p.push("一句:" + sr.sentence.slice(0, 60));
+  return p.length ? p.join("｜") : "未自评";
+}
+
+// 断连自动保存后的自评补记：npz meta 不改写，只追加 experience 事件
+async function selfReportSupplemental(npz) {
+  const sr = await openSelfReport();
+  const payload = sr && sr.skipped ? { skipped: true } : sr;
+  if (lastReg) {
+    lastReg.self_report = payload;
+    lastReg.post_state = srSummary(payload);
+  }
+  try {
+    await api("/api/monitor/self_report", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ self_report: payload }) });
+    monMsg(payload && payload.skipped ? "已如实记录：本次未自评"
+                                      : "自评已补记入会话事件流（数据文件不改写）", "ok");
+  } catch (e) {
+    monMsg("自评补记失败（不影响已保存数据）：" + e.message, "err");
+  }
+}
+
+// 本会话登记快照（入库卡与自评摘要取用；DOM 芯片在开始后即清空）
+let lastReg = null;
+let stopRequested = false;    // 停止按钮已按下（自评卡已弹）
+let midSaveRequested = false; // 「保存（不断连）」——不算停止，不弹自评
 function toast(text, cls) {
   const t = document.createElement("div");
   t.textContent = text;
@@ -1200,6 +1410,9 @@ function handleMonitorEvent(ev) {
     monSaved = ev;
     showQcBox(ev.qc);
     refreshSidOptions();
+    // 断连自动保存（非停止按钮、非"保存（不断连）"触发）：自评卡同样必弹。
+    // npz meta 已落盘不改写（原子性），自评以补记事件进事件流（P2 只追加）。
+    if (!stopRequested && !midSaveRequested) selfReportSupplemental(ev.npz);
   } else if (ev.type === "error") {
     monLastError = ev.text;
     monMsg("错误：" + ev.text, "err");
@@ -1270,13 +1483,22 @@ $("monStart").onclick = async () => {
       address: $("monAddress").value.trim() || null,
       participant: $("monParticipant").value || null,
       session_type: $("monSessionType").value,
-      pre_state: $("monPreState").value.trim() || null,
-      contact_quality: $("monContact").value,
+      pre_state: regStateChips.get(),           // 未选=null（必选把关在下方）
+      contact_quality: regContactChips.get(),   // 无默认，杜绝虚标 good
+      intent: $("monIntent").value || null,
       note: $("monNote").value.trim() || null,
     };
+    // R1 把关：状态/接触必选——未选不冒充真值，也不许空手开始
+    if (!common.pre_state || !common.contact_quality) {
+      return monMsg("请先点选「当下状态」与「接触快检」——两项必选且无默认（未选即不记录）", "err");
+    }
     if (!common.simulate && !common.participant) {
       return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
     }
+    // 登记快照：入库卡/摘要以此为准（芯片随后清空，防上一坐选择隐性变成默认）
+    lastReg = Object.assign({}, common);
+    stopRequested = false;
+    midSaveRequested = false;
     if (wsMode === "loop") {
       // ── 闭环反馈模式 ──
       const b = $("inBaseline").value ? +$("inBaseline").value : null;
@@ -1296,6 +1518,7 @@ $("monStart").onclick = async () => {
         $("monStop").disabled = false;
         $("expSummaryCard").style.display = "none";
         connectStream();
+        regStateChips.clear(); regContactChips.clear(); $("monNote").value = "";
         monMsg("实验已启动，等待数据…", "ok");
       } catch (e) {
         $("monStart").disabled = false;
@@ -1315,6 +1538,7 @@ $("monStart").onclick = async () => {
       setMarkerButtons(true);          // 采集中才开放打点
       setPhase("监测中", "monitor");
       connectMonitorStream();
+      regStateChips.clear(); regContactChips.clear(); $("monNote").value = "";
       monMsg("正在连接数据源…", "ok");
     } catch (e) {
       $("monStart").disabled = false;
@@ -1333,12 +1557,20 @@ $("monStart").onclick = async () => {
 };
 
 $("monStop").onclick = async () => {
+  // 自评必弹（裁定7）：先弹卡再发停止指令——结束当下回忆最准，
+  // 弹窗期间采集继续（数据不丢；后端幂等保存兜底）。
+  stopRequested = true;
+  const sr = await openSelfReport();
+  const payload = sr && sr.skipped ? { skipped: true } : sr;
+  if (lastReg) {
+    lastReg.self_report = payload;
+    lastReg.post_state = srSummary(payload);
+  }
   if ($("wsMode").value === "loop") {
     try {
       await api("/api/experiment/stop", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          post_state: $("monPostState").value.trim() || null }) });
+        body: JSON.stringify({ self_report: payload }) });
       monMsg("已发送停止指令…");
     } catch (e) { monMsg(e.message, "err"); }
     return;
@@ -1346,15 +1578,14 @@ $("monStop").onclick = async () => {
   try {
     await api("/api/monitor/stop", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        save: true,
-        post_state: $("monPostState").value.trim() || null }) });
+      body: JSON.stringify({ save: true, self_report: payload }) });
     monMsg("正在保存并停止…");
   } catch (e) { monMsg(e.message, "err"); }
 };
 
 $("monSave").onclick = async () => {
   try {
+    midSaveRequested = true;   // 中途保存不弹自评卡（自评只在"停止"时必弹）
     await api("/api/monitor/save", { method: "POST" });
     monMsg("已请求保存（采集不中断）…", "ok");
   } catch (e) { monMsg(e.message, "err"); }
@@ -1798,10 +2029,12 @@ $("monIngestRun").onclick = async () => {
         quarantine,
         // 场景不在此硬编码（2026-09-18 修）：npz meta.scene 为权威（ingest 端
         // meta 优先、--scene 仅回退），否则闭环会话会被误标为 monitor。
-        note: $("monNote").value.trim() || null,
-        pre_state: $("monPreState").value.trim() || null,
-        post_state: $("monPostState").value.trim() || null,
-        contact_quality: ($("monContactFinal").value || null),
+        // 登记/自评一律取会话快照 lastReg（2026-09-24 重设计：芯片开始后即清空、
+        // 自评在停止弹窗提交，DOM 现值不再是权威；null 如实传 null）。
+        note: lastReg ? (lastReg.note || null) : null,
+        pre_state: lastReg ? (lastReg.pre_state || null) : null,
+        post_state: lastReg ? (lastReg.post_state || null) : null,
+        contact_quality: lastReg ? (lastReg.contact_quality || null) : null,
       }) });
     out.textContent = r.output || "(无输出)";
     $("monIngestMsg").textContent = r.ok ? "✅ 入库完成" : "❌ 入库失败";

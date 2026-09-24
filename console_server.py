@@ -641,6 +641,10 @@ class MonitorSession:
                               "packet_loss_rate": (qc.get("metrics") or {})
                               .get("packet_loss_rate")},
                              "监测路径质检完成")
+                # 事前登记＋事后自评 → experience 事件（2026-09-24 裁定2/6/7；
+                # meta.self_report 已由 extra_meta 落盘，事件流是行为侧账本）
+                _append_experience_events(events_path_for(data_path),
+                                          info, self.started_at)
             except Exception:
                 pass
         return self.saved
@@ -986,6 +990,9 @@ class ExperimentSession:
                                      "闭环路径质检完成")
                         append_event(ep, "closed", "operator", "measured",
                                      {"saved": True}, "闭环实验结束")
+                        # 事前登记＋事后自评 → experience 事件（同监测路径，
+                        # meta.self_report 由 run_closed_loop 的 session_info 落盘）
+                        _append_experience_events(ep, info, self.started_at)
                     except Exception:
                         pass
                 except Exception as ex:
@@ -1246,6 +1253,7 @@ class MonitorStartPayload(BaseModel):
     session_type: Optional[str] = None
     pre_state: Optional[str] = None
     contact_quality: Optional[str] = None
+    intent: Optional[str] = None      # 场景意图（坐禅/行禅/日常/实验，2026-09-24 裁定2）
     note: Optional[str] = None
 
 
@@ -1265,6 +1273,49 @@ def _resolve_replay_path(name: str) -> str:
     return real
 
 
+def _self_report_summary(sr):
+    """自评 → 入库登记表 post_state 列的可读摘要（枚举词，非自由文本）。
+    未自评如实写「未自评」（数据诚实红线，2026-09-24 裁定 7）。"""
+    if not sr or sr.get("skipped"):
+        return "未自评"
+    parts = []
+    if sr.get("valence") is not None:
+        parts.append(f"水面={sr.get('valence_word') or sr['valence']}")
+    if sr.get("clarity") is not None:
+        parts.append(f"天色={sr.get('clarity_word') or sr['clarity']}")
+    if sr.get("attention"):
+        parts.append("注意力=" + ",".join(sr["attention"]))
+    if (sr.get("adverse") or {}).get("on"):
+        parts.append("不适=" + ",".join(sr["adverse"].get("tags") or ["未细列"]))
+    if sr.get("sentence"):
+        parts.append("一句:" + str(sr["sentence"])[:60])
+    return "｜".join(parts) if parts else "未自评"
+
+
+def _append_experience_events(events_path, info, started_at):
+    """事前/事后自评各追加一条 experience 事件（kind=self_report，讨论稿 §四）。
+    复用 marker 同一 append_event 管道（红线5）；ts=登记/提交时刻，非写盘时刻。
+    未选字段如实为 null（裁定6：未选即未记录，不冒充真值）。契约附属物：失败静默。"""
+    if not events_path:
+        return
+    from session_contract import append_event
+    pre = {"state": info.get("pre_state"),
+           "contact": info.get("contact_quality"),
+           "intent": info.get("intent"),
+           "note": info.get("note")}
+    append_event(events_path, "experience", "subject", "self_report", pre,
+                 "采集前登记（未选=null）",
+                 ts=(started_at.astimezone().isoformat(timespec="seconds")
+                     if started_at else None))
+    sr = info.get("self_report")
+    post = (dict(sr) if sr else {"skipped": True})
+    post.setdefault("skipped", False)
+    if post.get("skipped"):
+        post = {"skipped": True, "note": "自评弹窗被关闭/断连未提交，如实记未自评"}
+    append_event(events_path, "experience", "subject", "self_report", post,
+                 "采集后自评（跳过=如实记未自评）")
+
+
 @app.post("/api/monitor/start")
 def monitor_start(payload: MonitorStartPayload):
     _assert_no_other_session(MONITOR)
@@ -1277,15 +1328,19 @@ def monitor_start(payload: MonitorStartPayload):
     replay_path = None
     if payload.replay_npz:
         replay_path = _resolve_replay_path(payload.replay_npz)
+    # 数据诚实（2026-09-24 裁定6）：未选即 null，不写成空串冒充"登记过但为空"；
+    # 唯一例外 participant/session_type（入库必需要素，前端本就必填）。
     session_info = {"participant": payload.participant or "",
                     "session_type": payload.session_type or "",
-                    "pre_state": payload.pre_state or "",
-                    "contact_quality": payload.contact_quality or "",
-                    "note": payload.note or ""}
+                    "pre_state": payload.pre_state,
+                    "contact_quality": payload.contact_quality,
+                    "intent": payload.intent,
+                    "note": payload.note}
     if replay_path:
         # 数据边界：回放会话一律标记为回放，禁止入库 Zen-EEG。
         session_info["session_type"] = "replay"
-        session_info["note"] = ((session_info["note"] + " | ") if session_info["note"] else "") \
+        session_info["note"] = ((str(session_info["note"]) + " | ")
+                                if session_info["note"] else "") \
             + "B3离线回放，禁止入库"
     MONITOR.start(simulate=payload.simulate, address=payload.address,
                   session_info=session_info,
@@ -1302,17 +1357,43 @@ def monitor_start(payload: MonitorStartPayload):
 
 class MonitorStopPayload(BaseModel):
     save: bool = True
-    post_state: Optional[str] = None
+    post_state: Optional[str] = None       # 旧字段保留兼容：不再由前端填写
+    self_report: Optional[dict] = None     # 自评五控件（2026-09-24 裁定2/7）
 
 
 @app.post("/api/monitor/stop")
 def monitor_stop(payload: MonitorStopPayload):
-    if payload.post_state:
+    if MONITOR.is_running() and payload.self_report is not None:
+        # 自评先写入共享 session_info，随后 worker 停止→_do_save 读取落盘；
+        # post_state 列存枚举词摘要（登记表可读），原值在 meta.self_report。
+        MONITOR.session_info["self_report"] = payload.self_report
+        MONITOR.session_info["post_state"] = _self_report_summary(
+            payload.self_report)
+    elif payload.post_state:
         MONITOR.session_info["post_state"] = payload.post_state
     if not MONITOR.request_stop(save=payload.save):
         raise HTTPException(status_code=409, detail="当前没有正在运行的监测会话")
     return {"ok": True, "message": "已发送停止指令" +
             ("（将先保存数据）" if payload.save else "")}
+
+
+@app.post("/api/monitor/self_report")
+def monitor_self_report(payload: MonitorStopPayload):
+    """断连自动保存后的补交自评（弹窗在'saved'事件后仍可提交）。
+
+    npz meta 已写盘、不改写（契约附属物＋原子性）；只把这条自评**追加进事件流**
+    （P2 只追加），experience/self_report 事件如实承载后补语义。
+    """
+    saved = MONITOR.saved or {}
+    npz = saved.get("npz")
+    if not npz:
+        raise HTTPException(status_code=409, detail="没有可补交自评的已保存会话")
+    from session_contract import append_event, events_path_for
+    ok = append_event(
+        events_path_for(npz), "experience", "subject", "self_report",
+        dict(payload.self_report or {"skipped": True}),
+        "采集后自评（断连自动保存后补交）")
+    return {"ok": bool(ok), "appended": bool(ok)}
 
 
 @app.post("/api/monitor/save")
@@ -1404,6 +1485,7 @@ class StartPayload(BaseModel):
     session_type: Optional[str] = None   # 采集台统一表单：与会话登记共用
     pre_state: Optional[str] = None
     contact_quality: Optional[str] = None
+    intent: Optional[str] = None         # 场景意图（2026-09-24 裁定2）
     post_state: Optional[str] = None
     note: Optional[str] = None
 
@@ -1420,12 +1502,14 @@ def start_experiment(payload: StartPayload):
         cfg = load_experiment_config(real, cli_overrides=overrides)
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))
+    # 数据诚实（2026-09-24 裁定6）：未选即 null，不写空串冒充"登记过但为空"
     session_info = {"participant": payload.participant or "",
                     "session_type": payload.session_type or "",
-                    "pre_state": payload.pre_state or "",
-                    "contact_quality": payload.contact_quality or "",
-                    "post_state": payload.post_state or "",
-                    "note": payload.note or ""}
+                    "pre_state": payload.pre_state,
+                    "contact_quality": payload.contact_quality,
+                    "intent": payload.intent,
+                    "post_state": payload.post_state,
+                    "note": payload.note}
     SESSION.start(cfg, simulate=payload.simulate, address=payload.address,
                   adapter=payload.adapter or "bleak",
                   serial_port=payload.serial_port,
@@ -1439,8 +1523,14 @@ def start_experiment(payload: StartPayload):
 
 @app.post("/api/experiment/stop")
 def stop_experiment(payload: Optional[dict] = None):
-    # 统一入库卡需要事后自评：停止体可选 {"post_state": "..."}
-    if payload and payload.get("post_state"):
+    # 统一入库卡需要事后自评：停止体可选 {"self_report": {...}}
+    # session_info 与 run_closed_loop 共享同一 dict 引用 → 停止时写入可赶在
+    # 引擎存盘前送达 meta（self_report/post_state 同机制）。
+    if payload and payload.get("self_report") is not None:
+        SESSION.session_info["self_report"] = payload["self_report"]
+        SESSION.session_info["post_state"] = _self_report_summary(
+            payload["self_report"])
+    elif payload and payload.get("post_state"):
         SESSION.session_info["post_state"] = str(payload["post_state"])
     if not SESSION.stop():
         raise HTTPException(status_code=409, detail="当前没有正在运行的实验")
