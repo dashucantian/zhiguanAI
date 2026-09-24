@@ -65,6 +65,35 @@
   details.fold summary { font-size: 12px; color: var(--dim); cursor: pointer;
     margin-top: 8px; }
   details.fold input { margin-top: 6px; }
+  /* ── 专注模式（R3′·V3 虚空单境哲学：采集时隐藏复杂度，行者不盯数据）──
+     z-index 90：压在自评卡 sr-overlay(98) 之下——停止时自评必弹浮于其上。 */
+  .fx-overlay { position: fixed; inset: 0; z-index: 90; display: none;
+    background: radial-gradient(ellipse at 50% 42%, #121a2b 0%, #0a0d14 62%, #060709 100%);
+    flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
+  .fx-dots { position: relative; width: 96px; height: 96px; }
+  .fx-dots::after { content: ""; position: absolute; left: 50%; top: 50%;
+    width: 96px; height: 96px; transform: translate(-50%, -50%);
+    border-radius: 50%; border: 1px solid rgba(78, 205, 196, .22);
+    animation: fxBreath 7s ease-in-out infinite; }
+  .fx-dot { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px;
+    transform: translate(-50%, -50%); border-radius: 50%;
+    background: radial-gradient(circle at 38% 34%, rgba(150, 240, 230, .95),
+      rgba(78, 205, 196, .6) 55%, rgba(78, 205, 196, .12) 78%);
+    box-shadow: 0 0 38px 10px rgba(78, 205, 196, .28);
+    animation: fxBreath 7s ease-in-out infinite; }
+  @keyframes fxBreath { 0%, 100% { transform: translate(-50%, -50%) scale(.6); opacity: .5; }
+    46%, 54% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; } }
+  .fx-elapsed { font-size: 30px; color: #dfeff0; letter-spacing: 3px; min-height: 34px; }
+  .fx-row { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+  .fx-row .chip { background: transparent; color: #9fb6ba;
+    border: 1px solid #2c3b48; border-radius: 14px; padding: 5px 14px; font-size: 13px; }
+  .fx-row .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .fx-row input { background: rgba(255,255,255,.06); color: var(--text);
+    border: 1px solid #2c3b48; border-radius: 4px; padding: 6px 10px; font-size: 13px; }
+  .fx-exit { background: none; border: none; color: #5c6b70; font-size: 12px;
+    cursor: pointer; letter-spacing: 1px; }
+  .fx-exit:hover { color: var(--text); }
+  body.fx-lock { overflow: hidden; }
   button.btn { background: var(--accent); color: #06202c; border: none;
     border-radius: 5px; padding: 9px 22px; font-size: 14px; font-weight: bold;
     cursor: pointer; }
@@ -353,6 +382,7 @@
       <button class="btn" id="monStart">▶ 开始采集</button>
       <button class="btn ghost" id="monSave" disabled>💾 保存（不断连）</button>
       <button class="btn danger" id="monStop" disabled>■ 停止并保存</button>
+      <button class="btn ghost" id="btnFocus" disabled title="隐藏波形与数值，只留呼吸光点、时长、打点与结束（浏览器端；Pico 侧随 S1 收口后另议）">🧘 专注模式</button>
       <span class="msg" id="monMsg"></span>
     </div>
     <!-- 采集期手打标记（2026-09-24 法师授权，T1 睁闭眼等协议用）：
@@ -636,6 +666,7 @@
     <div class="toolbar" style="margin-top:10px;">
       <button class="btn" id="btnLoadGuide">加载引导体验</button>
       <button class="btn ghost" id="btnUnloadGuide">关闭</button>
+      <button class="btn ghost" id="btnFxPreview" title="与采集工作台专注模式共用同一体验层组件（R3′ 对齐；本入口不涉采集）">🧘 体验专注模式</button>
       <span class="msg" id="guideMsg"></span>
     </div>
     <div id="guideContainer" style="margin-top:15px; display:none;">
@@ -645,6 +676,26 @@
 </section>
 
 </main>
+
+<!-- ═══ 专注模式 overlay（R3′·V3 虚空单境：采集时隐藏复杂度）═══
+     中心呼吸光点（7s 缓吸缓呼）＋时长＋事件打点＋结束钮，其余全折叠。
+     结束钮复用「停止并保存」主链路（自评卡 z98 浮于本层 z90 之上，必弹不破）。
+     引导体验页签可以 preview 态借用本组件（体验层设计语言统一）。 -->
+<div class="fx-overlay" id="fxOverlay">
+  <div class="fx-dots"><div class="fx-dot"></div></div>
+  <div class="fx-elapsed" id="fxElapsed"></div>
+  <div class="fx-row" id="fxMarkerRow">
+    <button type="button" class="chip mon-marker" data-label="睁眼" disabled>👁 睁眼</button>
+    <button type="button" class="chip mon-marker" data-label="闭眼" disabled>🌙 闭眼</button>
+    <input id="fxMarkerCustom" placeholder="自定义…" style="width:120px" disabled />
+    <button type="button" class="chip mon-marker" id="fxMarkerAdd" disabled>＋记</button>
+  </div>
+  <div class="fx-row" id="fxStampLine" style="min-height:18px;"><span class="hint" id="fxMsg" style="margin:0;color:#7f9296;"></span></div>
+  <div class="fx-row" id="fxCtlRow">
+    <button class="btn danger" id="fxFinish">■ 结束这一坐</button>
+  </div>
+  <button class="fx-exit" id="fxExit">↩ 回到全仪表（Esc）· 采集继续在后台进行</button>
+</div>
 
 <!-- ═══ 采集后自评卡（2026-09-24 重设计；停止采集后必弹、可跳过＝如实记"未自评"）═══
      措辞经法师 09-24 裁定定稿：水面（身心受）/天色（清晰度）；档位只显词不显数。
@@ -1419,6 +1470,7 @@ function handleMonitorEvent(ev) {
   } else if (ev.type === "end") {
     monRunning = false;
     setMarkerButtons(false);           // 会话结束，打点关闭
+    if (fxOn) fxClose();               // 专注模式随会话结束收起，露出全仪表看保存卡
     setPhase("待机", "");
     $("monStart").disabled = false;
     $("monStop").disabled = true;
@@ -1600,6 +1652,8 @@ function setMarkerButtons(on) {
   document.querySelectorAll(".mon-marker").forEach(b => { b.disabled = !on; });
   const c = $("markerCustom");
   if (c) c.disabled = !on;
+  const fc = $("fxMarkerCustom");
+  if (fc) fc.disabled = !on;
 }
 function markerStamp(text) {
   const el = $("markerMsg");
@@ -1616,9 +1670,11 @@ async function sendMarker(label) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label }) });
     markerStamp(`📍 ${r.label}（第 ${r.count} 个）`);
+    fxStamp(`📍 ${r.label}（第 ${r.count} 个）已记`, true);
   } catch (e) {
     const el = $("markerMsg");
     if (el) { el.textContent = "打点失败：" + e.message; el.className = "msg err"; }
+    fxStamp("打点失败：" + e.message, false);
   }
 }
 document.querySelectorAll(".mon-marker[data-label]").forEach(b => {
@@ -1632,6 +1688,61 @@ $("markerAdd").onclick = () => {
 $("markerCustom").onkeydown = (e) => {
   if (e.key === "Enter") { e.preventDefault(); $("markerAdd").click(); }
 };
+
+// ═══ 专注模式（R3′·V3 虚空单境）═══
+// 采集期一键进入全屏极简态：只留呼吸光点、时长、打点、结束，其余全折叠。
+// 结束钮直接复用主链路 monStop（自评卡 z98 浮于本层之上，"必弹"不破）；
+// "回到全仪表"只是收起遮罩，采集在后台照常跑。预览态供引导体验页签借用。
+let fxOn = false, fxTimer = 0;
+function fmtElapsed(txt) {
+  const s = parseInt(txt, 10);
+  if (!isFinite(s) || s < 0) return "";
+  const m = Math.floor(s / 60), r = s % 60;
+  return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
+}
+function fxSyncElapsed() {
+  const v = fmtElapsed($("monElapsed").textContent);
+  $("fxElapsed").textContent = v || "准备就绪";
+}
+function fxStamp(text, ok) {
+  const el = $("fxMsg");
+  if (!el) return;
+  el.textContent = text || "";
+  el.style.color = ok === false ? "#e79a9a" : "#7f9296";
+}
+function fxOpen(preview) {
+  fxOn = true;
+  $("fxOverlay").style.display = "flex";
+  // 预览态（无在采会话）：隐藏打点与结束控件，只演示呼吸光点体验层
+  $("fxMarkerRow").style.display = preview ? "none" : "flex";
+  $("fxCtlRow").style.display = preview ? "none" : "flex";
+  $("fxStampLine").style.display = preview ? "none" : "flex";
+  document.body.classList.add("fx-lock");
+  fxSyncElapsed();
+  clearInterval(fxTimer);
+  fxTimer = setInterval(fxSyncElapsed, 1000);
+}
+function fxClose() {
+  fxOn = false;
+  $("fxOverlay").style.display = "none";
+  clearInterval(fxTimer); fxTimer = 0;
+  document.body.classList.remove("fx-lock");
+}
+$("btnFocus").onclick = () => { if (!$("btnFocus").disabled) fxOpen(false); };
+$("btnFxPreview").onclick = () => fxOpen(true);
+$("fxExit").onclick = fxClose;
+$("fxFinish").onclick = () => { if (!$("monStop").disabled) $("monStop").click(); };
+$("fxMarkerAdd").onclick = () => {
+  const v = $("fxMarkerCustom").value;
+  if (v && v.trim()) sendMarker(v);
+  $("fxMarkerCustom").value = "";
+};
+$("fxMarkerCustom").onkeydown = (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("fxMarkerAdd").click(); }
+};
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && fxOn && $("srOverlay").style.display !== "flex") fxClose();
+});
 
 $("monCopyCmd").onclick = async () => {
   try {
@@ -2301,6 +2412,7 @@ async function pollStatus() {
     $("monStart").disabled = busy;
     $("monStop").disabled = !busy;
     $("monSave").disabled = !m.running;   // "不断连保存"仅监测模式有意义
+    const bf = $("btnFocus"); if (bf) bf.disabled = !busy;   // 专注模式仅采集中可入
     updateVrPill();                        // 顺带刷新 VR 投显胶囊
   } catch (e) { $("statusText").textContent = "服务不可用"; }
 }
