@@ -84,8 +84,10 @@ def write_manifest(npz_path, meta, report_path, session_id=None,
     return p
 
 
-def make_event(type_, actor, kind, payload=None, note=""):
-    return {"schema_version": CONTRACT_VERSION, "ts": _now(),
+def make_event(type_, actor, kind, payload=None, note="", ts=None):
+    """ts 可选：补记**过去时刻**的事件（如采集期手打 marker 在会话结束时才落盘，
+    须用按下那一刻的挂钟时间，而非写盘时刻）。缺省仍取当前时刻（旧行为不变）。"""
+    return {"schema_version": CONTRACT_VERSION, "ts": ts or _now(),
             "type": type_, "actor": actor, "kind": kind,
             "payload": payload or {}, "note": note}
 
@@ -99,12 +101,12 @@ def init_events(npz_path, events):
     return p
 
 
-def append_event(events_path, type_, actor, kind, payload=None, note=""):
+def append_event(events_path, type_, actor, kind, payload=None, note="", ts=None):
     """只追加（P2）。文件不存在则跳过并返回 False（契约是附属物）。"""
     if not events_path or not os.path.exists(events_path):
         return False
     with open(events_path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(make_event(type_, actor, kind, payload, note),
+        f.write(json.dumps(make_event(type_, actor, kind, payload, note, ts=ts),
                            ensure_ascii=False) + "\n")
     return True
 

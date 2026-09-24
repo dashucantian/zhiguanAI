@@ -365,6 +365,12 @@ class DataBuffer:
         self.eeg_raw_all = {ch: [] for ch in self.channels}
         self.has_raw = False
         self.chain_override = None   # 非 None 时 save_bin 以此为准标注链
+        # 采集期手打事件标记（T1 睁闭眼等，2026-09-24 法师授权）：
+        # 每项 {"epoch": 挂钟秒, "label": 文本}。epoch 与 self.timestamps 同为
+        # Unix epoch 秒（add_eeg 用 time.time() 锚定），save_bin 时换算为相对秒
+        # t_rel 注入 meta["markers"]，再由契约层逐条写成 marker 事件。
+        # 只在内存累积、不落盘（契约纪律 P1a：采集端一次写成），崩溃即随会话丢弃。
+        self.marker_epochs = []
         self.optics = {name: deque(maxlen=PPG_ANALYSIS_SAMPLES) for name in OPTICS_CHANNELS_8}
         self.optics_n_ch = 0
         self.optics_baseline = {}
@@ -403,6 +409,14 @@ class DataBuffer:
         self._snapshot_count = 0
         self._last_snapshot_t = 0.0
         self._last_snapshot_path = None
+
+    def add_marker(self, label="", epoch=None):
+        """记录一个采集期手打标记（挂钟时刻）。返回已记录数。"""
+        with self.lock:
+            self.marker_epochs.append(
+                {"epoch": float(epoch if epoch is not None else time.time()),
+                 "label": str(label or "")})
+            return len(self.marker_epochs)
 
     def _append_ts(self, t: float):
         """Append a sample timestamp, enforcing strict monotonic increase."""
@@ -853,6 +867,18 @@ class DataBuffer:
         }
         if extra_meta:
             meta.update(extra_meta)
+        # 采集期手打标记 → 注入 meta["markers"]（相对首样本的 t_rel＋原始 epoch）。
+        # 时钟对齐说明：epoch 与 timestamps 同为 Unix epoch 秒；t_rel 为
+        # epoch−首样本时刻，可为负（标记早于首样本）或超出时长（晚于末样本），
+        # 如实保留不截断——分析端按 t_rel 取窗时自行判断有效性。
+        with self.lock:
+            mk = [dict(m) for m in self.marker_epochs]
+        if mk:
+            t0 = float(ts_arr[0])
+            meta["markers"] = [{"label": m.get("label", ""),
+                                "epoch": round(float(m["epoch"]), 3),
+                                "t_rel": round(float(m["epoch"]) - t0, 3)}
+                               for m in sorted(mk, key=lambda x: x["epoch"])]
         # ── P0-4：原子落盘（缺陷 A-5）────────────────────────────────────
         # 旧实现直接 np.savez(最终路径)：无临时文件、无 os.replace、无写后校验，
         # 崩溃即留下**同名的半个 zip**，而下游会把它当"无 qc"静默放过。
@@ -915,17 +941,29 @@ class DataBuffer:
             write_manifest(data_path, meta, report_ok,
                            participant_id=participant, scene=scene,
                            protocol="采集端暂存（P1a）")
-            init_events(data_path, [
+            evs = [
                 make_event("created", "system", "ruled",
                            {"scene": scene}, "会话数据落盘"),
                 make_event("started", "operator", "measured",
                            {"device": self.device, "sfreq": self.sfreq},
                            "数据源随保存记录"),
+            ]
+            # 采集期手打标记 → 逐条 marker 事件（ts=按下时刻的挂钟 ISO，
+            # 非写盘时刻；payload 带 t_rel 相对秒与 epoch 原值，分析端可直接取窗）
+            for m in (meta.get("markers") or []):
+                evs.append(make_event(
+                    "marker", "operator", "ruled",
+                    {"label": m.get("label", ""), "t_rel": m.get("t_rel"),
+                     "epoch": m.get("epoch")},
+                    "采集期手打标记（保存时补写，ts=按下时刻）",
+                    ts=datetime.fromtimestamp(float(m["epoch"])).isoformat(
+                        timespec="seconds")))
+            evs.append(
                 make_event("saved", "system", "measured",
                            {"npz": os.path.basename(data_path),
                             "report": (os.path.basename(report_ok)
-                                       if report_ok else "")}),
-            ])
+                                       if report_ok else "")}))
+            init_events(data_path, evs)
         except ImportError:
             if not getattr(self, "_contract_warned", False):
                 self._contract_warned = True

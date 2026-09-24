@@ -315,6 +315,17 @@
       <button class="btn danger" id="monStop" disabled>■ 停止并保存</button>
       <span class="msg" id="monMsg"></span>
     </div>
+    <!-- 采集期手打标记（2026-09-24 法师授权，T1 睁闭眼等协议用）：
+         采集中才可点；点击即 POST /api/monitor/marker，服务器打挂钟戳，
+         会话保存时随契约事件流逐条写成 marker 事件（ts=按下时刻）。 -->
+    <div class="toolbar" id="markerBar" style="align-items:center;">
+      <span class="hint" style="margin:0;">📍 事件标记</span>
+      <button class="btn ghost mon-marker" data-label="睁眼" disabled>👁 睁眼</button>
+      <button class="btn ghost mon-marker" data-label="闭眼" disabled>🌙 闭眼</button>
+      <input id="markerCustom" placeholder="自定义标记…" style="width:140px" disabled />
+      <button class="btn ghost mon-marker" id="markerAdd" disabled>＋记</button>
+      <span class="msg" id="markerMsg"></span>
+    </div>
     <div class="hint">停止时自动保存会话数据并做质检评估；两种模式数据均写入 npz（scene=monitor/closedloop），统一在此入库。数据格式与 Zen-EEG 数据字典一致。</div>
   </div>
 
@@ -1194,6 +1205,7 @@ function handleMonitorEvent(ev) {
     monMsg("错误：" + ev.text, "err");
   } else if (ev.type === "end") {
     monRunning = false;
+    setMarkerButtons(false);           // 会话结束，打点关闭
     setPhase("待机", "");
     $("monStart").disabled = false;
     $("monStop").disabled = true;
@@ -1300,6 +1312,7 @@ $("monStart").onclick = async () => {
       monRunning = true;
       $("monStop").disabled = false;
       $("monSave").disabled = false;
+      setMarkerButtons(true);          // 采集中才开放打点
       setPhase("监测中", "monitor");
       connectMonitorStream();
       monMsg("正在连接数据源…", "ok");
@@ -1345,6 +1358,48 @@ $("monSave").onclick = async () => {
     await api("/api/monitor/save", { method: "POST" });
     monMsg("已请求保存（采集不中断）…", "ok");
   } catch (e) { monMsg(e.message, "err"); }
+};
+
+// ── 采集期手打事件标记（2026-09-24 法师授权；T1 睁闭眼等协议）──
+// 点击即 POST /api/monitor/marker，服务器收到时打挂钟戳；数据保存时随
+// 契约事件流逐条写成 marker 事件（ts=按下时刻，payload.t_rel=相对首样本秒）。
+// 注意：标记只进"当前这一次保存"的会话缓冲（save 幂等、二次保存返回旧路径），
+//       若采集中途点了"保存（不断连）"，之后的标记不会并入已存文件——属已知边界。
+function setMarkerButtons(on) {
+  document.querySelectorAll(".mon-marker").forEach(b => { b.disabled = !on; });
+  const c = $("markerCustom");
+  if (c) c.disabled = !on;
+}
+function markerStamp(text) {
+  const el = $("markerMsg");
+  if (!el) return;
+  const t = new Date();
+  el.textContent = `${text} @ ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}:${String(t.getSeconds()).padStart(2,"0")}`;
+  el.className = "msg ok";
+}
+async function sendMarker(label) {
+  label = (label || "").trim();
+  if (!label) { return; }
+  try {
+    const r = await api("/api/monitor/marker", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label }) });
+    markerStamp(`📍 ${r.label}（第 ${r.count} 个）`);
+  } catch (e) {
+    const el = $("markerMsg");
+    if (el) { el.textContent = "打点失败：" + e.message; el.className = "msg err"; }
+  }
+}
+document.querySelectorAll(".mon-marker[data-label]").forEach(b => {
+  b.onclick = () => { if (!b.disabled) sendMarker(b.dataset.label); };
+});
+$("markerAdd").onclick = () => {
+  const v = $("markerCustom").value;
+  sendMarker(v);
+  $("markerCustom").value = "";
+};
+$("markerCustom").onkeydown = (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("markerAdd").click(); }
 };
 
 $("monCopyCmd").onclick = async () => {

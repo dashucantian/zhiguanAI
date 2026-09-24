@@ -1322,6 +1322,29 @@ def monitor_save():
     return {"ok": True, "message": "已请求保存（保存不中断采集）"}
 
 
+class MarkerPayload(BaseModel):
+    label: str = ""
+
+
+@app.post("/api/monitor/marker")
+def monitor_marker(payload: MarkerPayload):
+    """采集期手打事件标记（T1 睁闭眼等，2026-09-24 法师授权）。
+
+    只在内存暂存（DataBuffer.marker_epochs），会话保存时随契约事件流一次写成
+    （ts=按下时刻）——与 P1a"采集端一次写成"语义一致，不中途开写盘路径。
+    服务器收到即打戳（浏览器→服务器一跳毫秒级，手按秒级误差远大于此）。
+    """
+    if not MONITOR.is_running():
+        raise HTTPException(status_code=409, detail="当前没有正在运行的监测会话")
+    label = (payload.label or "").strip()[:60]
+    if not label:
+        raise HTTPException(status_code=400, detail="标记内容不能为空")
+    buf = MONITOR.app.buffer
+    n = buf.add_marker(label=label)
+    MONITOR._emit({"type": "marker", "label": label, "count": n})
+    return {"ok": True, "count": n, "label": label}
+
+
 @app.get("/api/monitor/status")
 def monitor_status():
     return MONITOR.snapshot()
