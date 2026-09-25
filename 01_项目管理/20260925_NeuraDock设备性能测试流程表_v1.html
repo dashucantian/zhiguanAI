@@ -179,15 +179,113 @@ footer{max-width:1020px;margin:0 auto;padding:8px 16px 40px;color:var(--ink3);fo
   pre{background:#f2f2f2;color:#222;border:1px solid #ccc}
   .tm{display:none}
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   皮肤 B：仪表盘（dash）——数据屏视觉，供"一眼看全局＋手上能操作"
+   本块置于最后，故与 html.night 同时存在时以本块为准。
+   ══════════════════════════════════════════════════════════════════ */
+html.dash{
+  --bg:#0E1116; --bg2:#161B22; --card:#141A21; --ink:#E6EDF3; --ink2:#9BA7B4; --ink3:#6B7684;
+  --line:#232B36; --zhu:#FF5D73; --qing:#2FD4C4; --jin:#F0B429; --lan:#4C9AFF;
+  --ok:#2FD4C4; --okbg:#0E2A28; --warn:#F0B429; --warnbg:#2A2313; --bad:#FF5D73; --badbg:#2C1720;
+  --na:#8892A0; --nabg:#1B2129;
+  --shadow:0 0 0 1px rgba(47,212,196,.06),0 8px 24px rgba(0,0,0,.55); --r:12px;
+}
+html.dash body{background:
+  radial-gradient(1200px 500px at 12% -10%,rgba(47,212,196,.07),transparent 60%),
+  radial-gradient(900px 420px at 96% -4%,rgba(240,180,41,.05),transparent 55%),var(--bg)}
+html.dash header{background:rgba(20,26,33,.94)}
+html.dash .htitle{font-size:.96em;letter-spacing:.05em}
+html.dash .tbtn{border-radius:8px;background:#1B222B;border-color:#2A3340}
+html.dash .tbtn.on{background:var(--qing);border-color:var(--qing);color:#06231F}
+html.dash .pbar{height:9px;background:#1B222B;border-radius:3px}
+html.dash .pbar i{border-radius:0}
+html.dash nav a{border-radius:8px;background:#171D25;border-color:#242C37;font-variant-numeric:tabular-nums}
+html.dash nav a.here{background:var(--qing);color:#06231F;border-color:var(--qing);font-weight:600}
+html.dash .sec h2{font-size:1.02em;letter-spacing:.03em;border-left:3px solid var(--acc);padding-left:10px}
+html.dash .sec h2 .dot{display:none}
+html.dash .card{background:linear-gradient(180deg,#161C24,#131922)}
+html.dash .card::before{width:3px;opacity:1;box-shadow:0 0 14px var(--acc)}
+html.dash .chip{border-radius:6px;background:#1B222B;border-color:#2A3340;font-variant-numeric:tabular-nums}
+html.dash .chip.time{background:transparent;border-color:currentColor}
+html.dash .note{border-radius:9px;background:#171D25;border-color:#242C37}
+html.dash .note.warm{background:#241E10;border-color:#4A3C15}
+html.dash .note.red{background:#2A161C;border-color:#5A2632}
+html.dash .note.good{background:#0F2624;border-color:#1E4A46}
+html.dash .rowchk{border-radius:8px;border-color:#1E252E}
+html.dash .rowchk:hover{background:#1A212A}
+html.dash .rowchk input{border-color:#3A4553;background:#0E1116;border-radius:5px}
+html.dash .rowchk input:checked{background:var(--qing);border-color:var(--qing)}
+html.dash .rowchk code,html.dash .hint code{background:#1B222B;border-color:#2A3340}
+html.dash th{background:#171D25;color:#8A96A3;letter-spacing:.03em}
+html.dash th,html.dash td{padding:6px 9px}
+html.dash input,html.dash select{background:#0E1116;border-color:#28313C;border-radius:8px}
+html.dash input[inputmode=decimal]{font-family:ui-monospace,Consolas,monospace;letter-spacing:.02em}
+html.dash .vb{border-radius:8px;background:#151B23;border-color:#28313C}
+html.dash .vb[aria-pressed=true]{box-shadow:0 0 16px -3px currentColor}
+html.dash .vb[data-v=pass][aria-pressed=true],html.dash .vb[data-v=cond][aria-pressed=true],
+html.dash .vb[data-v=na][aria-pressed=true]{color:#08171A}
+html.dash .vb[data-v=fail][aria-pressed=true]{color:#2A0E14}
+html.dash .badge{border-radius:6px;font-variant-numeric:tabular-nums}
+html.dash .tm{background:#171D25;border-color:#242C37;border-radius:9px}
+html.dash .ring{background:conic-gradient(var(--qing) calc(var(--p,0)*1%),#232B36 0)}
+html.dash .ring::after{background:#131922}
+html.dash pre{background:#0B0F14;border:1px solid #232B36}
+html.dash .fold{border-color:#242C37;border-radius:9px;background:#151B23}
+html.dash .fold>button{background:#171D25;border-left-color:var(--acc)}
+html.dash .cmdbtns .btn,html.dash .tm .btn{border-radius:8px;background:#1B222B;border-color:#2A3340}
+html.dash .btn.pri{background:var(--qing);border-color:var(--qing);color:#06231F}
+html.dash footer{color:#6B7684}
+html.dash footer code{color:#9BA7B4}
+
+/* KPI 仪表区（仅仪表盘皮肤显示） */
+#kpi{display:none}
+html.dash #kpi{display:block;border-top:1px solid var(--line);margin-top:9px;padding:11px 0 3px}
+.kpiwrap{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.gauge{position:relative;width:84px;height:84px;flex:none;border-radius:99px;display:grid;place-items:center;
+  background:conic-gradient(var(--gc,var(--qing)) calc(var(--p,0)*1%),#232B36 0);
+  box-shadow:0 0 22px -6px var(--gc,var(--qing))}
+.gauge::after{content:"";position:absolute;inset:9px;border-radius:99px;background:#10161D}
+.gauge b{position:relative;font-size:1.06em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi-mini{display:flex;gap:13px;flex-wrap:wrap}
+.mini{width:58px;text-align:center}
+.mini .g2{position:relative;width:58px;height:58px;border-radius:99px;display:grid;place-items:center;
+  background:conic-gradient(var(--gc,var(--qing)) calc(var(--p,0)*1%),#232B36 0)}
+.mini .g2::after{content:"";position:absolute;inset:6px;border-radius:99px;background:#10161D}
+.mini .g2 i{position:relative;font-style:normal;font-size:.72em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.mini .lb{font-size:.7em;color:var(--ink2);margin-top:4px;line-height:1.3}
+.kpicol{display:flex;flex-direction:column;gap:8px;min-width:230px}
+.leds{display:flex;gap:11px;flex-wrap:wrap;font-size:.76em;color:var(--ink2)}
+.led{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+.led i{width:9px;height:9px;border-radius:99px;background:#3A4553;display:inline-block}
+.led.pass i{background:var(--ok);box-shadow:0 0 9px var(--ok)}
+.led.cond i{background:var(--warn);box-shadow:0 0 9px var(--warn)}
+.led.fail i{background:var(--bad);box-shadow:0 0 9px var(--bad)}
+.led.na i{background:var(--na)}
+#kpiLive{font-size:.78em;color:var(--ink2);font-variant-numeric:tabular-nums}
+#kpiLive b{color:var(--ink)}
+@media (max-width:620px){
+  .gauge{width:66px;height:66px}.mini,.mini .g2{width:48px}.mini .g2{height:48px}
+  .kpicol{min-width:0;width:100%}
+}
+@media print{
+  html.dash{--bg:#fff;--bg2:#fff;--card:#fff;--ink:#111;--ink2:#444;--ink3:#666;--line:#bbb;--shadow:none}
+  html.dash .card{background:#fff}
+  html.dash .gauge,html.dash .mini .g2{background:#ededed;box-shadow:none}
+  html.dash .gauge::after,html.dash .mini .g2::after{background:#fff}
+  html.dash pre{background:#f4f4f4;color:#222;border-color:#ccc}
+  html.dash .led i{box-shadow:none}
+}
 </style>
 </head>
 <body>
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1 · 2026-09-25</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.1 · 双皮肤（仪表盘／宣纸）· 2026-09-25</small></div>
       <div class="hspace"></div>
-      <button class="tbtn" id="bNight" title="夜间模式（晚课测试用）">🌙 夜间</button>
+      <button class="tbtn" id="bSkin" title="切换皮肤：仪表盘／宣纸">📊 皮肤</button>
+      <button class="tbtn" id="bNight" title="夜间模式（宣纸皮肤用；仪表盘恒为暗色数据屏）">🌙 夜间</button>
       <button class="tbtn" id="bFsp" title="放大字号">A+</button>
       <button class="tbtn" id="bFsm" title="缩小字号">A−</button>
       <button class="tbtn" id="bOut" title="导出记录">导出</button>
@@ -197,6 +295,16 @@ footer{max-width:1020px;margin:0 auto;padding:8px 16px 40px;color:var(--ink3);fo
     <div class="pbar" id="pbar"></div>
     <div class="pmeta"><span>完成度 <b id="pct">0%</b></span><span id="pnum">0 / 0 项</span>
       <span class="hspace"></span><span class="saved" id="saved">自动保存在本机浏览器</span></div>
+    <div id="kpi">
+      <div class="kpiwrap">
+        <div class="gauge" id="gAll" style="--p:0"><b id="gAllT">0%</b></div>
+        <div class="kpi-mini" id="gSecs"></div>
+        <div class="kpicol">
+          <div class="leds" id="leds"></div>
+          <div id="kpiLive">现场：未启动计时</div>
+        </div>
+      </div>
+    </div>
   </div>
   <nav id="nav"></nav>
 </header>
@@ -280,7 +388,7 @@ const FLOW = {
       ['S0-4','★ 可安全暂停','—','未产生有效数据，随时可停','']
      ],v:'s0v',vlabel:'S0 结论'},
 
-    {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,
+    {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,live:'t1',
      hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下控制台上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
 
     {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,
@@ -346,7 +454,7 @@ const FLOW = {
 
   /* ══ 场② ══ */
   { id:'s2', name:'场② 长时程与链路', desc:'60–70 分钟 · 可与一次真实晚课同场，不额外占时间。每 10 分钟低头填一行就行。', acc:'#4A7C59', blocks:[
-    {k:'timer',title:'T5 十分钟提醒',mode:'interval',sec:600,
+    {k:'timer',title:'T5 十分钟提醒',mode:'interval',sec:600,live:'t5',
      hint:'点「开始」后每到 10 分钟响一声，提醒你低头填一行。T9（端到端延迟）因场次待裁，本场不执行。'},
     {k:'grid',title:'T5 长时程稳定性',chip:'60–70 分钟',
      hint:'判据：断包率 <b>&lt;1%</b> 且不集中在开头；每小时塌陷 <b>≤1 分钟</b>；幅值/带宽漂移 <b>≤20%/小时</b>。⚠️ 开机前 2 分钟是重点——09-21 曾出现 205 次断包（疑握手问题），要复现或排除它。',
@@ -484,7 +592,8 @@ const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
-let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17}};
+let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash'}};
+const LIVE = {t1:null, t5:null};   /* 现场计时状态 → 仪表盘 KPI 条的"现场"一行 */
 let saveTimer = null;
 
 function load(){
@@ -696,6 +805,7 @@ function renderTimer(blk){
     h('div', {class:'big'}, blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒'),
     h('div', {class:'sm'}, blk.mode === 'count' ? '每段 60 秒，响声即打点' : '每 10 分钟响一声，提醒填一行'));
   const st = {run:false, left: blk.mode === 'count' ? blk.sec : blk.sec, seg:1, id:null};
+  if(blk.live) LIVE[blk.live] = {run:false, left:st.left, seg:1, total:blk.times || 1};
   const bStart = h('button', {class:'btn pri', type:'button'}, '开始');
   const bReset = h('button', {class:'btn ghost', type:'button'}, '重置');
   const tick = ()=>{
@@ -713,16 +823,20 @@ function renderTimer(blk){
     }
     ring.firstChild.textContent = fmt(Math.ceil(st.left));
     ring.style.setProperty('--p', String(100 * (1 - st.left / blk.sec)));
+    if(blk.live && LIVE[blk.live]){ LIVE[blk.live].left = st.left; LIVE[blk.live].seg = st.seg; paintLive(); }
   };
   bStart.onclick = ()=>{
     st.run = !st.run;
     if(st.run){ st.id = setInterval(tick, 250); TIMERS.push(st.id); bStart.textContent = '暂停'; bStart.classList.remove('pri'); }
     else{ clearInterval(st.id); bStart.textContent = '继续'; bStart.classList.add('pri'); }
+    if(blk.live && LIVE[blk.live]){ LIVE[blk.live].run = st.run; paintLive(); }
   };
   bReset.onclick = ()=>{ clearInterval(st.id); st.run = false; st.left = blk.sec; st.seg = 1;
     ring.style.setProperty('--p','0'); ring.firstChild.textContent = fmt(blk.sec);
     info.firstChild.textContent = blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒';
-    bStart.textContent = '开始'; bStart.classList.add('pri'); };
+    bStart.textContent = '开始'; bStart.classList.add('pri');
+    if(blk.live) LIVE[blk.live] = {run:false, left:blk.sec, seg:1, total:blk.times || 1};
+    paintLive(); };
   const tm = h('div', {class:'tm noprint'}, ring, info, h('div', {class:'tbtns'}, bStart, bReset));
   const c = card({title:blk.title, chip:'计时', hint:blk.hint}, [tm]);
   return c;
@@ -765,6 +879,52 @@ function updateCalc(){
   }
 }
 
+/* ── 仪表盘 KPI（皮肤 B：总环／分节微仪表／判定灯／现场计时） ────── */
+function paintMini(secId, st, tt){
+  const box = document.getElementById('gSecs');
+  if(!box) return;
+  let m = document.getElementById('mini-' + secId);
+  if(!m){
+    const sec = FLOW.secs.filter(s=>s.id === secId)[0] || {name:secId, acc:'#2FD4C4'};
+    m = h('div', {class:'mini', id:'mini-' + secId, style:'--gc:' + sec.acc},
+      h('div', {class:'g2'}, h('i', null, '0/0')),
+      h('div', {class:'lb'}, sec.name.replace(/\s.*$/, '')));
+    box.appendChild(m);
+  }
+  const p = tt ? Math.round(100*st/tt) : 0;
+  m.firstChild.style.setProperty('--p', String(p));
+  m.firstChild.firstChild.textContent = st + '/' + tt;
+}
+function paintKpi(done, total){
+  const pct = total ? Math.round(100*done/total) : 0;
+  const g = document.getElementById('gAll');
+  if(g){ g.style.setProperty('--p', String(pct));
+    const t = document.getElementById('gAllT'); if(t) t.textContent = pct + '%'; }
+  const cnt = {pass:0, cond:0, fail:0, na:0, none:0};
+  document.querySelectorAll('[data-vrow]').forEach(el=>{
+    const v = S.verdicts[el.getAttribute('data-vrow')] || '';
+    cnt[v || 'none']++;
+  });
+  const box = document.getElementById('leds');
+  if(box){
+    box.innerHTML = '';
+    [['pass','通过'],['cond','有条件'],['fail','不通过'],['na','不可判定'],['none','未判']].forEach(([k,label])=>{
+      box.appendChild(h('span', {class:'led' + (k === 'none' ? '' : ' ' + k)}, h('i'), label + ' ' + cnt[k]));
+    });
+  }
+  paintLive();
+}
+function paintLive(){
+  const el = document.getElementById('kpiLive');
+  if(!el) return;
+  const parts = [];
+  if(LIVE.t1 && LIVE.t1.run) parts.push('T1 第 ' + LIVE.t1.seg + '/' + LIVE.t1.total + ' 段 ' + fmt(LIVE.t1.left));
+  if(LIVE.t5 && LIVE.t5.run) parts.push('T5 距提醒 ' + fmt(LIVE.t5.left));
+  el.innerHTML = '';
+  el.appendChild(h('b', null, '现场：'));
+  el.appendChild(document.createTextNode(parts.length ? ' ' + parts.join('　｜　') : ' 未启动计时（T1 分段／T5 十分钟提醒在页内）'));
+}
+
 /* ── 进度 ───────────────────────────────────────────────────────── */
 function recount(){
   let done = 0, total = 0;
@@ -801,8 +961,10 @@ function recount(){
       if(val && String(val).trim()) st++;
     });
     chip.textContent = s.name + ' ' + st + '/' + tt;
+    paintMini(s.id, st, tt);
   });
   updateMirror();
+  paintKpi(done, total);
 }
 
 /* ── 探活 ───────────────────────────────────────────────────────── */
@@ -917,9 +1079,14 @@ function importJson(file){
 
 /* ── 外壳 ───────────────────────────────────────────────────────── */
 function applyTheme(){
-  document.documentElement.classList.toggle('night', !!S.meta.night);
+  const dash = S.meta.skin !== 'paper';
+  document.documentElement.classList.toggle('dash', dash);
+  document.documentElement.classList.toggle('night', !!S.meta.night && !dash);
   document.documentElement.style.setProperty('--fs', (S.meta.fs || 17) + 'px');
-  document.getElementById('bNight').classList.toggle('on', !!S.meta.night);
+  const bs = document.getElementById('bSkin');
+  if(bs) bs.textContent = dash ? '📜 宣纸皮肤' : '📊 仪表盘皮肤';
+  const bn = document.getElementById('bNight');
+  if(bn) bn.style.display = dash ? 'none' : '';   /* 仪表盘恒为暗色数据屏 */
 }
 function build(){
   TIMERS.forEach(id => clearInterval(id)); TIMERS.length = 0;
@@ -998,6 +1165,11 @@ applyTheme();
 build();
 attachDelegates();
 updateCalc();
+document.getElementById('bSkin').onclick = ()=>{
+  S.meta.skin = (S.meta.skin === 'paper') ? 'dash' : 'paper';
+  applyTheme(); saveSoon();
+  toast(S.meta.skin === 'paper' ? '宣纸皮肤：柔和纸质，适合打印与长读' : '仪表盘皮肤：数据屏视觉，一眼看全局');
+};
 document.getElementById('bNight').onclick = ()=>{ S.meta.night = !S.meta.night; applyTheme(); saveSoon(); };
 document.getElementById('bFsp').onclick = ()=>{ S.meta.fs = Math.min(FS_MAX, (S.meta.fs||17) + 1); applyTheme(); saveSoon(); };
 document.getElementById('bFsm').onclick = ()=>{ S.meta.fs = Math.max(FS_MIN, (S.meta.fs||17) - 1); applyTheme(); saveSoon(); };
@@ -1005,7 +1177,7 @@ document.getElementById('bPrint').onclick = ()=> window.print();
 document.getElementById('bOut').onclick = openExport;
 document.getElementById('bReset').onclick = ()=>{
   if(!confirm('清空全部勾选与记录？此操作不可撤销（建议先「导出」留档）。')) return;
-  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs}};
+  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin}};
   save(); hardRefresh(); toast('已清空');
 };
 window.addEventListener('beforeunload', ()=>{ try{ save(); }catch(e){} });
