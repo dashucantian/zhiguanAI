@@ -202,6 +202,13 @@ nav:empty{display:none}
 .gnext[disabled]{opacity:.5;cursor:not-allowed}
 .gate h2{flex-wrap:wrap}
 .gsum{font-size:.74em;color:var(--ink3);margin:2px 0 10px}
+/* 受试者提示条（B4）：大字显示"现在做什么/还有多久"，不显评价性数字 */
+.ptbar{display:none;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--line);
+  border-radius:14px;padding:14px 18px;margin:0 0 12px}
+.ptbar.on{display:flex}
+.ptbar .who{font-size:.72em;color:var(--ink3);flex:none}
+.ptbar .what{font-size:1.45em;font-weight:600;letter-spacing:.04em;color:var(--ink)}
+.ptbar .btn{margin-left:auto}
 .chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .chead h3{margin:0}
 .ctgl{margin-left:auto;border:1px solid var(--line);background:var(--bg2);color:var(--ink2);
@@ -466,7 +473,30 @@ const FLOW = {
       ['e1','受试者知情：本次为<b>设备性能测试</b>，不是修行评价',''],
       ['e2','<b>本场数据是否入工厂，当场裁定并记录</b>','机制：<code>--type test</code> 默认落隔离区；裁定结果填进「汇总」记录卡'],
       ['e3','全部数据本地处理，原始 EEG 与个人数据<b>不出网</b>','红线']
-    ]}
+    ]},
+    {k:'fields',title:'设备档案（Device Profile）',chip:'一次建档·判据参数化',
+     hint:'法师 09-25 裁定 D6＝<b>甲：先补设备档案字段</b>（通道命名／参考／无枕区降级规则），以 <b>Muse 实测</b>校验抽象是否成立。本卡即设备无关化的参数落点：换设备只改这里，判据分级不变。',
+     items:[
+      ['dp_name','设备名与固件/软件版本','NeuraDock（硬件 V2／软件 V2／白皮书 V1.1）'],
+      ['dp_ch','通道数与通道名（按索引序）','7 通道：CP5 CP6 PO3 PO4 O1 Oz O2'],
+      ['dp_sf','标称采样率（Hz）','250'],
+      ['dp_link','传输方式与地址','USB 隔离线（1 样本/行）／TCP 127.0.0.1:9600'],
+      ['dp_ref','参考与地位置','2.5mm 耳夹参考（记录左/右侧，跨场次须一致）'],
+      ['dp_wear','佩戴方式与调节范围','三段式自适应；贴合不压'],
+      ['dp_weak','已知弱点','枕区接触稳定性待考；降噪核心电路不开源'],
+      ['dp_rule','无枕区降级规则（他设备用）','无枕区（如 Muse）→ 以 AF7/TP9 就近替代并在结论<b>标注替代</b>，不冒充枕区'],
+      ['dp_meta','建档日期与建档人','']
+     ]},
+    {k:'check',title:'知情同意（G0 必办）',chip:'受试者确认·不代签',
+     hint:'法师 09-25 裁定 C5＝<b>甲：明确「工程验收＋知情同意」，不设伦理审查</b>；本阶段非研究，L3 立项时再议。逐项当面向受试者说明并确认，<b>AI 不得代签</b>；受试者中止即如实登记，不补记。',
+     items:[
+      ['cs1','已说明目的：<b>设备性能验收</b>，不是治疗、不是修行评价',''],
+      ['cs2','已说明内容与时长：睁闭眼／静息／动作／长时程等各阶段，合计约 N 分钟',''],
+      ['cs3','已说明风险与不适：电极压迫、疲劳、眼胀等；<b>可随时中止，无理由、无影响</b>',''],
+      ['cs4','已说明数据用途：本机处理、原始 EEG 与个人信息<b>不出网</b>、以 P00N 编号脱名',''],
+      ['cs5','受试者已确认（口头／书面）同意参与；确认人与时间如实记录于备注',''],
+      ['cs6','若受试者中止：如实登记「受试者中止」（弃权一等值），不补记、不追填','']
+     ]}
   ]},
 
   /* ══ 场① ══ */
@@ -697,7 +727,7 @@ const FLOW = {
 const GATES = [
   {id:'g0', name:'G0 准备', acc:'#8A6A4F',
    desc:'设备档案、佩戴、端口、边界与合规——把"合法、可复现的开场"先做扎实。',
-   take:[['pre',0,6],['s1',1,2]]},
+   take:[['pre',0,8],['s1',1,2]]},
   {id:'g1', name:'G1 身份', acc:'#4C9AFF',
    desc:'接的是谁、给的是不是原始档：连接握手 ＋ 通道数与顺序 ＋ 原始流全量核验（T6）。',
    take:[['s1',0,1],['s1',2,3],['s1',15,16]]},
@@ -1367,6 +1397,13 @@ function paintLive(){
     }
   }
 }
+function setPt(text, clear){
+  const bar = document.getElementById('ptBar'), w = document.getElementById('ptWhat');
+  if(!bar || !w) return;
+  if(clear){ bar.classList.remove('on'); w.textContent = ''; return; }
+  if(!text){ return; }
+  w.textContent = text; bar.classList.add('on');
+}
 function applyBeepLabel(){
   const b = document.getElementById('beepTgl');
   if(b) b.textContent = (S.meta.beep !== false) ? '🔔 提示音：开' : '🔕 提示音：关';
@@ -1442,6 +1479,7 @@ const T1A = {
   }
 };
 function t1Msg(t, bad){
+  setPt(t || (T1A.on ? ('现在：' + ((T1A.seg % 2) ? '睁眼' : '闭眼') + ' · 还剩 ' + T1A.left + ' 秒') : null));
   const a = document.getElementById('t1aMsg'), b = document.getElementById('t1aSub');
   if(t && a){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
   if(b){
@@ -1531,6 +1569,7 @@ const T2A = {
   }
 };
 function t2Msg(t, bad){
+  setPt(t || (T2A.on ? ('现在：静坐不动 · 还剩 ' + fmt(T2A.left)) : null));
   const a = document.getElementById('t2aMsg');
   if(!a) return;
   if(t){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
@@ -1674,6 +1713,7 @@ const T3A = {
   }
 };
 function t3Msg(t, bad){
+  setPt(t || (T3A.on ? ('现在：' + (T3A.phase === 'act' ? ('做「' + T3A.ACTIONS[T3A.idx][0] + '」') : '静息恢复') + ' · 还剩 ' + T3A.left + ' 秒') : null));
   const a = document.getElementById('t3aMsg');
   if(!a) return;
   if(t){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
@@ -1717,6 +1757,10 @@ function build(){
     h('span', null, '⚠ 无新帧——数据可能已断：请查设备电源/佩戴与官方软件『打开数据服务』'),
     h('button', {class:'btn ghost', type:'button', id:'beepTgl',
       onclick: () => { S.meta.beep = !(S.meta.beep !== false); saveSoon(); applyBeepLabel(); }}, '🔔')));
+  main.appendChild(h('div', {class:'ptbar noprint', id:'ptBar'},
+    h('span', {class:'who'}, '受试者提示'),
+    h('span', {class:'what', id:'ptWhat'}, ''),
+    h('button', {class:'btn ghost', type:'button', onclick:()=>setPt(null, true)}, '清空')));
   main.appendChild(h('div', {class:'app'}, side, pane));
   applyBeepLabel();
   const cur = S.meta.gate || GATES[0].id;
