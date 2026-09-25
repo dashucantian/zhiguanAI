@@ -458,10 +458,17 @@ const FLOW = {
       ['s6','「📍 事件标记」条就位（👁 睁眼／🌙 闭眼 快捷键可用）','T1 全靠它打点'],
       ['s7','会话登记已填完（参与者 P001、场景、<code>protocol=devtest</code>、事前状态自评）','先登记后采集']
     ]},
-    {k:'cmd',title:'端口探活（仅厂商软件转发时用；蓝牙设备跳过第一行）',lines:[
-      'Test-NetConnection 127.0.0.1 -Port 9600 -InformationLevel Quiet   # 真机数据服务在不在',
-      '(Invoke-WebRequest http://127.0.0.1:8777/api/monitor/status -UseBasicParsing).Content'
-    ],note:'第一条 <b>True</b> ＝ 9600 有人监听；第二条能返回 JSON ＝ 实践驾驶舱活着。两条都通，才谈得上"设备问题"。',
+    {k:'cmd',title:'端口探活（仅厂商软件转发时用；蓝牙设备跳过第一行）',
+     lines: () => {
+       const p = devPort();
+       return ['Test-NetConnection 127.0.0.1 -Port ' + (p || '<档案端口>') + ' -InformationLevel Quiet   # 厂商数据服务在不在'
+                 + (p ? '（端口 ' + p + ' 取自《设备档案》链路）' : '（档案没填端口，请把 <档案端口> 换成实际值）'),
+               '(Invoke-WebRequest http://127.0.0.1:8777/api/monitor/status -UseBasicParsing).Content'];
+     },
+     note: () => {
+       const p = devPort();
+       return '第一条 <b>True</b> ＝ ' + (p ? p + ' 端口' : '档案端口') + '有人监听；第二条能返回 JSON ＝ 实践驾驶舱活着。两条都通，才谈得上"设备问题"。';
+     },
      probe:true},
     {k:'check',title:'项目侧与记录',chip:'5 项',items:[
       ['p1','本页已打开（手机／平板／电脑皆可），或正本已打印','建议 A4 双面 3 页'],
@@ -513,7 +520,7 @@ const FLOW = {
      cols:['#','操作','看哪里','判据','记录'],
      rows:[
       ['S0-1','实践驾驶舱点「开始采集」','状态横幅','5 秒内出现波形；不报 Internal Server Error',{f:'f_s0t',in:'text',ph:'用时 秒',w:'96px'}],
-      ['S0-2','看采集信息','会话信息条','设备显示 NeuraDock TCP（127.0.0.1:9600）',{f:'f_s0mode',in:'text',ph:'设备/模式'}],
+      ['S0-2','看采集信息','会话信息条','与《设备档案》链路一致（TCP 转发例：<code>127.0.0.1:9600</code>；蓝牙例：BLE 已连）',{f:'f_s0mode',in:'text',ph:'设备/模式'}],
       ['S0-3','静看 30 秒','波形幅值','不贴底（不是直线）、不削顶',{f:'f_s0w',in:'select',opt:['正常','贴底','削顶']}],
       ['S0-4','★ 可安全暂停','—','未产生有效数据，随时可停','']
      ],v:'s0v',vlabel:'S0 结论'},
@@ -522,7 +529,7 @@ const FLOW = {
      hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下实践驾驶舱上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
 
     {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,
-     hint:'填每段的 α 相对功率（8–12Hz 占比，实践驾驶舱频段条上读）。主看 <b>O1 / Oz / O2</b>；CP5/CP6/PO3/PO4 作辅助参考，不单独判。',
+     hint: () => '填每段的 α 相对功率（8–12Hz 占比，实践驾驶舱频段条上读）。主看 ' + mainAlphaText() + '；其余通道作辅助参考，不单独判。',
      cols:['段','状态','打点时刻','α 相对功率','备注（眨眼/困倦/体位）'],
      rows:[
       ['1','睁眼','__:__',{f:'t1a1',in:'num',ph:'如 0.18',w:'92px'},{f:'t1n1',in:'text',ph:'—'}],
@@ -536,11 +543,12 @@ const FLOW = {
      ],v:'t1v',vlabel:'T1 结论'},
     {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
     {k:'t1auto',title:'T1 自动跑（机器计时·自动打点·按段读 α）',chip:'推荐用这个',
-     hint:'点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（O1/Oz/O2 均值，用实时波形自算），你只负责按提示睁眼/闭眼。'},
+     hint: () => '点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（主看 ' + mainAlphaText() + '，用实时波形自算），你只负责按提示睁眼/闭眼。'},
     {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。<br><b>口径（09-25 法师裁定·E1 验证）</b>：此处的"提升"是<b>相对 α 比值</b>（8–12 Hz ÷ 0.5–45 Hz）的相对提升，<b>不等于 α 功率的提升</b>——两者呈亚线性（E1 实测：α 功率 +32% 时报 +28~32%，+69% 时报 +55~61%）。面板实时读数为<b>当场判断</b>用；权威值仍为保存后质检对全量 npz 的计算。'},
 
     {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',
-     hint:'静坐不动 5 分钟（不看手机、不说话）。<b>行按本设备实际通道自动生成</b>（来自实时通道名或《设备档案》）；重点盯<b>后部／枕区通道</b>（NeuraDock 前科：CP5／CP6／O2；Muse 无枕区则以 TP9／TP10 替代并标注）。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。',
+     hint: () => '静坐不动 5 分钟（不看手机、不说话）。<b>行按本设备实际通道自动生成</b>（来自实时通道名或《设备档案》）；重点盯<b>后部／枕区通道</b>（NeuraDock 前科：CP5／CP6／O2；Muse 无枕区则以 TP9／TP10 替代并标注）。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。'
+       + (deviceChannels().length ? '' : '<br><b>⚠ 尚未识别设备</b>：下表暂列的是 <b>NeuraDock 预设 7 通道</b>（兜底行）——若本场测的是别的设备，请先填《设备档案》或先开始采集，行会按实际通道自动重建；<b>别按预设行照填他设备的值</b>。'),
      cols:['通道','std（µV）','峰值（µV）','连续 &gt;1min 贴底','质检通道态'],
      rows:[
       ['CP5',{f:'t2s_cp5',in:'num',ph:'',w:'80px'},{f:'t2p_cp5',in:'num',ph:'',w:'80px'},{f:'t2f_cp5',in:'select',opt:['无','有']},{f:'t2q_cp5',in:'select',opt:['ok','warn','bad','unknown']}],
@@ -555,7 +563,7 @@ const FLOW = {
      hint:'点「开始 5 分钟」后机器每秒统计一次各通道 std/峰值，结束时自动填入上表并标出贴底通道（连续 60 秒均值 std < 2 µV 判贴底）。你只需静坐不动。'},
     {k:'fold',title:'贴底了先别急着挪电极——三种成因，先区分再动手',items:[
       ['滤波前后<b>同步塌</b>','指向源头：电极接触／放大器。→ 重新压实该电极、清洁触点，复测 1 分钟。'],
-      ['只有原始列塌、滤波列正常','指向链路补零／丢包。→ 查线缆与 USB 隔离线，看 T5 的丢包率。'],
+      ['只有原始列塌、滤波列正常','指向链路补零／丢包。→ 查线缆（有线设备查隔离数据线），看 T5 的丢包率。'],
       ['单通道塌、其余通道正常','指向该电极的个体问题。→ 记下位置与当日头型，纳入"佩戴 SOP"改进清单。']
     ]},
 
@@ -574,18 +582,27 @@ const FLOW = {
     {k:'grid',title:'T4 工频噪声',chip:'5 分钟',hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
      cols:['指标','实测','判据'],
      rows:[['工频残余比',{f:'t4r',in:'num',ph:'如 0.28',w:'110px'},'≤0.35 良好；0.35–0.5 可接受；>0.5 需排查']],
-     v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换 USB 隔离线 → 换插座回路／拔掉附近充电器 → 检查参考耳夹 → 电极重新压实']]},
+     v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换隔离数据线（有线设备）／排除蓝牙适配器占用（蓝牙设备） → 换插座回路／拔掉附近充电器 → 检查参考电极接触 → 电极重新压实']]},
     {k:'t4mains',title:'T4 实时工频预警（可选·非判据）',chip:'仅预警',
-     hint:'法师 09-25 裁定「甲＋可选乙」：**权威取保存后质检的 <code>mains_ratio</code>**；本卡为面板侧实时粗估，只用于当场预警。<br>口径：5.12 秒窗（1280 点 @250 Hz）下 50 Hz 恰为整数 bin 256，直接取该 bin 功率 ÷ 0.5–45 Hz 功率。<b>注意</b>：本场信号链为 1–40 Hz 带通，50 Hz 已被衰减 → 此值系统性偏低，**只可作"有没有明显工频"的粗判**。'},
+     hint: () => {
+       const sf = SFREQ(), ch = mainsCh();
+       const n0 = (LIVE.wave && ch && LIVE.wave[ch] && LIVE.wave[ch].length) || Math.round(5.12 * sf);
+       let n = 1; while(n < n0) n <<= 1;
+       const df = sf / n, k50 = Math.round(50 / df);
+       return '法师 09-25 裁定「甲＋可选乙」：**权威取保存后质检的 <code>mains_ratio</code>**；本卡为面板侧实时粗估，只用于当场预警。'
+         + '<br>口径：取' + (ch ? '通道 <b>' + ch + '</b> 的' : '') + '实时波形 ' + n0 + ' 点 @' + sf + ' Hz（≈' + (n0 / sf).toFixed(2)
+         + ' 秒窗，补零到 ' + n + ' 点做 FFT）→ 频率分辨率 ' + df.toFixed(3) + ' Hz，50 Hz 落在第 ' + k50 + ' 个 bin（取该 bin ±1 的功率 ÷ 0.5–45 Hz 功率）。'
+         + '<b>注意</b>：本场信号链为 1–40 Hz 带通，50 Hz 已被衰减 → 此值系统性偏低，**只可作"有没有明显工频"的粗判**。';
+     }},
 
     {k:'grid',title:'T6 原始流全量核验',chip:'★ 四问生命线',
      hint:'验的是"它给不给原始档"，不是"它降噪好不好"。<b>若只有加工流、无真原始档 → 触碰 D32 硬条件，走换货／谈判路径。</b>',
      cols:['核查点','怎么看','期望','记录'],
      rows:[
-      ['通道数 × 采样率','npz <code>meta</code> 的 channels／sfreq','7 通道 / 250 Hz',{f:'t6a',in:'text',ph:'__ ch / __ Hz'}],
+      ['通道数 × 采样率','npz <code>meta</code> 的 channels／sfreq','与《设备档案》一致（例：7 通道 / 250 Hz）',{f:'t6a',in:'text',ph:'__ ch / __ Hz'}],
       ['原始档在不在','npz 是否含 <code>eeg_pre_filter</code> 列','必须有',{f:'t6b',in:'select',opt:['有','无']}],
       ['有无设备端自动降噪/插值','<code>eeg_pre_filter</code> 与 <code>eeg</code> 逐点对照','如实记录差异',{f:'t6c',in:'text',ph:'差异描述'}],
-      ['通道顺序','列名逐项比对','CP5 CP6 PO3 PO4 O1 Oz O2',{f:'t6d',in:'text',ph:'一致／实际'}]
+      ['通道顺序','列名逐项比对','与《设备档案》通道串逐项一致（例：CP5 CP6 PO3 PO4 O1 Oz O2）',{f:'t6d',in:'text',ph:'一致／实际'}]
      ],v:'t6v',vlabel:'T6 结论'},
     {k:'hint',tone:'good',t:'★ 场①结束',d:'点「停止采集」→ 保存 → 顺手做 T8 的前两步（保存与入库）→ 回来填「汇总」的记录卡。'}
   ]},
@@ -629,11 +646,11 @@ const FLOW = {
     {k:'cmd',title:'命令行入库（与界面等价；出问题时用它定位）',lines:[
       '& "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe" "05_产品与开发\\muse-direct\\tools\\ingest_session.py" `',
       '  --npz "<会话npz完整路径>" --report "<report.html完整路径>" `',
-      '  --participant P001 --type test --operator tiand --note "NeuraDock 性能测试 场② T5/T8"'
+      '  --participant P001 --type test --operator tiand --note "<本场说明，例：设备性能测试 场② T5/T8>"'
     ],note:'<code>--type test</code> 按字典默认落隔离区；本场数据是否入工厂，按当场裁定执行（裁定结果填进汇总页）。'},
 
     {k:'grid',title:'T10 VR 同场共存',chip:'10 分钟',
-     hint:'Pico 连着 WiFi、头环采集中的状态下跑一场完整 VR 场景（mandala 任一变体），对比断包率。判据：有 VR 的断包率不高于无 VR。',
+     hint:'Pico 连着 WiFi、<b>设备戴好采集中的状态</b>下跑一场完整 VR 场景（mandala 任一变体），对比断包率。判据：有 VR 的断包率不高于无 VR。',
      cols:['条件','断包率','备注'],
      rows:[
       ['无 VR（取 T5 某 10 分钟）',{f:'t10a',in:'text',ph:'%',w:'96px'},{f:'t10n1',in:'text',ph:'—'}],
@@ -660,7 +677,7 @@ const FLOW = {
       ['α 阻断提升幅度',{f:'t11a',in:'text',ph:'%',w:'96px'},{f:'t11b',in:'text',ph:'%',w:'96px'},{f:'t11n1',in:'text',ph:'—'}],
       ['可用通道数（质检 ok）',{f:'t11c',in:'text',ph:'__ / 7',w:'96px'},{f:'t11d',in:'text',ph:'__ / 4',w:'96px'},{f:'t11n2',in:'text',ph:'—'}],
       ['佩戴体感（1–5 分）',{f:'t11e',in:'num',ph:'',w:'96px'},{f:'t11f',in:'num',ph:'',w:'96px'},{f:'t11n3',in:'text',ph:'双设备同戴是否可接受'}],
-      ['互相干扰观察','',' ',{f:'t11n4',in:'text',ph:'蓝牙/BLE 共存'}]
+      ['互相干扰观察','',' ',{f:'t11n4',in:'text',ph:'例：蓝牙/BLE 共存'}]
      ],v:'t11v',vlabel:'T11 结论'}
   ]},
 
@@ -713,10 +730,10 @@ const FLOW = {
      ]},
     {k:'fold',title:'异常处置速查（10 条，点开即可）',items:[
       ['1 · 点「开始采集」报 Internal Server Error／无波形／关不掉','后台服务已死，或已有会话在跑。→ ① 探活 8777；② 若提示"已有监测会话正在运行"，先在原页面停掉那场再开新场（重复开会返回 <b>409</b> 并说明原因，属保护）。'],
-      ['2 · 连接被拒 ConnectionRefusedError [WinError 10061]','<code>127.0.0.1:9600</code> 无人监听。四步：① 官方软件是否已连上设备（无设备时"打开数据服务"置灰）；② 是否已点『打开数据服务』；③ 端口是否被改成非 9600；④ <b>模拟器是否开着占用了 9600</b>（与真机互斥）。'],
+      ['2 · 连接被拒 ConnectionRefusedError [WinError 10061]','<b>仅 TCP 转发链路会有此错</b>（蓝牙设备不出现）：<code>127.0.0.1:9600</code> 无人监听。四步：① 厂商软件是否已连上设备（无设备时"打开数据服务"置灰）；② 是否已点『打开数据服务』；③ 端口是否被改成非 <b>档案端口</b>（NeuraDock 例：<code>9600</code>）；④ <b>模拟器是否开着占用了同一端口</b>（与真机互斥）。'],
       ['3 · 通道贴底（std < 2 µV）','电极／放大器／链路三选一。→ 走 T2 的"三种成因区分表"，<b>先区分再动手</b>。'],
-      ['4 · 波形是直线但通道名正常','电极未接触或参考脱落。→ 压实电极、检查耳夹参考，复测 1 分钟；仍直线则记 bad 并排除该通道分析。'],
-      ['5 · 工频（50 Hz）显著','接地／线缆／环境。→ ① 换 50Hz 隔离 USB 线 ② 拔掉附近充电器、换插座回路 ③ 检查耳夹 ④ 电极重压。'],
+      ['4 · 波形是直线但通道名正常','电极未接触或参考脱落。→ 压实电极、检查参考电极接触（例：NeuraDock 为耳夹；Muse 为前额参考），复测 1 分钟；仍直线则记 bad 并排除该通道分析。'],
+      ['5 · 工频（50 Hz）显著','接地／线缆／环境。→ ① 换 50Hz 隔离数据线（有线设备）② 拔掉附近充电器、换插座回路 ③ 检查参考电极 ④ 电极重压。'],
       ['6 · 断包集中在开头 2 分钟','开机链路握手。→ 复现并记录次数；报告如实标注"前 2 分钟数据可靠性低"；这是 T5 的重点观察项。'],
       ['7 · 保存后找不到 npz','保存未触发／路径不对。→ 回实践驾驶舱确认"已保存"状态；仍无则记录时间点，作为 T8 的失败证据（<b>不要重跑顶替，失败本身是数据</b>）。'],
       ['8 · 入库后 registry 无新行','入库脚本报错／被隔离。→ 看命令行输出与 <code>qc.json.recommend</code>；隔离是预期行为（见前置 e2），未隔离却无行才是故障。'],
@@ -851,7 +868,13 @@ function card(blk, body, extraChip){
     }}, '−'));
   const c = h('div', {class:'card'}, h('div', {class:'chead'}, ...head));
   const cb = h('div', {class:'cbody'});
-  if(blk.hint) cb.appendChild(h('p', {class:'hint', html:blk.hint}));
+  /* hint 可为字符串（固定文案）或函数（依赖《设备档案》/实时通道 → 由 refreshDevHints 自动重算） */
+  if(blk.hint){
+    const p = h('p', {class:'hint'});
+    if(typeof blk.hint === 'function'){ p.__devfn = blk.hint; p.setAttribute('data-devhint', '1'); p.innerHTML = blk.hint(); }
+    else p.innerHTML = blk.hint;
+    cb.appendChild(p);
+  }
   body.forEach(b => cb.appendChild(b));
   c.appendChild(cb);
   return c;
@@ -894,6 +917,78 @@ function deviceChannels(){
   const m = dp.match(/[A-Za-z]{1,3}[0-9a-z]{1,2}/g) || [];
   return m.filter(x => /^(CP|PO|OZ|O[12]|TP|AF|FP|F[0-9]|P[0-9z]|T[0-9]|C[0-9z])/i.test(x)).slice(0, 16);
 }
+/* ══ DEV-INFER-BEGIN ══ 设备推断区（本区内出现设备名/通道名属**正当**：
+   这些函数就是"把设备事实收在一处"的实现，扫描器按标记整区豁免）══ */
+/* ── 设备推断：面板里凡"主看哪个通道／断流怎么自救／导出叫什么名"都从这里取 ──
+   2026-09-26 系统性排查（法师令：不许一段一段撞着修）：
+   把某台设备的通道名／采样率／端口写进**通用条件**的，一律改成本组函数取值；
+   取不到就如实说"未识别"，不拿 NeuraDock 的数当默认值（那正是 T1 误报的成因）。 */
+function devShortName(){                       /* 「Muse（S/2 代，蓝牙）」→「Muse」 */
+  const s = String(S.fields['dp_name'] || '').trim();
+  return (s.split(/[（(]/)[0] || s).trim();
+}
+function devTag(){ return devShortName() || '脑电设备'; }   /* 导出标签，档案没填就中性 */
+function devPort(){                            /* 从档案链路里取端口（NeuraDock 例：9600） */
+  const m = String(S.fields['dp_link'] || '').match(/:(\d{2,5})\b/);
+  return m ? m[1] : '';
+}
+function devLinkKind(){                        /* 链路类型：决定"断流自救"怎么说 */
+  const s = String(S.fields['dp_link'] || '') + ' ' + String(S.fields['dp_name'] || '');
+  if(/蓝牙|BLE/i.test(s)) return 'ble';
+  if(/TCP|127\.0\.0\.1|数据服务/i.test(s)) return 'tcp';
+  return '';
+}
+function devHelpText(){
+  const k = devLinkKind();
+  if(k === 'ble') return '请查设备电量、佩戴贴合与蓝牙适配器是否被占用（本机为蓝牙链路，不涉及厂商数据服务端口）';
+  if(k === 'tcp') return '请查设备电源／佩戴，以及厂商软件『打开数据服务』是否仍在（本机为 TCP 数据服务链路）';
+  return '请查设备电源／佩戴与链路（有线查数据线；经厂商软件转发时查『打开数据服务』）';
+}
+/* α 主看通道：枕区优先 → 后部降级（D6）→ 全通道；并如实标注"替代"。
+   通道池与判类**只此一份**（alphaPickFrom），面板文案与实际取数共用，避免两处各说一套。 */
+const ALPHA_OCC  = ['O1','Oz','O2','PO3','PO4','Pz','POz','Iz','O1h','O2h'];
+const ALPHA_POST = ['TP9','TP10','T5','T6','P3','P4','CP5','CP6'];
+function alphaPickFrom(chs){
+  const occ = ALPHA_OCC.filter(c => chs.indexOf(c) >= 0);
+  if(occ.length) return {chs:occ, kind:'occ'};
+  const post = ALPHA_POST.filter(c => chs.indexOf(c) >= 0);
+  if(post.length) return {chs:post, kind:'post'};
+  return {chs:chs, kind:'all'};
+}
+function alphaKindText(kind){
+  if(kind === 'occ')  return '枕区';
+  if(kind === 'post') return '本设备无枕区，按 D6 降级规则就近替代——结论须标注"替代"';
+  return '无枕区通道，取全通道，属替代';
+}
+function mainAlphaText(){
+  const chs = deviceChannels();
+  if(!chs.length) return '（尚未识别通道——请先在《设备档案》填通道名，或先开始采集）';
+  const p = alphaPickFrom(chs);
+  return '<b>' + p.chs.join(' / ') + '</b>（' + alphaKindText(p.kind) + '）';
+}
+/* T4 工频预警取一路即可（工频为共模）：Oz → 任一 O* → 首通道 */
+function mainsCh(){
+  const chs = deviceChannels();
+  if(!chs.length) return '';
+  if(chs.indexOf('Oz') >= 0) return 'Oz';
+  return chs.filter(c => /^O[12z]?$/i.test(c))[0] || chs[0];
+}
+/* 函数式提示的自刷新：通道集或档案一变就重算文案，不必整页重建（不丢输入焦点） */
+function refreshDevHints(){
+  const key = deviceChannels().join(',') + '|' + String(S.fields['dp_link'] || '') + '|' + String(S.fields['dp_name'] || '') + '|' + SFREQ();
+  if(key === refreshDevHints.k) return;
+  refreshDevHints.k = key;
+  document.querySelectorAll('[data-devhint],[data-devcmd]').forEach(el => {
+    if(!el.__devfn) return;
+    const v = el.__devfn();
+    if(el.tagName === 'PRE') el.textContent = v; else el.innerHTML = v;
+  });
+  const w = document.getElementById('rtWarnWhy');
+  if(w) w.textContent = '⚠ 无新帧——数据可能已断：' + devHelpText();
+  const si = document.getElementById('sfInp');
+  if(si && document.activeElement !== si) si.value = String(SFREQ());
+}
+/* ══ DEV-INFER-END ══ */
 function t2DynRows(cols){
   const chs = deviceChannels();
   if(!chs.length) return null;
@@ -910,7 +1005,7 @@ function renderGrid(blk){
   const thead = h('thead', null, h('tr', null, ...blk.cols.map((c,i)=> h('th', {html:c}))));
   const tbody = h('tbody');
   const dynRows = (blk.dyn === 'ch') ? t2DynRows(blk.cols) : null;
-  if(dynRows && dynRows.length) blk._dynKey = dynRows.map(r => r[0]).join(',');
+  if(dynRows && dynRows.length){ blk._dynKey = dynRows.map(r => r[0]).join(','); window.__dynKey = blk._dynKey; }
   (dynRows && dynRows.length ? dynRows : blk.rows).forEach(r=>{
     const tr = h('tr');
     r.forEach(cell=>{
@@ -944,13 +1039,22 @@ function renderFold(blk){
   return card(blk, body);
 }
 function renderCmd(blk){
-  const text = blk.lines.join('\n');
+  /* lines / note 可为字符串或函数（依赖《设备档案》→ 由 refreshDevHints 自动重算） */
+  const linesFn = (typeof blk.lines === 'function') ? blk.lines : null;
+  const getLines = () => (linesFn ? linesFn() : blk.lines);
+  const pre = h('pre', {text:getLines().join('\n')});
+  if(linesFn){ pre.__devfn = () => getLines().join('\n'); pre.setAttribute('data-devcmd', '1'); }
   const body = [h('div', {class:'cmdbtns noprint'},
-      h('button', {class:'btn ghost', type:'button', onclick:()=>copy(text,'命令已复制')}, '复制命令'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>copy(getLines().join('\n'), '命令已复制')}, '复制命令'),
       blk.probe ? h('button', {class:'btn', type:'button', onclick:probe}, '探一下实践驾驶舱（8777）') : null,
       blk.probe ? h('a', {class:'btn', href:'http://127.0.0.1:8777', target:'_blank', rel:'noopener'}, '打开实践驾驶舱') : null),
-    h('pre', {text:text})];
-  if(blk.note) body.push(h('p', {class:'hint', html:blk.note}));
+    pre];
+  if(blk.note){
+    const p = h('p', {class:'hint'});
+    if(typeof blk.note === 'function'){ p.__devfn = blk.note; p.setAttribute('data-devhint', '1'); p.innerHTML = blk.note(); }
+    else p.innerHTML = blk.note;
+    body.push(p);
+  }
   if(blk.probe) body.push(h('p', {class:'hint', id:'probeOut'}, ''));
   return card(blk, body);
 }
@@ -1192,7 +1296,7 @@ function probe(){
     })
     .catch(()=>{
       clearTimeout(to);
-      out.innerHTML = '🔴 <b>没连上实践驾驶舱</b>。三种可能：① 实践驾驶舱服务没起（见前置「软件与端口」第 4 条）；② 本页以 <code>file://</code> 打开、浏览器拦了跨域请求 → 点上面「打开实践驾驶舱」人工确认即可；③ 端口不是 8777。<br>9600（设备数据服务）浏览器探不了，请用前置里的 PowerShell 命令。';
+      out.innerHTML = '🔴 <b>没连上实践驾驶舱</b>。三种可能：① 实践驾驶舱服务没起（见前置「软件与端口」第 4 条）；② 本页以 <code>file://</code> 打开、浏览器拦了跨域请求 → 点上面「打开实践驾驶舱」人工确认即可；③ 端口不是 8777。<br>设备侧端口（档案里的 ' + (devPort() || 'TCP 数据服务端口') + '）浏览器探不了，请用前置里的 PowerShell 命令。';
     });
 }
 
@@ -1212,7 +1316,7 @@ function fallbackCopy(text, done){
 function toMarkdown(){
   const L = [];
   const now = new Date().toLocaleString('zh-CN', {hour12:false});
-  L.push('# NeuraDock 设备性能测试 · 记录（导出自执行面板）', '', '导出时间：' + now, '');
+  L.push('# ' + devTag() + ' 设备性能测试 · 记录（导出自执行面板）', '', '导出时间：' + now, '');
   FLOW.secs.forEach(sec=>{
     L.push('## ' + sec.name, '');
     sec.blocks.forEach(blk=>{
@@ -1262,8 +1366,8 @@ function openExport(){
     h('p', {class:'hint'}, '三种方式随你挑：复制全文（贴进文档／微信）、下载 Markdown（存档）、下载 JSON（换设备后可用「导入」恢复全部勾选与记录）。'),
     h('div', {class:'cmdbtns'},
       h('button', {class:'btn pri', type:'button', onclick:()=>copy(md,'记录已复制到剪贴板')}, '复制全文'),
-      h('button', {class:'btn', type:'button', onclick:()=>{ download('NeuraDock测试记录_' + stamp + '.md', md, 'text/markdown'); toast('已下载 Markdown'); }}, '下载 Markdown'),
-      h('button', {class:'btn', type:'button', onclick:()=>{ download('NeuraDock测试记录_' + stamp + '.json', JSON.stringify(S, null, 1), 'application/json'); toast('已下载 JSON'); }}, '下载 JSON（含勾选）'),
+      h('button', {class:'btn', type:'button', onclick:()=>{ download(devTag() + '测试记录_' + stamp + '.md', md, 'text/markdown'); toast('已下载 Markdown'); }}, '下载 Markdown'),
+      h('button', {class:'btn', type:'button', onclick:()=>{ download(devTag() + '测试记录_' + stamp + '.json', JSON.stringify(S, null, 1), 'application/json'); toast('已下载 JSON'); }}, '下载 JSON（含勾选）'),
       h('label', {class:'btn', style:'display:inline-flex;align-items:center'}, '导入 JSON',
         h('input', {type:'file', accept:'.json', style:'display:none', onchange: e=>importJson(e.target.files[0])})),
       h('button', {class:'btn ghost', type:'button', onclick:()=>ov.remove()}, '关闭')),
@@ -1294,7 +1398,13 @@ function importJson(file){
      POST /api/monitor/marker → 打点（由机器自动打）
    分工：机器＝计时·打点·按段读 α·填表；人＝按提示睁眼闭眼／静坐／做动作。
    ══════════════════════════════════════════════════════════════════ */
-const SFREQ = () => (Number(S.meta.sf) > 0 ? Number(S.meta.sf) : 250);
+/* 采样率真源：实时帧给的 → 《设备档案》dp_sf → 才轮到 250（NeuraDock 标称，仅作最后兜底） */
+const SFREQ = () => {
+  const live = Number(S.meta.sf);
+  if(live > 0) return live;
+  const dp = parseFloat(String(S.fields['dp_sf'] || '').replace(/[^0-9.]/g, ''));
+  return dp > 0 ? dp : 250;
+};
 
 /* 迭代式 radix-2 FFT（就地） */
 function fftRadix2(re, im){
@@ -1415,10 +1525,16 @@ function liveTick(ev){
   LIVE.tick = d; LIVE.at = Date.now(); LIVE.on = !!d.connected;
   if(!LIVE.on) LIVE.why = '已连服务但设备未连接';
   if(d.wave) LIVE.wave = d.wave;
+  /* 采样率以机器为准（2026-09-26）：服务端 tick 带实际 sfreq 则覆盖面板值；
+     旧版服务端不带此字段，此时退回《设备档案》dp_sf（见 SFREQ）。 */
+  if(d.sfreq && Number(d.sfreq) > 0) S.meta.sf = Number(d.sfreq);
   paintLive(); T1A.onTick(d); T2A.onTick(d); T3A.onTick(d);
-  /* T4 实时工频预警：约每秒一次（Oz 通道），只作预警 */
-  if(LIVE.on && Date.now() - M4.at > 1000 && LIVE.wave && LIVE.wave['Oz']){
-    M4.v = mainsRel(LIVE.wave['Oz'], SFREQ()); M4.at = Date.now(); paintMains();
+  /* T4 实时工频预警：约每秒一次，只作预警。
+     通道不写死（2026-09-26 系统排查）：工频为共模，任一路皆可 → mainsCh() 取 Oz／任一 O*／首通道。
+     此前写死 LIVE.wave['Oz']，Muse 等无枕区设备上这一卡永远不动。 */
+  const mc = mainsCh();
+  if(LIVE.on && Date.now() - M4.at > 1000 && mc && LIVE.wave && LIVE.wave[mc]){
+    M4.v = mainsRel(LIVE.wave[mc], SFREQ()); M4.at = Date.now(); M4.ch = mc; paintMains();
   }
 }
 /* 帧龄守卫（2026-09-25 首场会话尾段断流 12.6 分钟而界面照常显示"进行中"）：
@@ -1427,6 +1543,8 @@ function liveTick(ev){
 const STALE_MS = 5000;
 function liveStale(){ return !LIVE.at || (Date.now() - LIVE.at) > STALE_MS; }
 function paintLive(){
+  /* ⓪ 设备相关文案自刷新（通道集／档案／采样率一变即重算，不整页重建） */
+  refreshDevHints();
   /* ① 现场计时（T1 分段／T5 十分钟提醒 → 顶栏 KPI 条） */
   const e1 = document.getElementById('kpiLive');
   if(e1){
@@ -1487,20 +1605,19 @@ function applyBeepLabel(){
   const b = document.getElementById('beepTgl');
   if(b) b.textContent = (S.meta.beep !== false) ? '🔔 提示音：开' : '🔕 提示音：关';
 }
-/* 取本刻 α：优先用实时波形自算 O1/Oz/O2 均值；取不到返回 null（不拿 dB 冒充相对功率） */
+/* 取本刻 α：用实时波形自算（通道由 pickAlphaChannels 按设备取，不写死）；取不到返回 null（不拿 dB 冒充相对功率） */
 let ALPHA_BASIS = '';
 /* α 主看通道：**不写死设备**（2026-09-26 现场教训：Muse 无 O1/Oz/O2，写死会误报"疑似断流"）
-   枕区优先 → 无枕区按 D6 降级规则取后部（TP9/TP10）→ 再退全通道均值，并如实标注"替代"。 */
+   枕区优先 → 无枕区按 D6 降级规则取后部（TP9/TP10）→ 再退全通道均值，并如实标注"替代"。
+   判类与通道池复用 alphaPickFrom（与面板文案 mainAlphaText 同源，不再各写一套）。 */
 function pickAlphaChannels(){
-  const w = LIVE.wave || {}, all = Object.keys(w);
-  if(!all.length) return {chs:[], label:'（尚未收到波形帧）'};
-  const occZone = ['O1','Oz','O2','PO3','PO4','Pz','POz','Iz','O1h','O2h'];
-  const posterior = ['TP9','TP10','T5','T6','P3','P4','CP5','CP6'];
-  const occ = occZone.filter(c => all.indexOf(c) >= 0);
-  if(occ.length) return {chs:occ, label:'枕区 ' + occ.join('/')};
-  const post = posterior.filter(c => all.indexOf(c) >= 0);
-  if(post.length) return {chs:post, label:'后部 ' + post.join('/') + '（本设备无枕区通道，按 D6 降级规则就近替代——结论须标注"替代"）'};
-  return {chs:all, label:'全通道均值 ' + all.join('/') + '（无枕区通道，属替代）'};
+  const all = Object.keys(LIVE.wave || {});
+  if(!all.length) return {chs:[], label:'（尚未收到波形帧）', short:'（尚未收到波形帧）'};
+  const p = alphaPickFrom(all), lab = p.chs.join('/');
+  return {chs:p.chs, short:alphaKindText(p.kind),
+          label:(p.kind === 'occ' ? '枕区 ' + lab
+               : p.kind === 'post' ? '后部 ' + lab + '（' + alphaKindText('post') + '）'
+               : '全通道均值 ' + lab + '（' + alphaKindText('all') + '）')};
 }
 function measureAlpha(){
   const w = LIVE.wave, sf = SFREQ();
@@ -1670,15 +1787,13 @@ const T2A = {
     t2Msg('✅ 5 分钟完成，已按通道自动填表（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
   }
 };
-/* 通道集变了就重建表格（只重画界面，S 里的数据不动） */
+/* 通道集变了就重建表格（只重画界面，S 里的数据不动）。
+   2026-09-26 修：键此前只写进 blk._dynKey、这里却读 window.__dynKey → 守卫恒不成立，
+   每次调用都整页重建（会打断正在跑的计时器）。两处统一到 window.__dynKey。 */
 function syncDeviceRows(){
   const want = deviceChannels().join(',');
   if(!want) return;
-  const cards = document.querySelectorAll('#g2 .card');
-  let cur = null;
-  cards.forEach(c => { const g = c.querySelector('table'); if(g && !cur) cur = c; });
-  const key = (window.__dynKey || '');
-  if(want !== key){ window.__dynKey = want; hardRefresh(); }
+  if(want !== (window.__dynKey || '')){ window.__dynKey = want; hardRefresh(); }
 }
 function t2Msg(t, bad){
   setPt(t || (T2A.on ? ('现在：静坐不动 · 还剩 ' + fmt(T2A.left)) : null));
@@ -1697,7 +1812,7 @@ function renderBridge(blk){
         toast(chs.length ? ('收到 ' + chs.length + ' 通道波形：' + chs.join('/')) : '还没收到波形帧（先开始采集）');
       }}, '自检波形'),
       h('span', {class:'hint', style:'margin:0'}, '采样率'),
-      h('input', {type:'text', inputmode:'decimal', style:'width:72px', value:String(SFREQ()),
+      h('input', {type:'text', inputmode:'decimal', id:'sfInp', style:'width:72px', value:String(SFREQ()),
         onchange: e => { const v = Number(e.target.value); if(v > 0){ S.meta.sf = v; saveSoon(); toast('采样率设为 ' + v + ' Hz'); } }}),
       h('span', {class:'hint', style:'margin:0'}, 'Hz')),
     h('p', {class:'hint', html:'本页与驾驶舱<b>同源</b>才能自动读数（从 <code>/ndtest</code> 或驾驶舱「设备测试」页签进入）。以本机文件方式打开时浏览器会拦跨源请求，只能手动填写。'}),
@@ -1735,7 +1850,7 @@ function renderT2Auto(blk){
 }
 
 /* ── T4 实时工频预警（可选·非判据；法师 09-25 裁定「甲＋可选乙」）── */
-const M4 = {v:null, at:0};
+const M4 = {v:null, at:0, ch:''};
 function mainsRel(sig, sf){
   const n0 = sig.length;
   if(n0 < 128) return null;
@@ -1761,7 +1876,7 @@ function paintMains(){
   if(!el) return;
   if(M4.v == null){ el.textContent = LIVE.on ? '候首帧…' : '未接入实时数据（需从 /ndtest 打开并开始采集）'; return; }
   const lvl = M4.v > 0.5 ? '偏高——当场查接线/接地' : (M4.v > 0.35 ? '略高' : '未见明显工频');
-  el.textContent = '面板侧粗估 50 Hz 占比 ＝ ' + M4.v.toFixed(3) + '（' + lvl + '）· 更新于 '
+  el.textContent = '面板侧粗估 50 Hz 占比 ＝ ' + M4.v.toFixed(3) + '（取通道 ' + (M4.ch || '—') + '；' + lvl + '）· 更新于 '
     + new Date(M4.at).toLocaleTimeString('zh-CN', {hour12:false}) + '　※ 仅预警，权威取保存后质检 mains_ratio';
 }
 function renderT4Mains(blk){
@@ -2002,7 +2117,7 @@ function build(){
   const pane = h('div', {class:'pane', id:'pane'});
   /* 断流横幅：常驻于版面顶部，仅在无新帧时亮起（法师 09-25 裁定②） */
   main.appendChild(h('div', {class:'rtwarn noprint', id:'rtWarn'},
-    h('span', null, '⚠ 无新帧——数据可能已断：请查设备电源/佩戴与官方软件『打开数据服务』'),
+    h('span', {id:'rtWarnWhy'}, '⚠ 无新帧——数据可能已断：' + devHelpText()),
     h('button', {class:'btn ghost', type:'button', id:'beepTgl',
       onclick: () => { S.meta.beep = !(S.meta.beep !== false); saveSoon(); applyBeepLabel(); }}, '🔔')));
   main.appendChild(h('div', {class:'ptbar noprint', id:'ptBar'},
@@ -2148,8 +2263,9 @@ applyTheme();
 build();
 attachDelegates();
 updateCalc();
-/* 实时数据桥：启动即接；未接入则每 10 秒重试（人不用管） */
-if(!S.meta.sf) S.meta.sf = 250;
+/* 实时数据桥：启动即接；未接入则每 10 秒重试（人不用管）
+   采样率不再播种 250（那会把 NeuraDock 的标称值冒充成"设备实际值"）：
+   由 tick 的 sfreq → 《设备档案》dp_sf → 才轮到 250 兜底，见 SFREQ()。 */
 liveConnect();
 setInterval(paintLive, 1000);
 setInterval(() => { if(!LIVE.on) liveConnect(); }, 10000);

@@ -848,6 +848,10 @@ class MonitorSession:
                     "motion_xyz": {"x": _ds(accx, 80), "y": _ds(accy, 80),
                                    "z": _ds(accz, 80)},
                     "wave": wave,
+                    # 实际采样率（附加式新增 2026-09-26，不改既有字段）：
+                    # 面板侧 α 相对功率与工频 bin 换算必须以机器实际 sfreq 为准，
+                    # 此前面板只能问《设备档案》或兜底 250 Hz，换 Muse(256) 即错。
+                    "sfreq": getattr(buf, "sfreq", None),
                     # 声音指令（2026-09-11 附加式新增，不改既有字段）：
                     # 监测路径此前无 beat/vol，VR 场景拿不到声音指令。
                     # phase 供前端判断是否已过基线期（基线期不出声）。
