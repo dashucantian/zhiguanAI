@@ -689,6 +689,7 @@ function renderV(blk){
 }
 
 /* ── 计时器 ─────────────────────────────────────────────────────── */
+const TIMERS = [];   /* 活着的计时器；重建界面时统一清掉，防止"幽灵响铃" */
 function renderTimer(blk){
   const ring = h('div', {class:'ring', style:'--p:0'}, h('b', null, fmt(blk.mode === 'count' ? blk.sec : 0)));
   const info = h('div', {class:'tinfo'},
@@ -715,7 +716,7 @@ function renderTimer(blk){
   };
   bStart.onclick = ()=>{
     st.run = !st.run;
-    if(st.run){ st.id = setInterval(tick, 250); bStart.textContent = '暂停'; bStart.classList.remove('pri'); }
+    if(st.run){ st.id = setInterval(tick, 250); TIMERS.push(st.id); bStart.textContent = '暂停'; bStart.classList.remove('pri'); }
     else{ clearInterval(st.id); bStart.textContent = '继续'; bStart.classList.add('pri'); }
   };
   bReset.onclick = ()=>{ clearInterval(st.id); st.run = false; st.left = blk.sec; st.seg = 1;
@@ -921,6 +922,7 @@ function applyTheme(){
   document.getElementById('bNight').classList.toggle('on', !!S.meta.night);
 }
 function build(){
+  TIMERS.forEach(id => clearInterval(id)); TIMERS.length = 0;
   const main = document.getElementById('main');
   main.innerHTML = '';
   const nav = document.getElementById('nav');
