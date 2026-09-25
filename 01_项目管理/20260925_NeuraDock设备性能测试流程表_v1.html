@@ -193,6 +193,15 @@ nav:empty{display:none}
 .side a .n{font-size:.78em;opacity:.85;font-variant-numeric:tabular-nums}
 .gate{display:none}
 .gate.active{display:block}
+/* ── B2 阶段状态机（2026-09-25 法师令开工）── */
+.gstat{border-radius:6px}
+.gstat.todo{color:var(--ink3);border-color:var(--line)}
+.gstat.doing{color:var(--jin);border-color:currentColor}
+.gstat.ok{color:var(--qing);border-color:currentColor;font-weight:600}
+.gnext{margin-left:10px;vertical-align:middle}
+.gnext[disabled]{opacity:.5;cursor:not-allowed}
+.gate h2{flex-wrap:wrap}
+.gsum{font-size:.74em;color:var(--ink3);margin:2px 0 10px}
 .chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .chead h3{margin:0}
 .ctgl{margin-left:auto;border:1px solid var(--line);background:var(--bg2);color:var(--ink2);
@@ -1079,6 +1088,7 @@ function recount(){
     if(n) n.textContent = st + '/' + tt;
     paintMini(g.id, st, tt);
   });
+  refreshGates();
   updateMirror();
   paintKpi(done, total);
 }
@@ -1594,8 +1604,12 @@ function build(){
       onclick: () => showGate(g.id)},
       h('span', null, g.name), h('span', {class:'n', id:'gn-' + g.id}, '0/0')));
     const wrap = h('section', {class:'gate sec' + (act ? ' active' : ''), id:g.id, style:'--acc:' + g.acc},
-      h('h2', null, h('span', {class:'dot'}), g.name),
-      h('p', {class:'sdesc'}, g.desc));
+      h('h2', null, h('span', {class:'dot'}), g.name,
+        h('span', {class:'chip gstat todo', id:'gs-' + g.id}, '未开始'),
+        h('button', {class:'btn pri gnext noprint', id:'gn2-' + g.id, type:'button',
+          onclick: () => nextGate(g.id)}, '本阶段完成 → 下一阶段')),
+      h('p', {class:'sdesc'}, g.desc),
+      h('div', {class:'gsum', id:'gl-' + g.id}));
     gateBlocks(g).forEach(blk=>{
       let el;
       switch(blk.k){
@@ -1630,6 +1644,63 @@ function showGate(id){
   document.querySelectorAll('.gate').forEach(s => s.classList.toggle('active', s.id === id));
   document.querySelectorAll('.side a.gnav').forEach(a => a.classList.toggle('here', a.dataset.g === id));
   window.scrollTo(0, 0);
+}
+/* ── B2 阶段状态机（2026-09-25 法师令开工）──────────────────────────
+   准出（闸门通过）判据——两条互补，取实际适用者：
+     · 该闸门含判定块（如 G2 的 T1–T4）：**结论全部已判**＝通过（人是裁定者）；
+     · 不含判定块的闸门（G0 准备／速查）：**记录项全部完成**＝通过。
+   准入：上一闸门通过即可进入；未通过时主按钮禁用并在标题写明原因（不靠猜）。 */
+function gateStat(g){
+  let st = 0, tt = 0;
+  document.querySelectorAll('#' + g.id + ' [data-c], #' + g.id + ' [data-f], #' + g.id + ' [data-vrow]').forEach(el=>{
+    tt++;
+    const id = el.getAttribute('data-c') || el.getAttribute('data-f') || el.getAttribute('data-vrow');
+    const val = el.hasAttribute('data-c') ? S.checks[id] : (el.hasAttribute('data-f') ? S.fields[id] : S.verdicts[id]);
+    if(val && String(val).trim()) st++;
+  });
+  const vids = Array.prototype.map.call(
+    document.querySelectorAll('#' + g.id + ' [data-vrow]'), e => e.getAttribute('data-vrow'));
+  const undecided = vids.filter(v => !S.verdicts[v]);
+  const done = tt > 0 && st === tt;
+  const ok = vids.length ? (undecided.length === 0) : done;
+  const pct = tt ? Math.round(100 * st / tt) : 100;
+  return {st, tt, pct, vids, undecided, done, ok,
+    why: ok ? '' : (vids.length ? ('未判结论：' + undecided.join('、'))
+      : (st === 0 ? '尚未开始' : ('还有 ' + (tt - st) + ' 项未完成')))};
+}
+function refreshGates(){
+  GATES.forEach((g, i) => {
+    const s = gateStat(g);
+    const chip = document.getElementById('gs-' + g.id);
+    if(chip){
+      chip.className = 'chip gstat ' + (s.ok ? 'ok' : (s.st ? 'doing' : 'todo'));
+      chip.textContent = s.ok ? '✅ 已通过' : (s.st ? ('进行中 ' + s.pct + '%') : '未开始');
+    }
+    const btn = document.getElementById('gn2-' + g.id);
+    if(btn){
+      btn.disabled = !s.ok;
+      btn.title = s.ok ? '进入下一闸门' : ('未满足准出：' + s.why);
+      if(i === GATES.length - 1) btn.textContent = '本阶段完成（末闸门，请到速查收口）';
+    }
+    const sum = document.getElementById('gl-' + g.id);
+    if(sum){
+      sum.innerHTML = '';
+      sum.appendChild(document.createTextNode(
+        '准出：' + (s.vids.length ? ('该闸门 ' + s.vids.length + ' 个结论全部已判') : '记录项全部完成')
+        + '　｜　当前 ' + s.st + '/' + s.tt + '（' + s.pct + '%）'
+        + (s.ok ? '　✅ 已通过' : ('　⏳ ' + s.why))));
+    }
+  });
+}
+function nextGate(id){
+  const i = GATES.map(g => g.id).indexOf(id);
+  if(i < 0) return;
+  const s = gateStat(GATES[i]);
+  if(!s.ok){ toast('未满足准出：' + s.why); return; }
+  const nx = GATES[i + 1];
+  if(!nx){ toast('已是末闸门——请到「速查与处置」核对判据后收口'); return; }
+  showGate(nx.id);
+  toast('已通过 ' + GATES[i].name + ' → 进入 ' + nx.name);
 }
 function hardRefresh(){ build(); updateCalc(); }
 
