@@ -1466,14 +1466,31 @@ function applyBeepLabel(){
   if(b) b.textContent = (S.meta.beep !== false) ? '🔔 提示音：开' : '🔕 提示音：关';
 }
 /* 取本刻 α：优先用实时波形自算 O1/Oz/O2 均值；取不到返回 null（不拿 dB 冒充相对功率） */
+let ALPHA_BASIS = '';
+/* α 主看通道：**不写死设备**（2026-09-26 现场教训：Muse 无 O1/Oz/O2，写死会误报"疑似断流"）
+   枕区优先 → 无枕区按 D6 降级规则取后部（TP9/TP10）→ 再退全通道均值，并如实标注"替代"。 */
+function pickAlphaChannels(){
+  const w = LIVE.wave || {}, all = Object.keys(w);
+  if(!all.length) return {chs:[], label:'（尚未收到波形帧）'};
+  const occZone = ['O1','Oz','O2','PO3','PO4','Pz','POz','Iz','O1h','O2h'];
+  const posterior = ['TP9','TP10','T5','T6','P3','P4','CP5','CP6'];
+  const occ = occZone.filter(c => all.indexOf(c) >= 0);
+  if(occ.length) return {chs:occ, label:'枕区 ' + occ.join('/')};
+  const post = posterior.filter(c => all.indexOf(c) >= 0);
+  if(post.length) return {chs:post, label:'后部 ' + post.join('/') + '（本设备无枕区通道，按 D6 降级规则就近替代——结论须标注"替代"）'};
+  return {chs:all, label:'全通道均值 ' + all.join('/') + '（无枕区通道，属替代）'};
+}
 function measureAlpha(){
   const w = LIVE.wave, sf = SFREQ();
-  if(w){
-    const chs = ['O1','Oz','O2'].filter(c => w[c] && w[c].length > 200);
-    const vals = chs.map(c => alphaRel(w[c], sf)).filter(v => v != null);
-    if(vals.length) return vals.reduce((a,b)=>a+b,0)/vals.length;
-  }
-  return null;
+  if(!w) return null;
+  const pick = pickAlphaChannels();
+  if(!pick.chs.length) return null;
+  const vals = pick.chs
+    .map(c => (w[c] && w[c].length > 200) ? alphaRel(w[c], sf) : null)
+    .filter(v => v != null);
+  if(!vals.length) return null;
+  ALPHA_BASIS = pick.label;
+  return vals.reduce((a,b)=>a+b,0)/vals.length;
 }
 /* ── T1 自动跑：8 段 × 60 秒，自动打点 + 按段读 α + 自动填表 ── */
 const T1A = {
@@ -1481,16 +1498,19 @@ const T1A = {
   start(){
     if(T1A.on) return;
     if(!LIVE.on){ t1Msg('未接入实时数据——原因：' + (LIVE.why || '未知') + '（请看「实时数据联动」卡的诊断行）', true); return; }
-    T1A.on = true; T1A.seg = 0; T1A.acc = {}; T1A.next();
+    T1A.on = true; T1A.seg = 0; T1A.acc = {}; T1A.empty = 0;
+    T1A.next();
   },
-  stop(){ T1A.on = false; clearInterval(T1A.timer); t1Msg('已停止（已完成段落的数据保留）'); },
+  stop(){ T1A.on = false; T1A.empty = 0; clearInterval(T1A.timer); t1SetBtn(false); t1Msg('已停止（已完成段落的数据保留）'); },
   next(){
     T1A.seg++;
     if(T1A.seg > 8){ T1A.finish(); return; }
     const st = (T1A.seg % 2) ? '睁眼' : '闭眼';
     T1A.acc[T1A.seg] = []; T1A.left = 60;
     postMarker(st);                         /* 机器自动打点，人不用管 */
-    t1Msg('第 ' + T1A.seg + '/8 段：' + st + '（已自动打点，保持 60 秒）');
+    beep(2);                                /* 打点提示音：听到响就切换状态 */
+    t1SetBtn(true);
+    t1Msg('第 ' + T1A.seg + '/8 段：' + st + '（已自动打点＋响铃，保持 60 秒）');
     clearInterval(T1A.timer);
     T1A.timer = setInterval(() => {
       T1A.left--;
@@ -1514,7 +1534,9 @@ const T1A = {
       T1A.empty = (T1A.empty || 0) + 1;
       if(T1A.empty >= 2){
         T1A.on = false; clearInterval(T1A.timer);
-        t1Msg('连续两段无有效数据——已中止自动跑（疑似断流/未推流）。请检查连接后重试', true);
+        t1SetBtn(false);
+        t1Msg('连续两段无有效数据——已中止自动跑。核查顺序：①「实时数据联动」诊断行（monitor.running/connected）'
+          + '②本设备实际通道名（当前 α 主看通道：' + (ALPHA_BASIS || '尚未确定') + '）③若通道名与设备不符请回报', true);
         return;
       }
     } else { T1A.empty = 0; }
@@ -1530,7 +1552,7 @@ const T1A = {
     T1A.next();
   },
   finish(){
-    T1A.on = false;
+    T1A.on = false; t1SetBtn(false);
     t1Msg('✅ 8 段跑完：表已自动填好、幅度已算好——请核对后点 T1 结论');
     updateCalc();
   }
@@ -1650,14 +1672,21 @@ function renderBridge(blk){
   ];
   return card(blk, body);
 }
+function t1SetBtn(running){
+  const b = document.getElementById('t1aGo'), s = document.getElementById('t1aStop');
+  if(b){ b.disabled = running; b.textContent = running ? '运行中…' : '▶ 自动跑 8 段'; }
+  if(s) s.disabled = !running;
+}
 function renderT1Auto(blk){
   const body = [h('div', {class:'tm'},
     h('div', {class:'tinfo'},
       h('div', {class:'big', id:'t1aMsg'}, '未开始'),
       h('div', {class:'sm', id:'t1aSub'}, '机器负责计时、打点、读 α、填表；你只管睁眼/闭眼。')),
     h('div', {class:'tbtns'},
-      h('button', {class:'btn pri', type:'button', onclick:()=>T1A.start()}, '▶ 自动跑 8 段'),
-      h('button', {class:'btn ghost', type:'button', onclick:()=>T1A.stop()}, '停止')))];
+      h('button', {class:'btn pri', type:'button', id:'t1aGo', onclick:()=>T1A.start()}, '▶ 自动跑 8 段'),
+      h('button', {class:'btn ghost', type:'button', id:'t1aStop', disabled:'disabled', onclick:()=>T1A.stop()}, '停止'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>{ S.meta.beep = !(S.meta.beep !== false); saveSoon(); applyBeepLabel(); toast('提示音：' + ((S.meta.beep !== false) ? '开' : '关')); }}, '🔔 提示音开关'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>{ beep(2); toast('试听：应听到两声短响（若无声音，检查系统音量/浏览器是否静音）'); }}, '试听')))];
   return card(blk, body);
 }
 function renderT2Auto(blk){
