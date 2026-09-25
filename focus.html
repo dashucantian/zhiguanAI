@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>止坐 · 实践驾驶舱 专注页</title>
+<style>
+  /* ═══ 专注模式独立页（R3′ 修正·法师裁定：禅修页面单独跳出，风格与驾驶舱不同）═══
+     设计语言＝提案 V3「虚空单境」：近黑场、细白字、大留白、一屏一事。
+     tokens 直接承 05_产品与开发/20260924_界面重构提案/V3_虚空单境.html。
+     本页不与 console.html 共用样式体系——两套皮肤各页各表，不再混进一个文件。 */
+  :root{
+    --void:#07080c; --ink:#c9ced8; --dim:#565d6b; --line:#1b1e27;
+    --glow:#9fd8d2; --faint:#2a3140; --gold:#cbb27a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--void);color:var(--ink);letter-spacing:1px;
+    font-family:"Microsoft YaHei",system-ui,sans-serif;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  .kicker{font-size:11px;color:var(--dim);letter-spacing:8px;margin-bottom:26px}
+  .dots{position:relative;width:120px;height:120px;margin-bottom:34px}
+  .dots::after{content:"";position:absolute;left:50%;top:50%;width:120px;height:120px;
+    transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(159,216,210,.18);
+    animation:breath 7s ease-in-out infinite}
+  .dot{position:absolute;left:50%;top:50%;width:64px;height:64px;
+    transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle at 38% 34%,rgba(196,240,234,.95),
+      rgba(159,216,210,.55) 55%,rgba(159,216,210,.10) 78%);
+    box-shadow:0 0 46px 12px rgba(159,216,210,.16);
+    animation:breath 7s ease-in-out infinite}
+  @keyframes breath{0%,100%{transform:translate(-50%,-50%) scale(.6);opacity:.5}
+    46%,54%{transform:translate(-50%,-50%) scale(1.16);opacity:1}}
+  .elapsed{font-size:34px;font-weight:300;color:#e8ebf2;letter-spacing:4px;min-height:40px}
+  .hintline{font-size:11px;color:var(--dim);min-height:16px;margin-bottom:22px}
+  .row{display:flex;align-items:center;gap:18px;min-height:36px}
+  .chip{background:none;border:1px solid var(--faint);border-radius:18px;color:var(--dim);
+    font-size:13px;letter-spacing:2px;padding:8px 20px;cursor:pointer;transition:all .25s}
+  .chip:hover:not(:disabled){color:var(--glow);border-color:var(--glow)}
+  .chip:disabled{opacity:.35;cursor:default}
+  input{background:none;border:none;border-bottom:1px solid var(--faint);color:var(--ink);
+    font-size:13px;padding:6px 4px;width:120px;outline:none;letter-spacing:1px}
+  input:focus{border-bottom-color:var(--glow)}
+  .finish{margin-top:30px;background:none;border:1px solid var(--gold);border-radius:24px;
+    color:var(--gold);font-size:14px;letter-spacing:4px;padding:12px 34px;cursor:pointer;
+    transition:all .3s}
+  .finish:hover:not(:disabled){box-shadow:0 0 22px rgba(203,178,122,.25)}
+  .finish:disabled{opacity:.3;cursor:default}
+  .foot{position:fixed;bottom:26px;left:0;right:0;text-align:center;font-size:11px;
+    color:var(--dim);letter-spacing:2px}
+  .foot a{color:var(--dim);text-decoration:none;border-bottom:1px dashed var(--faint);cursor:pointer}
+  .done{font-size:16px;color:var(--glow);letter-spacing:6px;margin-top:26px;min-height:24px}
+</style>
+</head>
+<body>
+  <div class="kicker" id="kicker">止 · 观</div>
+  <div class="dots"><div class="dot"></div></div>
+  <div class="elapsed" id="elapsed">…</div>
+  <div class="hintline" id="hintline"></div>
+
+  <div class="row" id="markerRow">
+    <button type="button" class="chip fx-marker" data-label="睁眼">👁 睁眼</button>
+    <button type="button" class="chip fx-marker" data-label="闭眼">🌙 闭眼</button>
+    <input id="markerCustom" placeholder="自定义…" maxlength="24" />
+    <button type="button" class="chip" id="markerAdd">＋记</button>
+  </div>
+
+  <button class="finish" id="finish">■ 结束这一坐</button>
+  <div class="done" id="done"></div>
+
+  <div class="foot"><a id="backLink">↩ 回到驾驶舱 · 采集在后台进行</a></div>
+
+<script>
+"use strict";
+/* 专注模式独立页（/focus）。与驾驶舱的分工：
+   - 打点：直连 POST /api/monitor/marker（与驾驶舱同一服务端实现，挂钟戳一致）；
+   - 结束：本页不自己发 stop——自评必弹（裁定7）只在驾驶舱窗发生，
+     故经 BroadcastChannel 请驾驶舱执行其 monStop，本页只候会话结束（SSE end/status）。
+   - 驾驶舱窗不在时如实提示，绝不绕过自评必弹红线。 */
+const $ = id => document.getElementById(id);
+const demo = new URLSearchParams(location.search).get("demo") === "1";
+let es = null, stopped = false;
+
+function fmt(s){ s = Math.max(0, Math.floor(s||0));
+  return String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0"); }
+function hint(t){ $("hintline").textContent = t || ""; }
+
+async function jget(path){ const r = await fetch(path); if (!r.ok) throw new Error(r.status); return r.json(); }
+async function jpost(path, body){
+  const r = await fetch(path, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(body||{}) });
+  const t = await r.text(); let d = {}; try { d = JSON.parse(t); } catch(e){}
+  if (!r.ok) throw new Error(d.detail || r.status);
+  return d;
+}
+
+async function sendMarker(label){
+  label = (label||"").trim(); if (!label || stopped) return;
+  try { const r = await jpost("/api/monitor/marker", { label });
+    hint(`📍 ${r.label}（第 ${r.count} 个）`); }
+  catch (e) { hint("打点失败：" + e.message); }
+}
+document.querySelectorAll(".fx-marker").forEach(b => { b.onclick = () => sendMarker(b.dataset.label); });
+$("markerAdd").onclick = () => { sendMarker($("markerCustom").value); $("markerCustom").value = ""; };
+$("markerCustom").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); $("markerAdd").click(); } };
+
+/* 桥：结束请求交驾驶舱（自评必弹不破） */
+const bridge = ("BroadcastChannel" in window) ? new BroadcastChannel("fx-bridge") : null;
+$("finish").onclick = async () => {
+  if (stopped) return;
+  let acked = false;
+  if (bridge) {
+    const wait = new Promise(res => {
+      const h = ev => { if (ev.data && ev.data.t === "stop-ack") { acked = true; res(); } };
+      bridge.addEventListener("message", h);
+      setTimeout(() => { bridge.removeEventListener("message", h); res(); }, 1500);
+    });
+    bridge.postMessage({ t: "stop-request" });
+    await wait;
+  }
+  if (acked) { stopped = true; $("finish").disabled = true;
+    document.querySelectorAll(".fx-marker,#markerAdd").forEach(b => b.disabled = true);
+    hint("已请求结束——请回驾驶舱窗完成自评（必弹，勿关那一窗）。"); }
+  else { hint("驾驶舱窗未应答。请切到驾驶舱窗按「停止」结束（自评必弹不可绕过）。"); }
+};
+$("backLink").onclick = () => { try { window.close(); } catch(e){ location.href = "/"; } };
+
+function watchEnd(){
+  jget("/api/monitor/status").then(st => {
+    if (stopped || st.running) return;   // 仍在跑＝收尾中，候下一次信号
+    onEnded();
+  }).catch(() => {});
+}
+function onEnded(){
+  $("elapsed").textContent = "圆坐"; hint("");
+  $("done").textContent = "这一坐已结束 · 自评在驾驶舱窗进行";
+  $("markerRow").style.display = "none"; $("finish").style.display = "none";
+  setTimeout(() => { try { window.close(); } catch(e){} }, 6000);
+}
+function enterIdle(){
+  $("elapsed").textContent = "--:--"; hint("当前无在采会话。请回驾驶舱开始采集后再入本页。");
+  $("markerRow").style.display = "none"; $("finish").style.display = "none";
+}
+
+function attachStream(){
+  es = new EventSource("/api/monitor/stream");
+  es.onmessage = ev => {
+    let d; try { d = JSON.parse(ev.data); } catch(e){ return; }
+    if (d.type === "end") { watchEnd(); return; }
+    if (typeof d.elapsed === "number") $("elapsed").textContent = fmt(d.elapsed);
+  };
+  es.onerror = () => { /* EventSource 自会重连；断流超 12s 如实提示（不假死） */ };
+}
+
+(async function init(){
+  if (demo) {
+    $("kicker").textContent = "预 览";
+    $("elapsed").textContent = "体验层演示";
+    hint("预览态：只演示呼吸光点，不涉采集。真实止坐请从驾驶舱采集工作台进入。");
+    $("markerRow").style.display = "none"; $("finish").style.display = "none";
+    return;
+  }
+  try {
+    const st = await jget("/api/monitor/status");
+    if (!st.running) { enterIdle(); return; }
+    attachStream();
+  } catch (e) { hint("驾驶舱服务未连通：" + e.message); }
+})();
+</script>
+</body>
+</html>

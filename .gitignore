@@ -93,6 +93,7 @@ vr_assets/tls/
 !config*.json
 !vr_feedback.html
 !console.html
+!focus.html
 !vr_mandala.html
 !视图甘特流程图.html
 # 2026-09-25 W1：NeuraDock 测试执行面板（法师真机测试时手上用的操作页，交付件）

@@ -3,12 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>止观AI 统一控制台 · V0905-1</title>
+<title>实践驾驶舱 · NeuraDock</title>
 <style>
+  /* R6 视觉层（2026-09-25 法师批「直接进R6施工」）：token 值升级至 V1「静水映天」定稿色板
+     （05_产品与开发\20260924_界面重构提案\V1_静水映天.html :root）。变量名沿用本舱旧名，仅换值。 */
   :root {
-    --bg: #0f0f11; --panel: #1a1a2e; --panel2: #16213e;
-    --border: #2a2a3e; --text: #ccc; --dim: #888;
-    --accent: #4ecdc4; --warn: #ff6b6b; --ok: #66bb6a; --gold: #ffe66d;
+    --bg: #0a0f1e; --panel: #111a30; --panel2: #0d1526;
+    --border: #22304e; --text: #c8d2e4; --dim: #6b7a95;
+    --accent: #5fd6cb; --warn: #e07a6a; --ok: #7ec98f; --gold: #e8c87a;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text);
@@ -59,41 +61,15 @@
     max-height: 90vh; overflow-y: auto; }
   .sr-box h2 { font-size: 16px; margin-bottom: 4px; }
   .sr-box .field { margin-top: 14px; }
+  /* R6 ②：水面/天色意象条（V1 提案画法，只显意象不显数，档位词/存值零改动） */
+  .sr-axis-svg { display: block; width: 100%; height: 52px;
+    border-radius: 8px; margin-top: 8px; }
   .sr-box textarea { background: #0d0d18; color: var(--text);
     border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px;
     font-size: 13px; min-height: 44px; resize: vertical; }
   details.fold summary { font-size: 12px; color: var(--dim); cursor: pointer;
     margin-top: 8px; }
   details.fold input { margin-top: 6px; }
-  /* ── 专注模式（R3′·V3 虚空单境哲学：采集时隐藏复杂度，行者不盯数据）──
-     z-index 90：压在自评卡 sr-overlay(98) 之下——停止时自评必弹浮于其上。 */
-  .fx-overlay { position: fixed; inset: 0; z-index: 90; display: none;
-    background: radial-gradient(ellipse at 50% 42%, #121a2b 0%, #0a0d14 62%, #060709 100%);
-    flex-direction: column; align-items: center; justify-content: center; gap: 26px; }
-  .fx-dots { position: relative; width: 96px; height: 96px; }
-  .fx-dots::after { content: ""; position: absolute; left: 50%; top: 50%;
-    width: 96px; height: 96px; transform: translate(-50%, -50%);
-    border-radius: 50%; border: 1px solid rgba(78, 205, 196, .22);
-    animation: fxBreath 7s ease-in-out infinite; }
-  .fx-dot { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px;
-    transform: translate(-50%, -50%); border-radius: 50%;
-    background: radial-gradient(circle at 38% 34%, rgba(150, 240, 230, .95),
-      rgba(78, 205, 196, .6) 55%, rgba(78, 205, 196, .12) 78%);
-    box-shadow: 0 0 38px 10px rgba(78, 205, 196, .28);
-    animation: fxBreath 7s ease-in-out infinite; }
-  @keyframes fxBreath { 0%, 100% { transform: translate(-50%, -50%) scale(.6); opacity: .5; }
-    46%, 54% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; } }
-  .fx-elapsed { font-size: 30px; color: #dfeff0; letter-spacing: 3px; min-height: 34px; }
-  .fx-row { display: flex; align-items: center; gap: 10px; min-height: 34px; }
-  .fx-row .chip { background: transparent; color: #9fb6ba;
-    border: 1px solid #2c3b48; border-radius: 14px; padding: 5px 14px; font-size: 13px; }
-  .fx-row .chip:hover { color: var(--accent); border-color: var(--accent); }
-  .fx-row input { background: rgba(255,255,255,.06); color: var(--text);
-    border: 1px solid #2c3b48; border-radius: 4px; padding: 6px 10px; font-size: 13px; }
-  .fx-exit { background: none; border: none; color: #5c6b70; font-size: 12px;
-    cursor: pointer; letter-spacing: 1px; }
-  .fx-exit:hover { color: var(--text); }
-  body.fx-lock { overflow: hidden; }
   button.btn { background: var(--accent); color: #06202c; border: none;
     border-radius: 5px; padding: 9px 22px; font-size: 14px; font-weight: bold;
     cursor: pointer; }
@@ -243,7 +219,7 @@
 </head>
 <body>
 <header>
-  <h1>🧠 止观AI 统一控制台</h1>
+  <h1>🧠 实践驾驶舱</h1>
   <span id="phaseTag" class="phase-tag">待机</span>
   <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">服务连接中…</span></span>
 </header>
@@ -373,7 +349,7 @@
       <button class="btn" id="monStart">▶ 开始采集</button>
       <button class="btn ghost" id="monSave" disabled>💾 保存（不断连）</button>
       <button class="btn danger" id="monStop" disabled>■ 停止并保存</button>
-      <button class="btn ghost" id="btnFocus" disabled title="隐藏波形与数值，只留呼吸光点、时长、打点与结束（浏览器端；Pico 侧随 S1 收口后另议）">🧘 专注模式</button>
+      <button class="btn ghost" id="btnFocus" disabled title="单独跳转到专注页（V3 虚空单境独立风格·法师 09-25 裁定：禅修页面不混在本页）；采集后台继续，结束回本页自评">🧘 专注模式</button>
       <span class="msg" id="monMsg"></span>
     </div>
     <!-- 采集期手打标记（2026-09-24 法师授权，T1 睁闭眼等协议用）：
@@ -565,6 +541,16 @@
     </table>
   </div>
   <div class="card">
+    <h2>四透镜 CT · 单坐分析（词汇层组织参照 · 无分数无排名 · 不判）</h2>
+    <div class="hint">只借《递归的生命》第二篇的波长分段组织法——逐息（阿毗达摩类比·微观生灭）／节律（干支类比·只借宏观周期格位，命理语义零导入）／叙事（占星类比·只借第一人称格位）／生理（RDoC 实证）；每列自曝盲区＝损失投影诚实；互证的收敛判定留给人审（判语 011/012/013）。</div>
+    <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
+      <label class="stat">会话：</label>
+      <select id="ctSid"><option value="">（清单加载中…）</option></select>
+      <button class="btn ghost" id="ctLoad">扫这一坐</button>
+    </div>
+    <div id="ctOut" class="outbox" style="display:none;"></div>
+  </div>
+  <div class="card">
     <h2>实验日志组（特征 / 决策 / 事件 / 配置快照）</h2>
     <table>
       <thead><tr><th>时间</th><th>文件</th></tr></thead>
@@ -657,7 +643,7 @@
     <div class="toolbar" style="margin-top:10px;">
       <button class="btn" id="btnLoadGuide">加载引导体验</button>
       <button class="btn ghost" id="btnUnloadGuide">关闭</button>
-      <button class="btn ghost" id="btnFxPreview" title="与采集工作台专注模式共用同一体验层组件（R3′ 对齐；本入口不涉采集）">🧘 体验专注模式</button>
+      <button class="btn ghost" id="btnFxPreview" title="单独跳出到专注页预览态（同一独立页 /focus?demo=1，只演示呼吸光点体验层；本入口不涉采集）">🧘 体验专注模式</button>
       <span class="msg" id="guideMsg"></span>
     </div>
     <div id="guideContainer" style="margin-top:15px; display:none;">
@@ -668,29 +654,15 @@
 
 </main>
 
-<!-- ═══ 专注模式 overlay（R3′·V3 虚空单境：采集时隐藏复杂度）═══
-     中心呼吸光点（7s 缓吸缓呼）＋时长＋事件打点＋结束钮，其余全折叠。
-     结束钮复用「停止并保存」主链路（自评卡 z98 浮于本层 z90 之上，必弹不破）。
-     引导体验页签可以 preview 态借用本组件（体验层设计语言统一）。 -->
-<div class="fx-overlay" id="fxOverlay">
-  <div class="fx-dots"><div class="fx-dot"></div></div>
-  <div class="fx-elapsed" id="fxElapsed"></div>
-  <div class="fx-row" id="fxMarkerRow">
-    <button type="button" class="chip mon-marker" data-label="睁眼" disabled>👁 睁眼</button>
-    <button type="button" class="chip mon-marker" data-label="闭眼" disabled>🌙 闭眼</button>
-    <input id="fxMarkerCustom" placeholder="自定义…" style="width:120px" disabled />
-    <button type="button" class="chip mon-marker" id="fxMarkerAdd" disabled>＋记</button>
-  </div>
-  <div class="fx-row" id="fxStampLine" style="min-height:18px;"><span class="hint" id="fxMsg" style="margin:0;color:#7f9296;"></span></div>
-  <div class="fx-row" id="fxCtlRow">
-    <button class="btn danger" id="fxFinish">■ 结束这一坐</button>
-  </div>
-  <button class="fx-exit" id="fxExit">↩ 回到全仪表（Esc）· 采集继续在后台进行</button>
-</div>
+<!-- 专注模式已迁为独立页 /focus（focus.html·V3 虚空单境独立风格）。
+     法师 09-25 裁定：禅修页面单独跳出，不同风格不混在一页——先例同 /vr 与 /mandala
+     "风格完全不同，不要混合在一起"（09-15）。本页只留跳转入口与结束请求桥。 -->
 
 <!-- ═══ 采集后自评卡（2026-09-24 重设计；停止采集后必弹、可跳过＝如实记"未自评"）═══
      措辞经法师 09-24 裁定定稿：水面（身心受）/天色（清晰度）；档位只显词不显数。
-     「这一坐的相」五相映射行按裁定⑤留到 R4，本卡不带。镜子不评判：无分数无排名。 -->
+     「这一坐的相」行：09-24 裁定⑤曾撤 → 09-25 D1 裁定**显式改判加回**（D-0924-W1e）。
+     卡内只记词不做判读（五相不回采集期实时界面，09-24 批②不破）；不选＝null 如实。
+     镜子不评判：无分数无排名。 -->
 <div class="sr-overlay" id="srOverlay">
   <div class="sr-box">
     <h2>这一坐，身体与心还记得什么</h2>
@@ -704,6 +676,7 @@
         <button type="button" class="chip" data-val="3" data-word="平水">平水</button>
         <button type="button" class="chip" data-val="4" data-word="澄明">澄明</button>
       </div>
+      <svg class="sr-axis-svg" id="srSeaSvg" viewBox="0 0 520 52" preserveAspectRatio="none"></svg>
     </div>
     <div class="field">
       <label>清晰度 · 天色（昏沉 ↔ 澄澈）</label>
@@ -714,6 +687,7 @@
         <button type="button" class="chip" data-val="3" data-word="晴明">晴明</button>
         <button type="button" class="chip" data-val="4" data-word="澄澈">澄澈</button>
       </div>
+      <svg class="sr-axis-svg" id="srSkySvg" viewBox="0 0 520 52" preserveAspectRatio="none"></svg>
     </div>
     <div class="field">
       <label>注意力品质（可多选）</label>
@@ -724,6 +698,16 @@
         <button type="button" class="chip" data-val="浮动">浮动</button>
         <button type="button" class="chip" data-val="投入">投入</button>
         <button type="button" class="chip" data-val="空白">空白</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>这一坐的相（五相索引 · 单选记词，不作判读；再点可取消）</label>
+      <div class="chips" id="srPhase">
+        <button type="button" class="chip" data-val="入">入</button>
+        <button type="button" class="chip" data-val="照">照</button>
+        <button type="button" class="chip" data-val="运">运</button>
+        <button type="button" class="chip" data-val="融">融</button>
+        <button type="button" class="chip" data-val="出">出</button>
       </div>
     </div>
     <div class="field">
@@ -869,17 +853,64 @@ $("monIntent").onchange = e => {
 const srV = bindChips($("srValence"));
 const srC = bindChips($("srClarity"));
 const srA = bindChips($("srAttention"), { multi: true });
+const srP = bindChips($("srPhase"));                 // D1 裁定（09-25）：五相记词单选
 const srAdv = bindChips($("srAdverseTags"), { multi: true });
 $("srAdverseOn").onchange = e => {
   $("srAdverseTags").style.display = e.target.checked ? "" : "none";
 };
+
+// ── R6 ②：水面/天色 SVG 意象（画法搬自 V1 提案稿 drawSea/drawSky，青波＋月轮＋天色渐变；
+//     纯视觉层：控件、措辞、存值零改动，档位只显词不显数——09-24 裁定红线保持）──
+function srWavePath(amp) {
+  let p = "M0 30";
+  for (let x = 0; x <= 520; x += 8) {
+    const y = 30 + Math.sin(x / 26) * amp * Math.sin(x / 97 + 1);
+    p += ` L${x} ${y.toFixed(1)}`;
+  }
+  return p;
+}
+function srEmpty(msg) {
+  return `<rect width="520" height="52" fill="#0d1526"/>` +
+    `<text x="260" y="30" fill="#3a4a6a" font-size="12" text-anchor="middle">${msg}</text>`;
+}
+function srDrawSea(v) {
+  const svg = $("srSeaSvg");
+  if (v === null) { svg.innerHTML = srEmpty("点上方词选档 · 不显数字"); return; }
+  const amp = [14, 9, 5, 2, 0][v];
+  const fill = ["#1a2438", "#18283e", "#153046", "#123a50", "#0f4a5c"][v];
+  svg.innerHTML = `<rect width="520" height="52" fill="${fill}"/>` +
+    `<path d="${srWavePath(amp)} L520 52 L0 52 Z" fill="rgba(95,214,203,.28)"/>` +
+    `<path d="${srWavePath(amp)}" stroke="#5fd6cb" fill="none" stroke-width="1.5"/>` +
+    (v === 4 ? `<circle cx="260" cy="14" r="5" fill="#e8c87a" opacity=".9"/>` : "");
+}
+function srDrawSky(v) {
+  const svg = $("srSkySvg");
+  if (v === null) { svg.innerHTML = srEmpty("点上方词选档 · 不显数字"); return; }
+  const cols = ["#0b0e18", "#141b2e", "#22304e", "#3c5a80", "#7fa8c9"];
+  svg.innerHTML = `<defs><linearGradient id="srSkyGrad" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${cols[v]}"/>` +
+    `<stop offset="1" stop-color="${cols[Math.max(0, v - 1)]}"/></linearGradient></defs>` +
+    `<rect width="520" height="52" fill="url(#srSkyGrad)"/>` +
+    `<circle cx="430" cy="16" r="7" fill="#fff" opacity="${[.05, .12, .3, .6, .92][v]}"/>`;
+}
+// 点选芯片即重绘（bindChips 用 onclick 赋值，这里用容器冒泡监听互不覆盖；
+// 目标芯片先于祖先监听执行，选中态此时已更新；再点取消→无 .sel→回空态）
+$("srValence").addEventListener("click", () => {
+  const s = $("srValence").querySelector(".chip.sel");
+  srDrawSea(s ? +s.dataset.val : null);
+});
+$("srClarity").addEventListener("click", () => {
+  const s = $("srClarity").querySelector(".chip.sel");
+  srDrawSky(s ? +s.dataset.val : null);
+});
 let srPending = null;
 function openSelfReport() {
-  srV.clear(); srC.clear(); srA.clear(); srAdv.clear();   // 每次从空开始，不沿袭上一坐
+  srV.clear(); srC.clear(); srA.clear(); srP.clear(); srAdv.clear();   // 每次从空开始，不沿袭上一坐
   $("srAdverseOn").checked = false;
   $("srAdverseTags").style.display = "none";
   $("srSentence").value = "";
   $("srSentenceFold").open = false;
+  srDrawSea(null); srDrawSky(null);   // R6②：每次从空意象开始，与芯片清空同步
   $("srOverlay").style.display = "flex";
   return new Promise(res => { srPending = res; });
 }
@@ -896,6 +927,7 @@ $("srOk").onclick = () => {
     valence: v === null ? null : +v, valence_word: selWord($("srValence")),
     clarity: c === null ? null : +c, clarity_word: selWord($("srClarity")),
     attention: srA.get(),
+    phase: srP.get(),
     adverse: { on: $("srAdverseOn").checked, tags: srAdv.get() },
     sentence: $("srSentence").value.trim() || null,
   });
@@ -910,6 +942,7 @@ function srSummary(sr) {
   if (sr.clarity !== null && sr.clarity !== undefined)
     p.push("天色=" + (sr.clarity_word || sr.clarity));
   if (sr.attention && sr.attention.length) p.push("注意力=" + sr.attention.join(","));
+  if (sr.phase) p.push("相=" + sr.phase);
   if (sr.adverse && sr.adverse.on)
     p.push("不适=" + ((sr.adverse.tags || []).join(",") || "未细列"));
   if (sr.sentence) p.push("一句:" + sr.sentence.slice(0, 60));
@@ -917,7 +950,9 @@ function srSummary(sr) {
 }
 
 // 断连自动保存后的自评补记：npz meta 不改写，只追加 experience 事件
-async function selfReportSupplemental(npz) {
+// （监测/闭环两路对等口——2026-09-25 D2 裁定，端点由调用方指定）
+async function selfReportSupplemental(npz, ep) {
+  ep = ep || "/api/monitor/self_report";
   const sr = await openSelfReport();
   const payload = sr && sr.skipped ? { skipped: true } : sr;
   if (lastReg) {
@@ -925,7 +960,7 @@ async function selfReportSupplemental(npz) {
     lastReg.post_state = srSummary(payload);
   }
   try {
-    await api("/api/monitor/self_report", {
+    await api(ep, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ self_report: payload }) });
     monMsg(payload && payload.skipped ? "已如实记录：本次未自评"
@@ -1461,7 +1496,6 @@ function handleMonitorEvent(ev) {
   } else if (ev.type === "end") {
     monRunning = false;
     setMarkerButtons(false);           // 会话结束，打点关闭
-    if (fxOn) fxClose();               // 专注模式随会话结束收起，露出全仪表看保存卡
     setPhase("待机", "");
     $("monStart").disabled = false;
     $("monStop").disabled = true;
@@ -1643,8 +1677,6 @@ function setMarkerButtons(on) {
   document.querySelectorAll(".mon-marker").forEach(b => { b.disabled = !on; });
   const c = $("markerCustom");
   if (c) c.disabled = !on;
-  const fc = $("fxMarkerCustom");
-  if (fc) fc.disabled = !on;
 }
 function markerStamp(text) {
   const el = $("markerMsg");
@@ -1661,11 +1693,9 @@ async function sendMarker(label) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ label }) });
     markerStamp(`📍 ${r.label}（第 ${r.count} 个）`);
-    fxStamp(`📍 ${r.label}（第 ${r.count} 个）已记`, true);
   } catch (e) {
     const el = $("markerMsg");
     if (el) { el.textContent = "打点失败：" + e.message; el.className = "msg err"; }
-    fxStamp("打点失败：" + e.message, false);
   }
 }
 document.querySelectorAll(".mon-marker[data-label]").forEach(b => {
@@ -1680,60 +1710,27 @@ $("markerCustom").onkeydown = (e) => {
   if (e.key === "Enter") { e.preventDefault(); $("markerAdd").click(); }
 };
 
-// ═══ 专注模式（R3′·V3 虚空单境）═══
-// 采集期一键进入全屏极简态：只留呼吸光点、时长、打点、结束，其余全折叠。
-// 结束钮直接复用主链路 monStop（自评卡 z98 浮于本层之上，"必弹"不破）；
-// "回到全仪表"只是收起遮罩，采集在后台照常跑。预览态供引导体验页签借用。
-let fxOn = false, fxTimer = 0;
-function fmtElapsed(txt) {
-  const s = parseInt(txt, 10);
-  if (!isFinite(s) || s < 0) return "";
-  const m = Math.floor(s / 60), r = s % 60;
-  return String(m).padStart(2, "0") + ":" + String(r).padStart(2, "0");
-}
-function fxSyncElapsed() {
-  const v = fmtElapsed($("monElapsed").textContent);
-  $("fxElapsed").textContent = v || "准备就绪";
-}
-function fxStamp(text, ok) {
-  const el = $("fxMsg");
-  if (!el) return;
-  el.textContent = text || "";
-  el.style.color = ok === false ? "#e79a9a" : "#7f9296";
-}
-function fxOpen(preview) {
-  fxOn = true;
-  $("fxOverlay").style.display = "flex";
-  // 预览态（无在采会话）：隐藏打点与结束控件，只演示呼吸光点体验层
-  $("fxMarkerRow").style.display = preview ? "none" : "flex";
-  $("fxCtlRow").style.display = preview ? "none" : "flex";
-  $("fxStampLine").style.display = preview ? "none" : "flex";
-  document.body.classList.add("fx-lock");
-  fxSyncElapsed();
-  clearInterval(fxTimer);
-  fxTimer = setInterval(fxSyncElapsed, 1000);
-}
-function fxClose() {
-  fxOn = false;
-  $("fxOverlay").style.display = "none";
-  clearInterval(fxTimer); fxTimer = 0;
-  document.body.classList.remove("fx-lock");
-}
-$("btnFocus").onclick = () => { if (!$("btnFocus").disabled) fxOpen(false); };
-$("btnFxPreview").onclick = () => fxOpen(true);
-$("fxExit").onclick = fxClose;
-$("fxFinish").onclick = () => { if (!$("monStop").disabled) $("monStop").click(); };
-$("fxMarkerAdd").onclick = () => {
-  const v = $("fxMarkerCustom").value;
-  if (v && v.trim()) sendMarker(v);
-  $("fxMarkerCustom").value = "";
+// ═══ 专注模式＝独立页跳转（R3′ 修正·法师 09-25 裁定：禅修页面单独跳出，
+// 不同风格不混一页——先例 /vr·/mandala"风格完全不同，不要混合在一起"09-15）。
+// 体验层整体移居 focus.html（/focus 路由，V3 虚空单境 tokens 独立样式体系）。
+// 本页职责两条：入口按钮跳出＋专注页结束请求经 monStop 单实现执行（自评必弹不破）。
+$("btnFocus").onclick = () => {
+  if (!$("btnFocus").disabled) window.open("/focus", "fxFocus", "width=680,height=780");
 };
-$("fxMarkerCustom").onkeydown = (e) => {
-  if (e.key === "Enter") { e.preventDefault(); $("fxMarkerAdd").click(); }
+$("btnFxPreview").onclick = () => {
+  window.open("/focus?demo=1", "fxDemo", "width=680,height=780");
 };
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && fxOn && $("srOverlay").style.display !== "flex") fxClose();
-});
+if ("BroadcastChannel" in window) {
+  const fxBridge = new BroadcastChannel("fx-bridge");
+  fxBridge.onmessage = (ev) => {
+    if (!ev.data || ev.data.t !== "stop-request") return;
+    const b = $("monStop");
+    if (b && !b.disabled) {                 // 只有真能停才回执——专注页否则如实提示
+      fxBridge.postMessage({ t: "stop-ack" });
+      b.click();
+    }
+  };
+}
 
 $("monCopyCmd").onclick = async () => {
   try {
@@ -2322,6 +2319,9 @@ function handleEvent(ev) {
     monSaved = ev;
     showQcBox(ev.qc);
     refreshSidOptions();
+    // 闭环 crash/断连自动保存（非停止按钮触发）：自评卡同样必弹补记
+    // （2026-09-25 D2 裁定；与监测侧对等，npz 不改写、只追加事件）。
+    if (!stopRequested) selfReportSupplemental(ev.npz, "/api/experiment/self_report");
   } else if (ev.type === "message") {
     monMsg(ev.text);
   } else if (ev.type === "error") {
@@ -2611,6 +2611,7 @@ window.ingestFromHistory = async (r, pSel, tSel) => {
 };
 
 async function loadHistory() {
+  loadCtOptions();   // 四透镜 CT 会话清单（同属回顾组惰性加载）
   try {
     const [rep, exp] = await Promise.all([api("/api/reports"), api("/api/experiments")]);
     reportsCache = rep.reports;
@@ -2645,6 +2646,97 @@ async function loadHistory() {
     });
   } catch (e) { console.error(e); }
 }
+
+// ── 四透镜 CT 卡（2026-09-25 C1"均准"S-a：纯读，只装素材不下结论）──
+async function loadCtOptions() {
+  const sel = $("ctSid");
+  if (!sel) return;
+  try {
+    const r = await api("/api/session/list");
+    sel.textContent = "";
+    const o0 = document.createElement("option");
+    o0.value = ""; o0.textContent = "（选择会话）";
+    sel.appendChild(o0);
+    (r.archived || []).forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.session_id;
+      o.textContent = s.session_id + " · " + (s.participant || "?") + " · " + (s.date || "");
+      sel.appendChild(o);
+    });
+    (r.staged || []).forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.session_id;
+      o.textContent = s.session_id + "（暂存）";
+      sel.appendChild(o);
+    });
+  } catch (e) { console.error(e); }
+}
+function ctCol(box, title, lines, blindspot) {
+  const h = document.createElement("div");
+  h.className = "stat"; h.style.fontWeight = "700";
+  h.textContent = "【" + title + "】";
+  box.appendChild(h);
+  (lines.length ? lines : ["本段无数据（如实）"]).forEach(t => {
+    const d = document.createElement("div");
+    d.textContent = t;
+    box.appendChild(d);
+  });
+  const b = document.createElement("div");
+  b.className = "hint";
+  b.textContent = "盲区：" + blindspot;
+  box.appendChild(b);
+}
+$("ctLoad").onclick = async () => {
+  const sid = $("ctSid").value, out = $("ctOut");
+  if (!sid) return;
+  out.style.display = ""; out.textContent = "装配中…";
+  let a;
+  try { a = await api("/api/session/" + encodeURIComponent(sid) + "/analysis"); }
+  catch (e) { out.textContent = "CT 数据加载失败：" + e.message; return; }
+  out.textContent = "";
+  const L = a.lenses || {};
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;";
+  const m = L.micro || {}, rh = L.rhythm || {}, nr = L.narrative || {}, hw = L.hardware || {};
+  ctCol(grid, "逐息 · 微观生灭", (m.markers || []).slice(0, 20)
+    .map(k => `${k.t_rel != null ? k.t_rel.toFixed(1) + "s" : "-"} ${k.label || "标记"}`)
+    .concat(m.n > 20 ? ["…共 " + m.n + " 个"] : []), m.blindspot || "");
+  const post = nr.post || {};
+  ctCol(grid, "节律 · 宏观趋势", [
+    rh.duration_s != null ? "时长 " + Math.round(rh.duration_s / 60) + " 分钟" : null,
+    rh.session_type ? "场景 " + rh.session_type : null,
+    rh.started_at ? "起坐 " + String(rh.started_at).slice(0, 16) : null,
+  ].filter(Boolean), rh.blindspot || "");
+  ctCol(grid, "叙事 · 第一人称", [
+    post.skipped ? "未自评（如实记录）" : null,
+    post.valence_word ? "水面=" + post.valence_word : null,
+    post.clarity_word ? "天色=" + post.clarity_word : null,
+    post.phase ? "相=" + post.phase + "（记词不判读）" : null,
+    (post.attention && post.attention.length) ? "注意力=" + post.attention.join(",") : null,
+    post.sentence ? "一句：" + post.sentence : null,
+    nr.supplemented ? "（断连后补交）" : null,
+  ].filter(Boolean), nr.blindspot || "");
+  const qc = hw.qc || {};
+  ctCol(grid, "生理 · 硬件在场", [
+    qc.clean_ratio != null ? "干净度 " + (qc.clean_ratio * 100).toFixed(0) + "%" : null,
+    qc.packet_loss_rate != null ? "丢包 " + (qc.packet_loss_rate * 100).toFixed(1) + "%" : null,
+    hw.device ? "设备 " + hw.device : null,
+    hw.channels && hw.channels.length ? "通道 " + hw.channels.length + " 路" : null,
+  ].filter(Boolean), hw.blindspot || "");
+  out.appendChild(grid);
+  (a.conclusion || []).forEach(c => {
+    const d = document.createElement("div");
+    d.className = c.kind === "diverge" ? "msg warn" : "stat";
+    d.textContent = (c.kind === "diverge" ? "◆ " : "· ") + c.text;
+    out.appendChild(d);
+  });
+  const foot = document.createElement("div");
+  foot.className = "hint";
+  foot.textContent = "五相过程相自动派生标注（derived，非判词）：" +
+    (a.zx_phase ? JSON.stringify(a.zx_phase) : "无") +
+    " ｜ 词汇层组织参照（判语013）：本卡不构成对任何一坐的判定。";
+  out.appendChild(foot);
+};
 
 // ── 引导体验（他山之石）──
 const GUIDE_URL = "https://www.yunzhongstudio.com/vr-the-journey/";

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-止观AI 统一控制台后端服务（监测 + 实验双模式）
+实践驾驶舱后端服务（监测 + 实验双模式）
 
 功能:
   A. 监测采集模式（2026-09-01 整合新增）：
@@ -170,7 +170,7 @@ def qc_assess(npz_path, report_path=None):
     return {"recommend": res["recommend"], "reasons": res["reasons"],
             "metrics": res["metrics"]}
 
-app = FastAPI(title="止观AI 统一控制台")
+app = FastAPI(title="实践驾驶舱")
 
 # ── 共享数据源适配器（供控制台无界面运行硬件层/模拟源） ─────────────────
 
@@ -1291,6 +1291,8 @@ def _self_report_summary(sr):
         parts.append(f"天色={sr.get('clarity_word') or sr['clarity']}")
     if sr.get("attention"):
         parts.append("注意力=" + ",".join(sr["attention"]))
+    if sr.get("phase"):   # 「这一坐的相」五相记词（2026-09-25 D1 裁定，只记不判）
+        parts.append("相=" + str(sr["phase"]))
     if (sr.get("adverse") or {}).get("on"):
         parts.append("不适=" + ",".join(sr["adverse"].get("tags") or ["未细列"]))
     if sr.get("sentence"):
@@ -1646,6 +1648,19 @@ def mandala_page():
                         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/focus")
+def focus_page():
+    """专注模式独立页（止坐·V3 虚空单境语言，2026-09-25 法师裁定）。
+
+    禅修体验页面单独跳出、不与驾驶舱（console.html）混在一页——同一裁定的
+    界面先例即 /vr 与 /mandala"风格完全不同，不要混合在一起"（09-15）。
+    本页不共享 console.html 样式体系；打点直连 /api/monitor/marker，
+    结束经 BroadcastChannel 委托驾驶舱执行（自评必弹红线不破）。"""
+    return FileResponse(os.path.join(SCRIPT_DIR, "focus.html"),
+                        media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
     """PWA 清单（PICO Web App 最低要求：name/icons/start_url/display）。
@@ -1964,7 +1979,7 @@ def list_quarantine():
     return {"items": items, "root": quarantine_root}
 
 
-# ── P1b/P1c 会话契约读写接口＋实践驾驶舱聚合（2026-09-19 D45/D46 后施工）──
+# ── P1b/P1c 会话契约读写接口＋实验回顾聚合（2026-09-19 D45/D46 后施工；原称"实践驾驶舱六卡"，09-25 总名定谳后随页签现名改口）──
 
 ZEN_RAW_ROOT = os.path.join(ZEN_ROOT, "02_raw")
 ZEN_QC_ROOT = os.path.join(ZEN_ROOT, "03_quality_control")
@@ -2055,8 +2070,154 @@ def session_events(sid: str):
     return {"session_id": sid, "events": events}
 
 
+def _ct_conclusion(post, clean_ratio, n_markers):
+    """CT 卡「机械对照行」：只跑两条透明规则，不做归纳、不测 D（判语009/012/013）。
+    分歧不标失败，登记为测量盲区假设候选（隐显方案 §178-② 既有纪律）。"""
+    lines = []
+    if not post or post.get("skipped"):
+        return [{"kind": "blind",
+                 "text": "叙事波长无记录（跳过/未补交）——本坐互证腿缺一条，如实登记。"}]
+    v = post.get("valence")
+    vw = post.get("valence_word") or ""
+    if v is None:
+        return [{"kind": "blind",
+                 "text": "叙事列未选「水面」——无对照锚点，只显素材不下结论。"}]
+    if v in (0, 1):   # 颠簸/起浪
+        if clean_ratio is not None and clean_ratio >= 0.8 and n_markers == 0:
+            lines.append({"kind": "diverge",
+                          "text": f"叙事报「{vw}」，而生理段干净度 "
+                                  f"{clean_ratio:.0%}、逐息段零标记 → 分歧登记为"
+                                  f"测量盲区假设候选（反馈 M1/M2，不判谁对）。"})
+    elif v in (3, 4):  # 平水/澄明
+        if clean_ratio is not None and clean_ratio < 0.5:
+            lines.append({"kind": "diverge",
+                          "text": f"叙事报「{vw}」，而生理段干净度仅 "
+                                  f"{clean_ratio:.0%} → 分歧如实登记，复盘人裁。"})
+    if not lines:
+        lines.append({"kind": "quiet",
+                      "text": "无机械矛盾（互证的收敛判定留给人审，本卡不代判）。"})
+    return lines
+
+
+@app.get("/api/session/{sid}/analysis")
+def session_analysis(sid: str):
+    """四透镜 CT 卡数据装配（2026-09-25 C1 裁定"均准"，方案稿 S-a）：纯读零写。
+
+    只借《递归的生命》第二篇波长分段组织法作词汇层参照（判语 013），
+    干支/占星借格位不借语义；每列自带盲区自曝（损失投影诚实）。
+    """
+    d, kind = _resolve_session_dir(sid)
+    if d is None:
+        raise HTTPException(status_code=404, detail=kind)
+    stem = "" if sid.startswith("ZEN-") else sid + "."
+    ep = os.path.join(d, stem + "session_events.jsonl")
+    events = []
+    if os.path.exists(ep):
+        with open(ep, "r", encoding="utf-8") as f:
+            events = [json.loads(l) for l in f if l.strip()]
+    # meta：ZEN 经 manifest 找 npz 名，暂存区同名直读（npz 只读不开写句柄）
+    meta = {}
+    npz_p = None
+    mf = os.path.join(d, stem + "session_manifest.json")
+    if os.path.exists(mf):
+        with open(mf, "r", encoding="utf-8") as f:
+            name = (json.load(f).get("files") or {}).get("eeg_npz")
+        if name:
+            npz_p = os.path.join(d, name)
+    else:
+        cand = os.path.join(d, sid + ".npz")
+        npz_p = cand if os.path.exists(cand) else None
+    if npz_p and os.path.exists(npz_p):
+        try:
+            import numpy as np   # 本模块惯例：numpy 函数内惰性导入
+            with np.load(npz_p, allow_pickle=True) as dd:
+                if "meta" in dd.files:
+                    meta = dd["meta"].item()
+        except Exception:
+            meta = {}
+    P = lambda e: (e.get("payload") or {})
+    markers = [dict(P(e), ts=e.get("ts")) for e in events
+               if e.get("type") == "marker"]
+    qc_e = [P(e) for e in events if e.get("type") == "qc_done"]
+    qc = qc_e[-1] if qc_e else None
+    device = meta.get("device") or meta.get("device_model")
+    if sid.startswith("ZEN-"):
+        # 归档前会话无事件流：质检/设备自数据工厂回退（纯读）
+        if qc is None:
+            for root in (ZEN_QC_ROOT, os.path.join(ZEN_QC_ROOT, "quarantine")):
+                qp = os.path.join(root, sid, "qc.json")
+                if os.path.exists(qp):
+                    try:
+                        with open(qp, "r", encoding="utf-8") as f:
+                            q = json.load(f)
+                        qc = {"recommend": q.get("recommend"),
+                              "clean_ratio": q.get("clean_ratio"),
+                              "packet_loss_rate": q.get("packet_loss_rate"),
+                              "source": "qc.json（归档回退）"}
+                    except Exception:
+                        qc = None
+                    break
+        if not device:
+            dp = os.path.join(d, "device_info.json")
+            if os.path.exists(dp):
+                try:
+                    with open(dp, "r", encoding="utf-8") as f:
+                        device = json.load(f).get("device_model")
+                except Exception:
+                    pass
+    exp = [e for e in events if e.get("type") == "experience"]
+    pre = P(exp[0]) if exp else (
+        {"state": meta.get("pre_state"), "contact": meta.get("contact_quality"),
+         "intent": meta.get("intent"), "note": meta.get("note")}
+        if any(meta.get(k) for k in ("pre_state", "contact_quality", "intent"))
+        else None)
+    post_e = next((e for e in reversed(exp)
+                   if "skipped" in P(e) or P(e).get("valence") is not None),
+                  None)
+    post = P(post_e) if post_e else (meta.get("self_report") or None)
+    clean = (qc or {}).get("clean_ratio")
+    started = next((e.get("ts") for e in events
+                    if e.get("type") == "started"), None) \
+        or meta.get("timestamp")
+    sr_meta = meta.get("self_report") or {}
+    return {
+        "session_id": sid, "kind": kind,
+        "registration": {
+            "participant": meta.get("participant"),
+            "session_type": meta.get("session_type"),
+            "scene": meta.get("scene"),
+            "pre": pre, "note": meta.get("note"),
+            "started_at": started,
+        },
+        "lenses": {
+            "micro": {"markers": markers, "n": len(markers),
+                      "blindspot": "只照刹那事件结构：不知道为何抖，无语义无体验"},
+            "rhythm": {"duration_s": meta.get("duration_seconds")
+                                 or meta.get("duration"),
+                       "session_type": meta.get("session_type"),
+                       "started_at": started,
+                       "blindspot": "只照坐-日趋势：不照一坐内微观；命理语义零导入"},
+            "narrative": {"pre": pre,
+                          "post": post if isinstance(post, dict) else {},
+                          "phase": (post or {}).get("phase")
+                                   or sr_meta.get("phase"),
+                          "supplemented": bool(
+                              post_e and "补交" in (post_e.get("note") or "")),
+                          "blindspot": "只照第一人称叙事：巴纳姆风险，只记不评"},
+            "hardware": {"qc": qc,
+                         "device": device,
+                         "channels": meta.get("channels"),
+                         "sfreq": meta.get("sfreq"),
+                         "blindspot": "只照生理硬件在场：测不到功夫与阶位（B≠S）"},
+        },
+        "zx_phase": meta.get("zx_phase"),
+        "conclusion": _ct_conclusion(post if isinstance(post, dict) else None,
+                                     clean, len(markers)),
+    }
+
+
 def _dashboard_data():
-    """实践驾驶舱六卡（样本/质量/标注/模型/伦理/进度）——纯读聚合，
+    """实验回顾六卡（样本/质量/标注/模型/伦理/进度）——纯读聚合，
     每个数字带来源会话清单，可点进源文件（P1c 原型口径）。"""
     rows = _read_registry_rows()
     archived_ids = [r.get("session_id", "") for r in rows]
@@ -2165,7 +2326,7 @@ def _dashboard_data():
 
 @app.get("/api/dashboard")
 def dashboard():
-    """实践驾驶舱六卡（D45 命名；P1c 原型：纯读聚合，数字可点进源会话）。"""
+    """实验回顾六卡（D45 命名·原"实践驾驶舱"，09-25 总名定谳随页签现名改口；P1c 原型：纯读聚合，数字可点进源会话）。"""
     return _dashboard_data()
 
 
@@ -2180,7 +2341,7 @@ def index():
 
 
 def main():
-    ap = argparse.ArgumentParser(description="止观AI 统一控制台服务")
+    ap = argparse.ArgumentParser(description="实践驾驶舱服务")
     ap.add_argument("--port", type=int, default=8777)
     ap.add_argument("--host", type=str, default="0.0.0.0",
                     help="2026-09-05 起默认监听所有网卡，供 Pico 头显同网访问；"
@@ -2215,7 +2376,7 @@ def main():
             args.https_port = 0
 
     print("=" * 62)
-    print("止观AI 统一控制台已启动（监测 + 实验双模式）")
+    print("实践驾驶舱已启动（监测 + 实验双模式）")
     print(f"本机浏览器打开: http://127.0.0.1:{args.port}")
     if lan_ip:
         print(f"VR 端（Pico 浏览器）打开: http://{lan_ip}:{args.port}/vr")
