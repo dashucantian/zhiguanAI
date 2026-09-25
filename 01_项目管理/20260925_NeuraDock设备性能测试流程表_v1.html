@@ -682,7 +682,9 @@ const FLOW = {
       ['🟡 有条件可用','T1 合格但 T2 有贴底／T3 恢复慢／T10 不通过','先落"佩戴 SOP＋开机自检"，贴底位置在 SOP 里重点标注；报告写明适用条件；问题清单回传厂商'],
       ['🔴 不可用','T6 无真原始档，或 T1 与 T2 双双不达标且排查后仍不合格','触发 D32 硬条件：不进入后续采购谈判，走换货路径；测试记录即谈判材料']
      ]},
-    {k:'v',id:'sumv',label:'本设备总评'}
+    {k:'v',id:'sumv',label:'本设备总评'},
+    {k:'dossier',title:'验收档案（一页结论＋证据指针＋反馈清单）',chip:'B6 一键出档',
+     hint:'先在上面「事后自动读数」卡读入本场会话，再点这里生成：档案含<b>十一项红绿灯</b>、关键读数（含<b>会话跨度缺口</b>与 jitter 达标情况）、<b>证据指针</b>（会话目录＋契约四件＋质检理由）与<b>自动汇总的问题清单</b>（供厂商反馈）。可复制、可下载 Markdown。'}
   ]},
 
   /* ══ 速查 ══ */
@@ -743,7 +745,7 @@ const GATES = [
    take:[['s2',5,8]]},
   {id:'g5', name:'G5 验收', acc:'#7C5CBF',
    desc:'值不值、能否长期用：T11 对照、11 项红绿灯、记录卡与总评三档。',
-   take:[['s3',0,1],['sum',0,4]]},
+   take:[['s3',0,1],['sum',0,5]]},
   {id:'ref', name:'速查与处置', acc:'#6B7280',
    desc:'判据速查卡、异常处置 10 条、最小可用子集、待裁清单——工具页，不属任何闸门。',
    take:[['ref',0,4]]}
@@ -1762,6 +1764,7 @@ async function phRead(){
   try{
     const j = await (await fetch('/api/session/' + encodeURIComponent(sid) + '/posthoc',
       {cache:'no-store'})).json();
+    PH = j;   /* 缓存给验收档案用 */
     const m = j.npz_meta || {}, tm = j.timing || {}, a = j.audit || {};
     const put = (f, v) => { if(v === null || v === undefined || v === '') return; S.fields[f] = String(v); syncField(f); };
     if(m.duration_s != null) put('t5dur', (Math.round(m.duration_s / 6) / 10));
@@ -1792,6 +1795,69 @@ function renderPosthoc(blk){
     h('button', {class:'btn', type:'button', onclick:phList}, '列会话'),
     h('button', {class:'btn pri', type:'button', onclick:phRead}, '读入并填表')),
     h('div', {class:'autoout', id:'phMsg'}, '')]);
+}
+
+/* ── B6 验收档案（法师 2026-09-26 令；原料全部来自既有读数，不新增指标）── */
+let PH = null;
+function buildDossier(){
+  const L = [];
+  const now = new Date().toLocaleString('zh-CN', {hour12:false});
+  const m = (PH && PH.npz_meta) || {}, t = (PH && PH.timing) || {}, a = (PH && PH.audit) || {};
+  const pc = v => (v == null ? '—' : v);
+  L.push('# 脑电设备验收档案（一页结论＋证据指针）', '');
+  L.push('- 生成时间：' + now);
+  L.push('- 设备档案：' + (S.fields['dp_name'] || '（未填）') + '｜通道：' + (S.fields['dp_ch'] || (m.channels || []).join(' ') || '（未填）'));
+  L.push('- 受试者：' + (S.fields['r_sub'] || 'P001') + '｜会话：' + (PH ? PH.sid : '（未读入会话）'));
+  L.push('- 质检建议：' + pc(a.recommend) + '｜阈值版本：' + pc(a.threshold_version));
+  L.push('- 知情同意：' + (S.checks['cs5'] ? '已确认（cs5）' : '**未见确认记录——不得据此下结论**'));
+  L.push('', '## 一 十一项红绿灯（面板判定，人审为准）', '', '| 项 | 结论 |', '|---|---|');
+  GATES.forEach(g => gateBlocks(g).forEach(b => {
+    if(b.k === 'grid' && b.v) L.push('| ' + b.title + ' | ' + (VLAB[S.verdicts[b.v]] || '—') + ' |');
+    else if(b.k === 'v') L.push('| ' + b.label + ' | ' + (VLAB[S.verdicts[b.id]] || '—') + ' |');
+  }));
+  L.push('', '## 二 关键读数（纯读：npz／逐样本时间戳／qc.json）', '', '| 读数 | 值 |', '|---|---|');
+  L.push('| 通道数／标称采样率 | ' + pc((m.channels || []).length || null) + ' / ' + pc(m.sfreq) + ' Hz |');
+  L.push('| 样本数／采样跨度 | ' + pc(m.samples) + ' / ' + pc(t.span_s) + ' s |');
+  L.push('| **会话跨度** | ' + pc(t.session_span_s) + ' s |');
+  L.push('| **采样跨度缺口（drift＝采样−会话）** | ' + pc(t.drift_s) + ' s |');
+  L.push('| 丢包（采样内口径 ／ **会话跨度口径**） | ' + (a.packet_loss_rate != null ? (a.packet_loss_rate*100).toFixed(2) + '%' : '—') + ' ／ ' + (a.span_loss_rate != null ? (a.span_loss_rate*100).toFixed(1) + '%' : '—') + ' |');
+  L.push('| 有效采样率 | ' + pc(a.effective_hz) + ' Hz |');
+  L.push('| jitter P95 ／ ±2 ms 内占比（判据 >99%） | ' + pc(t.jitter_p95_ms) + ' ms ／ ' + pc(t.jitter_within_2ms_pct) + '% |');
+  L.push('| 原始档 eeg_pre_filter | ' + (m.has_pre_filter ? '有' : '无') + ' |');
+  L.push('| markers 数 | ' + pc(m.markers_n) + ' |');
+  L.push('| 干净比例 clean_ratio | ' + pc(a.clean_ratio) + ' |');
+  L.push('', '## 三 证据指针', '');
+  L.push('- 会话目录：' + ((PH && PH.dir) || '—'));
+  L.push('- 契约四件：manifest ' + (a.manifest ? '有' : '缺') + '／events ' + (a.events ? '有' : '缺') + '／qc.json ' + (a.qc ? '有' : '缺') + '／report ' + (a.report ? '有' : '缺'));
+  L.push('- npz 文件：' + pc(m.file) + '｜signal_chain：' + pc(m.chain_tag));
+  L.push('- 质检理由：' + ((((a.reasons || []).join('；')) || '无')));
+  L.push('- 本页记录导出：面板「导出」→ Markdown／JSON（含全部勾选与填写，可复算）');
+  L.push('', '## 四 自动汇总的问题清单（供厂商反馈与待办）', '');
+  const issues = [];
+  if(a.span_loss_rate != null && a.span_loss_rate > 0.2)
+    issues.push('**采样跨度缺口 ' + (a.span_loss_rate*100).toFixed(1) + '%**（会话 ' + pc(t.session_span_s) + ' s vs 采样 ' + pc(t.span_s) + ' s）——须查官方数据服务／接收端是否中途停推（本项由 09-25 尾段断流事故引入）');
+  if(t.jitter_within_2ms_pct != null && t.jitter_within_2ms_pct < 99)
+    issues.push('**时基 jitter 不达标**：±2 ms 内仅 ' + t.jitter_within_2ms_pct + '%（判据 >99%），P95 ' + pc(t.jitter_p95_ms) + ' ms');
+  if(t.gaps_gt4steps) issues.push('采样间隔跳变（>4 步长）' + t.gaps_gt4steps + ' 处');
+  if(m.has_pre_filter === false) issues.push('**无原始档（eeg_pre_filter 缺失）**——触 D32 硬条件，走换货／谈判');
+  (a.reasons || []).forEach(r => issues.push('质检：' + r));
+  if(!issues.length) issues.push('（自动汇总未见问题项——仍以人审结论为准）');
+  issues.forEach((x, i) => L.push((i+1) + '. ' + x));
+  L.push('', '> 判据来源：《NeuraDock 设备性能测试方案（讨论稿 v1）》§二 ＋ `qc_pipeline.py`（阈值版本 ' + pc(a.threshold_version) + '）。');
+  L.push('> 本档案由执行面板自动汇总；**结论仍以人审为准**；测不出按"不可判定"处理，不写通过（P6 弃权一等值）。');
+  return L.join('\n');
+}
+function renderDossier(blk){
+  const out = h('div', {class:'autoout', id:'dsOut'}, '未生成（请先在 G3「事后自动读数」读入本场会话）');
+  return card(blk, [h('div', {class:'autob'},
+    h('button', {class:'btn pri', type:'button', onclick:()=>{
+      const md = buildDossier();
+      const o = document.getElementById('dsOut');
+      if(o) o.textContent = md.slice(0, 700) + '\n…（完整内容请用「复制档案」或「下载 Markdown」）';
+    }}, '生成预览'),
+    h('button', {class:'btn', type:'button', onclick:()=>copy(buildDossier(), '验收档案已复制')}, '复制档案'),
+    h('button', {class:'btn', type:'button', onclick:()=>download('验收档案_' + ((PH && PH.sid) || '未读会话') + '.md', buildDossier(), 'text/markdown')}, '下载 Markdown')),
+    out]);
 }
 
 /* ── 外壳 ───────────────────────────────────────────────────────── */
@@ -1860,6 +1926,7 @@ function build(){
         case 't3auto':  el = renderT3Auto(blk); break;
         case 't4mains': el = renderT4Mains(blk); break;
         case 'posthoc': el = renderPosthoc(blk); break;
+        case 'dossier': el = renderDossier(blk); break;
         case 'note':
         case 'hint':    el = renderHint(blk); break;
         default:        el = null;
