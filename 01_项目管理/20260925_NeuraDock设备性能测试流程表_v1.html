@@ -539,8 +539,8 @@ const FLOW = {
      hint:'点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（O1/Oz/O2 均值，用实时波形自算），你只负责按提示睁眼/闭眼。'},
     {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。<br><b>口径（09-25 法师裁定·E1 验证）</b>：此处的"提升"是<b>相对 α 比值</b>（8–12 Hz ÷ 0.5–45 Hz）的相对提升，<b>不等于 α 功率的提升</b>——两者呈亚线性（E1 实测：α 功率 +32% 时报 +28~32%，+69% 时报 +55~61%）。面板实时读数为<b>当场判断</b>用；权威值仍为保存后质检对全量 npz 的计算。'},
 
-    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',
-     hint:'静坐不动 5 分钟（不看手机、不说话）。重点盯 <b>CP5 / CP6 / O2</b>——09-21 三通道贴底的前科位置。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。',
+    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',
+     hint:'静坐不动 5 分钟（不看手机、不说话）。<b>行按本设备实际通道自动生成</b>（来自实时通道名或《设备档案》）；重点盯<b>后部／枕区通道</b>（NeuraDock 前科：CP5／CP6／O2；Muse 无枕区则以 TP9／TP10 替代并标注）。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。',
      cols:['通道','std（µV）','峰值（µV）','连续 &gt;1min 贴底','质检通道态'],
      rows:[
       ['CP5',{f:'t2s_cp5',in:'num',ph:'',w:'80px'},{f:'t2p_cp5',in:'num',ph:'',w:'80px'},{f:'t2f_cp5',in:'select',opt:['无','有']},{f:'t2q_cp5',in:'select',opt:['ok','warn','bad','unknown']}],
@@ -886,10 +886,32 @@ function mkInput(spec){
   return h('input', {class:'inp', type:t, inputmode:(spec.in==='num'?'decimal':'text'),
     'data-f':spec.f, placeholder:spec.ph || '', value: S.fields[spec.f] || ''});
 }
+/* 本设备通道：实时波道名 → 设备档案通道串 → 空（由静态行兜底） */
+function deviceChannels(){
+  const live = Object.keys(LIVE.wave || {});
+  if(live.length) return live;
+  const dp = String(S.fields['dp_ch'] || '');
+  const m = dp.match(/[A-Za-z]{1,3}[0-9a-z]{1,2}/g) || [];
+  return m.filter(x => /^(CP|PO|OZ|O[12]|TP|AF|FP|F[0-9]|P[0-9z]|T[0-9]|C[0-9z])/i.test(x)).slice(0, 16);
+}
+function t2DynRows(cols){
+  const chs = deviceChannels();
+  if(!chs.length) return null;
+  return chs.map(c => {
+    const k = c.toLowerCase();
+    return [c,
+      {f:'t2s_'+k, in:'num', ph:'', w:'80px'},
+      {f:'t2p_'+k, in:'num', ph:'', w:'80px'},
+      {f:'t2f_'+k, in:'select', opt:['无','有']},
+      {f:'t2q_'+k, in:'select', opt:['ok','warn','bad','unknown']}];
+  });
+}
 function renderGrid(blk){
   const thead = h('thead', null, h('tr', null, ...blk.cols.map((c,i)=> h('th', {html:c}))));
   const tbody = h('tbody');
-  blk.rows.forEach(r=>{
+  const dynRows = (blk.dyn === 'ch') ? t2DynRows(blk.cols) : null;
+  if(dynRows && dynRows.length) blk._dynKey = dynRows.map(r => r[0]).join(',');
+  (dynRows && dynRows.length ? dynRows : blk.rows).forEach(r=>{
     const tr = h('tr');
     r.forEach(cell=>{
       if(typeof cell === 'object' && cell && cell.f) tr.appendChild(h('td', {'data-cellw':'1'}, mkInput(cell)));
@@ -1364,7 +1386,7 @@ function liveConnect(){
     .then(r => r.json())
     .then(st => {
       LIVE.st = st; LIVE.on = !!st.running;
-      if(st.running){ LIVE.why = ''; toast('已接入监测会话'); paintLive(); return null; }
+      if(st.running){ LIVE.why = ''; toast('已接入监测会话'); paintLive(); syncDeviceRows(); return null; }
       /* 监测未跑：探测闭环实验路径。闭环流不含原始波形（wave），故不能供自动读数。 */
       return fetch('/api/experiment/status', {cache:'no-store'})
         .then(r => r.json())
@@ -1573,6 +1595,7 @@ const T2A = {
   start(){
     if(T2A.on) return;
     if(!LIVE.on){ t2Msg('未接入实时数据：请先在驾驶舱开始采集', true); return; }
+    syncDeviceRows();
     T2A.on = true; T2A.acc = {}; T2A.left = 300; T2A.lastCap = 0;
     t2Msg('开始 5 分钟静息采集：坐好、别说话、别动');
     clearInterval(T2A.timer);
@@ -1647,6 +1670,16 @@ const T2A = {
     t2Msg('✅ 5 分钟完成，已按通道自动填表（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
   }
 };
+/* 通道集变了就重建表格（只重画界面，S 里的数据不动） */
+function syncDeviceRows(){
+  const want = deviceChannels().join(',');
+  if(!want) return;
+  const cards = document.querySelectorAll('#g2 .card');
+  let cur = null;
+  cards.forEach(c => { const g = c.querySelector('table'); if(g && !cur) cur = c; });
+  const key = (window.__dynKey || '');
+  if(want !== key){ window.__dynKey = want; hardRefresh(); }
+}
 function t2Msg(t, bad){
   setPt(t || (T2A.on ? ('现在：静坐不动 · 还剩 ' + fmt(T2A.left)) : null));
   const a = document.getElementById('t2aMsg');
