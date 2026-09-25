@@ -232,6 +232,14 @@
     <span class="tab-sub">总览 · 报告 · 治理</span></button>
   <button class="tab-btn" data-tab="system">系统管理
     <span class="tab-sub">显则 · 引导</span></button>
+  <!-- 09-25 法师令：NeuraDock 设备性能测试执行面板并入页签（独立页 /ndtest 同源内嵌） -->
+  <button class="tab-btn" data-tab="ndtest">设备测试
+    <span class="tab-sub">NeuraDock 验收</span></button>
+  <!-- 09-25 法师令：专注模式页面链接整合到驾驶舱——入口上移导航级。
+       仍是"链接跳出独立页 /focus"（禅修页不混本页，09-25 裁定不破），非页签内容。 -->
+  <button class="nav-ext" id="navFocus" type="button"
+    title="单独跳出到专注页（V3 虚空单境独立风格）；采集中入口在采集工作台，此处常驻链接任何时刻可开">🧘 专注模式↗
+    <span class="tab-sub">独立页 · 跳出</span></button>
 </nav>
 <main>
 
@@ -652,6 +660,28 @@
   </div>
 </section>
 
+<!-- ═══ 设备测试（NeuraDock 设备性能验收 · 2026-09-25 法师令并入页签）═══
+     独立页 /ndtest（同 /focus 先例：自带样式体系的工具页单独成页，不与驾驶舱混排）。
+     本页签只做同源内嵌＋跳转入口；面板不产生第二份界面，数据只存本机浏览器
+     （localStorage nd-flow-v1），不入库、不出网。 -->
+<section id="tab-ndtest" class="tab" data-grp="ndtest">
+  <div class="card">
+    <h2>NeuraDock 设备性能测试</h2>
+    <div class="hint">11 项 T1–T11 判据与《NeuraDock 设备性能测试方案（讨论稿 v1）》§二
+      同源同判据；勾选、填写与计时只存本机浏览器。文字正本（可打印）：
+      <code>01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.md</code>。</div>
+    <div class="row" style="margin-top:10px; align-items:center; gap:8px;">
+      <a class="btn" href="/ndtest" target="_blank" rel="noopener">在新标签打开（大屏／打印）</a>
+      <button class="btn ghost" id="ndReload" type="button">重新载入面板</button>
+      <span class="hint" id="ndMsg" style="margin:0;"></span>
+    </div>
+    <iframe id="ndFrame" data-src="/ndtest" title="NeuraDock 设备性能测试执行面板"
+      style="width:100%; height:calc(100vh - 300px); min-height:520px; margin-top:12px;
+             border:1px solid var(--border); border-radius:4px; background:#0E1116;"
+      allow="fullscreen"></iframe>
+  </div>
+</section>
+
 </main>
 
 <!-- 专注模式已迁为独立页 /focus（focus.html·V3 虚空单境独立风格）。
@@ -747,9 +777,27 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
     document.querySelectorAll('.tab[data-grp="' + g + '"]').forEach(s => s.classList.add("active"));
     if (g === "review") { renderDashboard(); loadHistory(); loadGovern(); }
     if (g === "system" && !$("cfgEditor").value) loadConfigList();
+    if (g === "ndtest") loadNdPanel(false);
     window.scrollTo(0, 0);
   };
 });
+
+// ── 设备测试面板（NeuraDock 执行面板独立页 /ndtest 同源内嵌 · 2026-09-25）──
+// 懒加载：首次点开页签才请求；force=true 时重载（换正本/改判据后刷新用）
+function loadNdPanel(force) {
+  const f = $("ndFrame"), msg = $("ndMsg");
+  if (!f) return;
+  if (!f.src) {
+    f.src = f.dataset.src;
+    if (msg) msg.textContent = "面板已载入（记录只存本机浏览器）";
+  } else if (force) {
+    try { f.contentWindow.location.reload(); }
+    catch (e) { f.src = f.dataset.src; }
+    if (msg) msg.textContent = "已重新载入";
+  }
+}
+const ndReloadBtn = $("ndReload");
+if (ndReloadBtn) ndReloadBtn.onclick = () => loadNdPanel(true);
 
 async function api(path, opt) {
   // 2026-09-18：加 15s 超时（AbortController），防请求永久悬挂导致按钮/界面假死

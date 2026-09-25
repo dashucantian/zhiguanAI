@@ -1661,6 +1661,23 @@ def focus_page():
                         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/ndtest")
+def ndtest_page():
+    """NeuraDock 设备性能测试执行面板（独立页，2026-09-25 法师令并入驾驶舱页签）。
+
+    循 /focus 同一先例：自带样式体系的工具页单独成页，不与驾驶舱（console.html）
+    混排。本路由只做同源提供——驾驶舱「设备测试」页签内嵌（iframe）与
+    「在新标签打开」共用同一份文件，因此**不产生第二份界面**。
+    页面正本：01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.html
+    （判据与文字正本 …流程表_v1.md 同源：T1–T11 取自《测试方案（讨论稿 v1）》§二）。
+    数据仍只存本机浏览器（localStorage 键 nd-flow-v1），不入库、不出网。"""
+    return FileResponse(
+        os.path.join(SCRIPT_DIR, "01_项目管理",
+                     "20260925_NeuraDock设备性能测试流程表_v1.html"),
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
     """PWA 清单（PICO Web App 最低要求：name/icons/start_url/display）。
