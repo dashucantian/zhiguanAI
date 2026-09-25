@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>NeuraDock 设备性能测试 · 执行面板</title>
+<style>
+:root{
+  --bg:#FAF7F1; --bg2:#F3EEE4; --card:#FFFFFF; --ink:#2A2724; --ink2:#6E675C; --ink3:#9A9184;
+  --line:#E7DFD1; --zhu:#B4463C; --qing:#4A7C59; --jin:#B07C2A; --lan:#3F6B8A;
+  --ok:#3E7D4F; --okbg:#EAF4EC; --warn:#A9741B; --warnbg:#FBF3E2; --bad:#B4463C; --badbg:#FBECEA; --nabg:#EEF0F2; --na:#6B7280;
+  --shadow:0 1px 2px rgba(96,78,52,.05),0 6px 18px rgba(96,78,52,.06);
+  --acc:var(--zhu); --fs:17px; --r:16px;
+}
+html.night{
+  --bg:#14161A; --bg2:#191C21; --card:#1D2026; --ink:#E9E5DD; --ink2:#A9A296; --ink3:#7C766C;
+  --line:#2E3238; --lin2:#2E3238; --okbg:#1B2A1F; --warnbg:#2A2418; --badbg:#2B1D1C; --nabg:#22262B;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 18px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:var(--fs);line-height:1.75;
+  font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Source Han Sans SC",system-ui,-apple-system,sans-serif;
+  -webkit-text-size-adjust:100%;padding-bottom:64px}
+a{color:var(--lan);text-decoration:none;border-bottom:1px dotted var(--lan)}
+a:hover{border-bottom-style:solid}
+
+/* ── 顶栏 ───────────────────────────────── */
+header{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--line);
+  box-shadow:0 2px 12px rgba(96,78,52,.06);backdrop-filter:saturate(1.2) blur(6px)}
+.hwrap{max-width:1020px;margin:0 auto;padding:10px 16px 8px}
+.htop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.htitle{font-weight:700;font-size:1.02em;letter-spacing:.2px}
+.htitle small{font-weight:400;color:var(--ink3);font-size:.72em;margin-left:6px}
+.hspace{flex:1}
+.tbtn{border:1px solid var(--line);background:var(--bg2);color:var(--ink2);border-radius:10px;
+  padding:6px 10px;font-size:.78em;cursor:pointer;line-height:1.2;font-family:inherit}
+.tbtn:hover{color:var(--ink);border-color:var(--ink3)}
+.tbtn.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.pbar{height:7px;background:var(--bg2);border-radius:99px;margin-top:8px;overflow:hidden;display:flex}
+.pbar i{display:block;height:100%;background:var(--acc);transition:width .25s}
+.pmeta{display:flex;align-items:center;gap:10px;font-size:.74em;color:var(--ink3);margin-top:5px}
+.pmeta b{color:var(--ink);font-weight:600}
+.saved{color:var(--qing)}
+nav{max-width:1020px;margin:0 auto;padding:0 16px 8px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav a{flex:none;border:1px solid var(--line);border-radius:99px;padding:4px 12px;font-size:.78em;color:var(--ink2);border-bottom:1px solid var(--line)}
+nav a.here{background:var(--acc);border-color:var(--acc);color:#fff}
+
+/* ── 版心 ───────────────────────────────── */
+main{max-width:1020px;margin:0 auto;padding:18px 16px 40px}
+.sec{margin:26px 0 8px;scroll-margin-top:150px}
+.sec h2{font-size:1.18em;margin:0 0 2px;display:flex;align-items:center;gap:9px}
+.sec h2 .dot{width:11px;height:11px;border-radius:99px;background:var(--acc);flex:none}
+.sec .sdesc{color:var(--ink2);font-size:.86em;margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:16px 18px;margin:0 0 14px;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--acc);opacity:.85}
+.card h3{margin:0 0 4px;font-size:1.02em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chip{font-size:.7em;font-weight:500;color:var(--ink2);background:var(--bg2);border:1px solid var(--line);
+  border-radius:99px;padding:1px 9px;white-space:nowrap}
+.chip.time{color:var(--acc);border-color:currentColor;background:transparent}
+.chip.gold{color:var(--jin);border-color:currentColor;background:transparent}
+.hint{color:var(--ink2);font-size:.85em;margin:2px 0 10px}
+.hint.strong{color:var(--ink)}
+.note{border-radius:12px;padding:11px 14px;font-size:.88em;margin:0 0 12px;border:1px solid var(--line);background:var(--bg2)}
+.note.warm{background:var(--warnbg);border-color:#EBD9AE}
+.note.red{background:var(--badbg);border-color:#EFC9C5}
+.note.good{background:var(--okbg);border-color:#C8E2CE}
+html.night .note.warm{border-color:#453A1F}html.night .note.red{border-color:#4A2A28}html.night .note.good{border-color:#26402C}
+.note b{color:var(--ink)}
+
+/* ── 勾选行 ─────────────────────────────── */
+.rowchk{display:flex;gap:11px;align-items:flex-start;padding:9px 10px;border-radius:11px;cursor:pointer;
+  border:1px solid transparent;min-height:44px;transition:background .12s}
+.rowchk:hover{background:var(--bg2)}
+.rowchk input{appearance:none;width:23px;height:23px;flex:none;margin:4px 0 0;border:2px solid var(--ink3);
+  border-radius:7px;cursor:pointer;position:relative;background:var(--card)}
+.rowchk input:checked{background:var(--qing);border-color:var(--qing)}
+.rowchk input:checked::after{content:"";position:absolute;left:6px;top:2px;width:6px;height:11px;
+  border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(43deg)}
+.rowchk input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rowchk span{font-size:.92em}
+.rowchk.done span{color:var(--ink2)}
+.rowchk code{background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:0 5px;font-size:.86em;
+  font-family:ui-monospace,Consolas,monospace}
+
+/* ── 表格 ───────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:.9em}
+th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-weight:600;color:var(--ink2);font-size:.88em;background:var(--bg2);white-space:nowrap;position:relative}
+tr:last-child td{border-bottom:0}
+td.num{font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
+input[type=text],input[type=number],select{font-family:inherit;font-size:.95em;color:var(--ink);background:var(--bg);
+  border:1px solid var(--line);border-radius:10px;padding:6px 9px;min-height:38px;width:100%;transition:border-color .12s}
+input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 18%,transparent)}
+input::placeholder{color:var(--ink3)}
+td input{min-width:74px}
+.tip{font-size:.76em;color:var(--ink3);margin-top:6px}
+
+/* ── 判定 ───────────────────────────────── */
+.vrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;padding-top:11px;border-top:1px dashed var(--line)}
+.vrow .vl{font-size:.8em;color:var(--ink2);margin-right:2px}
+.vb{border:1.5px solid var(--line);background:var(--card);color:var(--ink2);border-radius:99px;padding:7px 14px;
+  font-size:.84em;cursor:pointer;font-family:inherit;min-height:40px;transition:.12s}
+.vb:hover{border-color:var(--ink3)}
+.vb[aria-pressed=true]{color:#fff;border-color:transparent;font-weight:600}
+.vb[data-v=pass][aria-pressed=true]{background:var(--ok)}
+.vb[data-v=cond][aria-pressed=true]{background:var(--warn)}
+.vb[data-v=fail][aria-pressed=true]{background:var(--bad)}
+.vb[data-v=na][aria-pressed=true]{background:var(--na)}
+.badge{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:2px 10px;font-size:.78em;font-weight:600;white-space:nowrap}
+.badge.pass{background:var(--okbg);color:var(--ok)}.badge.cond{background:var(--warnbg);color:var(--warn)}
+.badge.fail{background:var(--badbg);color:var(--bad)}.badge.na,.badge.none{background:var(--nabg);color:var(--na)}
+html.night .badge.pass{color:#8FD3A0}html.night .badge.cond{color:#E0BE72}
+html.night .badge.fail{color:#E79C95}html.night .badge.na{color:#9AA1AA}
+
+/* ── 计时器 ─────────────────────────────── */
+.tm{display:flex;gap:16px;align-items:center;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--line);
+  border-radius:14px;padding:12px 15px;margin:0 0 12px}
+.ring{width:96px;height:96px;flex:none;border-radius:99px;display:grid;place-items:center;position:relative;
+  background:conic-gradient(var(--acc) calc(var(--p,0)*1%),var(--line) 0)}
+.ring::after{content:"";position:absolute;inset:6px;border-radius:99px;background:var(--card)}
+.ring b{position:relative;font-size:1.25em;font-variant-numeric:tabular-nums;letter-spacing:.5px}
+.tm .tinfo{flex:1;min-width:180px}
+.tm .tinfo .big{font-size:.95em;font-weight:600}
+.tm .tinfo .sm{font-size:.8em;color:var(--ink2)}
+.tm .tbtns{display:flex;gap:7px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:11px;padding:8px 14px;
+  font-size:.84em;cursor:pointer;font-family:inherit;min-height:40px}
+.btn:hover{border-color:var(--ink3)}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.btn.ghost{background:transparent;color:var(--ink2)}
+.ring.flash{animation:fl .55s ease-in-out 3}
+@keyframes fl{50%{background:conic-gradient(var(--jin) 100%,var(--jin) 0)}}
+
+/* ── 代码 ───────────────────────────────── */
+pre{background:#22262B;color:#E8E4DC;border-radius:12px;padding:12px 14px;overflow-x:auto;font-size:.82em;
+  line-height:1.7;font-family:ui-monospace,Consolas,"Cascadia Mono",monospace;margin:0 0 8px;white-space:pre}
+.cmdbtns{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px}
+
+/* ── 折叠 ───────────────────────────────── */
+.fold{border:1px solid var(--line);border-radius:12px;margin-bottom:8px;overflow:hidden;background:var(--card)}
+.fold>button{width:100%;text-align:left;background:var(--bg2);border:0;border-left:4px solid var(--acc);
+  padding:11px 14px;font-size:.9em;font-family:inherit;color:var(--ink);cursor:pointer;min-height:44px}
+.fold>button:hover{background:var(--bg2);filter:brightness(.98)}
+.fold .fb{display:none;padding:11px 15px;font-size:.88em;color:var(--ink2);border-top:1px solid var(--line)}
+.fold.open .fb{display:block}
+.fold .fb b{color:var(--ink)}
+
+/* ── 报数/提示 ──────────────────────────── */
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:#22262B;color:#fff;
+  padding:10px 18px;border-radius:99px;font-size:.86em;opacity:0;pointer-events:none;transition:.22s;z-index:99}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+.calc{background:var(--bg2);border:1px dashed var(--line);border-radius:13px;padding:12px 15px;font-size:.9em;margin:0 0 12px}
+.calc .k{color:var(--ink2)}
+.calc .v{font-weight:700;font-variant-numeric:tabular-nums}
+.bigres{font-size:1.06em;margin-top:5px}
+footer{max-width:1020px;margin:0 auto;padding:8px 16px 40px;color:var(--ink3);font-size:.8em;line-height:1.9}
+
+@media (max-width:620px){
+  .hwrap{padding:8px 12px 6px}main{padding:14px 12px 40px}nav{padding:0 12px 8px}
+  .card{padding:13px 14px;border-radius:14px}.ring{width:82px;height:82px}
+  .htitle small{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}
+@media print{
+  :root{--bg:#fff;--card:#fff;--shadow:none;--fs:11.5pt}
+  header,nav,.noprint,#toast{display:none!important}
+  body{padding:0}main{max-width:none;padding:0}
+  .card{break-inside:avoid;border-color:#bbb;box-shadow:none;margin-bottom:8px}
+  .sec{break-before:page}
+  .sec:first-of-type{break-before:auto}
+  .fold .fb{display:block!important}
+  .fold>button{border-left-width:3px}
+  input{border:0;border-bottom:1px solid #999;border-radius:0;background:transparent;min-height:0;padding:2px 4px}
+  pre{background:#f2f2f2;color:#222;border:1px solid #ccc}
+  .tm{display:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <div class="htop">
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1 · 2026-09-25</small></div>
+      <div class="hspace"></div>
+      <button class="tbtn" id="bNight" title="夜间模式（晚课测试用）">🌙 夜间</button>
+      <button class="tbtn" id="bFsp" title="放大字号">A+</button>
+      <button class="tbtn" id="bFsm" title="缩小字号">A−</button>
+      <button class="tbtn" id="bOut" title="导出记录">导出</button>
+      <button class="tbtn" id="bPrint" title="打印／存 PDF">打印</button>
+      <button class="tbtn" id="bReset" title="清空所有勾选与记录">清空</button>
+    </div>
+    <div class="pbar" id="pbar"></div>
+    <div class="pmeta"><span>完成度 <b id="pct">0%</b></span><span id="pnum">0 / 0 项</span>
+      <span class="hspace"></span><span class="saved" id="saved">自动保存在本机浏览器</span></div>
+  </div>
+  <nav id="nav"></nav>
+</header>
+
+<main id="main"></main>
+
+<footer>
+  <div><b>正本（文字稿）</b>：<code>01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.md</code> ｜ 本页与正本同源同判据，可独立使用。</div>
+  <div><b>判据来源</b>：《NeuraDock 设备性能测试方案（讨论稿 v1）》§二（T1–T11）＋ <code>qc_pipeline.py</code>（阈值版本 20260920）。<b>本页不加指标、不改判据。</b></div>
+  <div><b>记录</b>：勾选与填写只存在本机浏览器（localStorage），不上网、不外发；换电脑请用「导出」带走 JSON，再用「导入」恢复。</div>
+  <div><b>边界</b>：只评设备与链路，不对禅定境界与脑电的对应作任何断言（判语 009）；测不出写「不可判定」，不写通过（P6·判语 011）。</div>
+</footer>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════════════════
+   NeuraDock 设备性能测试 · 执行面板
+   数据驱动：全部内容在 FLOW 里；渲染用 DOM 构造（不用 innerHTML 拼数据）。
+   判据数字与《…流程表_v1.md》《…测试方案_讨论稿v1.md》§二 同源。
+   ══════════════════════════════════════════════════════════════════ */
+const KEY = 'nd-flow-v1';
+const FS_MIN = 15, FS_MAX = 22;
+
+/* ── 内容 ───────────────────────────────────────────────────────── */
+const FLOW = {
+  nav: [['pre','开工前置'],['s1','场① 信号质量'],['s2','场② 长时程'],['s3','场③ 对照'],['sum','汇总总评'],['ref','速查处置']],
+  secs: [
+  /* ══ 前置 ══ */
+  { id:'pre', name:'开工前置核对', desc:'每场开跑前都过一遍，约 10 分钟。点不动的那一项，就是今天要先解决的问题。', acc:'#8A6A4F', blocks:[
+    {k:'hint',tone:'warm',t:'先花 10 分钟，省下 90 分钟',
+     d:'这份面板是给"边做边点"用的——不用背数字，页会替你算、替你记。<br>顺序建议：<b>先勾前置 → 再连接自检 → 再进本场试验</b>。中间想歇就歇，★ 处暂停不影响已完成部分。'},
+    {k:'check',title:'硬件',chip:'9 项',items:[
+      ['h1','主机电量充足（3500mAh，官方称 2–3 小时连采）','场②长时程前必须满电或插电'],
+      ['h2','7 电极就位：<code>CP5 CP6 PO3 PO4 O1 Oz O2</code>','软件列序索引 0–6，以此为准'],
+      ['h3','2.5mm 耳夹参考已夹好','与以往场次同一侧，便于跨场比较'],
+      ['h4','三段式佩戴收紧到"贴合但不压痛"','头顶无头发顶起电极'],
+      ['h5','电极触点清洁','勿用酒精湿擦导电胶面'],
+      ['h6','USB 模式必须用 50Hz 隔离数据线','普通充电线会引入大量噪声——"信号差"的第一大假象来源'],
+      ['h7','线缆走线不牵拉电极、不压到头侧','翻身/低头会拽动电极'],
+      ['h8','手机、蓝牙耳机移开 1 米以上','2.4G 共存'],
+      ['h9','记下当日佩戴体感（压迫点、滑移位置）','填进「汇总」的记录卡']
+    ]},
+    {k:'check',title:'软件与端口',chip:'7 项',items:[
+      ['s1','NeuraDock 官方软件已启动，设备已连上','"打开数据服务"按钮无设备时置灰——这是正常现象，不是故障'],
+      ['s2','官方软件已点『<b>打开数据服务</b>』，端口＝<b>9600</b>','若改端口，控制台地址须同步填一致'],
+      ['s3','⚠️ <code>NeuraDock模拟器.bat</code> 处于<b>关闭</b>状态','它与真机官方软件互斥占用 9600，同时开会连错对象'],
+      ['s4','控制台已启动（<code>console_server.py --port 8777</code>，须 Python 3.12）','裸 <code>python</code> 是 3.14 且缺依赖'],
+      ['s5','浏览器打开控制台 → 采集工作台 → 设备选「NeuraDock（TCP 数据服务）」','地址填 <code>127.0.0.1:9600</code>'],
+      ['s6','「📍 事件标记」条就位（👁 睁眼／🌙 闭眼 快捷键可用）','T1 全靠它打点'],
+      ['s7','会话登记已填完（参与者 P001、场景、<code>protocol=devtest</code>、事前状态自评）','先登记后采集']
+    ]},
+    {k:'cmd',title:'端口探活（30 秒，出故障时必跑）',lines:[
+      'Test-NetConnection 127.0.0.1 -Port 9600 -InformationLevel Quiet   # 真机数据服务在不在',
+      '(Invoke-WebRequest http://127.0.0.1:8777/api/monitor/status -UseBasicParsing).Content'
+    ],note:'第一条 <b>True</b> ＝ 9600 有人监听；第二条能返回 JSON ＝ 控制台活着。两条都通，才谈得上"设备问题"。',
+     probe:true},
+    {k:'check',title:'项目侧与记录',chip:'5 项',items:[
+      ['p1','本页已打开（手机／平板／电脑皆可），或正本已打印','建议 A4 双面 3 页'],
+      ['p2','数据工厂可写：<code>D:\\Project\\Zen-EEG</code>','01_registry／02_raw／03_quality_control'],
+      ['p3','磁盘剩余空间 ≥5 GB',''],
+      ['p4','上一场会话已关闭','若提示"已有监测会话正在运行"＝上一场没关，见「速查处置」'],
+      ['p5','记录人栏已写名字与日期','默认＝操作者本人']
+    ]},
+    {k:'check',title:'边界与伦理',chip:'3 项',items:[
+      ['e1','受试者知情：本次为<b>设备性能测试</b>，不是修行评价',''],
+      ['e2','<b>本场数据是否入工厂，当场裁定并记录</b>','机制：<code>--type test</code> 默认落隔离区；裁定结果填进「汇总」记录卡'],
+      ['e3','全部数据本地处理，原始 EEG 与个人数据<b>不出网</b>','红线']
+    ]}
+  ]},
+
+  /* ══ 场① ══ */
+  { id:'s1', name:'场① 信号质量', desc:'约 90 分钟 · 建议与场③同日（同环境同状态，对照才干净）。中途想歇就在 ★ 处歇。', acc:'#B4463C', blocks:[
+    {k:'hint',tone:'',t:'本场顺序',d:'连接自检 2 分钟 → <b>T1 睁闭眼</b>（金标准，16 分钟）→ T2 噪声底 5 分钟 → T3 耐受性 8 分钟 → T4 工频 5 分钟 → T6 原始流核验。做完一项点一次结论，页会自动记进度。'},
+    {k:'grid',title:'S0 连接自检',chip:'2 分钟',gold:1,hint:'每场都做。5 秒内出波形就算过。',
+     cols:['#','操作','看哪里','判据','记录'],
+     rows:[
+      ['S0-1','控制台点「开始采集」','状态横幅','5 秒内出现波形；不报 Internal Server Error',{f:'f_s0t',in:'text',ph:'用时 秒',w:'96px'}],
+      ['S0-2','看采集信息','会话信息条','设备显示 NeuraDock TCP（127.0.0.1:9600）',{f:'f_s0mode',in:'text',ph:'设备/模式'}],
+      ['S0-3','静看 30 秒','波形幅值','不贴底（不是直线）、不削顶',{f:'f_s0w',in:'select',opt:['正常','贴底','削顶']}],
+      ['S0-4','★ 可安全暂停','—','未产生有效数据，随时可停','']
+     ],v:'s0v',vlabel:'S0 结论'},
+
+    {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,
+     hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下控制台上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
+
+    {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,
+     hint:'填每段的 α 相对功率（8–12Hz 占比，控制台频段条上读）。主看 <b>O1 / Oz / O2</b>；CP5/CP6/PO3/PO4 作辅助参考，不单独判。',
+     cols:['段','状态','打点时刻','α 相对功率','备注（眨眼/困倦/体位）'],
+     rows:[
+      ['1','睁眼','__:__',{f:'t1a1',in:'num',ph:'如 0.18',w:'92px'},{f:'t1n1',in:'text',ph:'—'}],
+      ['2','闭眼','__:__',{f:'t1a2',in:'num',ph:'如 0.31',w:'92px'},{f:'t1n2',in:'text',ph:'—'}],
+      ['3','睁眼','__:__',{f:'t1a3',in:'num',ph:'',w:'92px'},{f:'t1n3',in:'text',ph:'—'}],
+      ['4','闭眼','__:__',{f:'t1a4',in:'num',ph:'',w:'92px'},{f:'t1n4',in:'text',ph:'—'}],
+      ['5','睁眼','__:__',{f:'t1a5',in:'num',ph:'',w:'92px'},{f:'t1n5',in:'text',ph:'—'}],
+      ['6','闭眼','__:__',{f:'t1a6',in:'num',ph:'',w:'92px'},{f:'t1n6',in:'text',ph:'—'}],
+      ['7','睁眼','__:__',{f:'t1a7',in:'num',ph:'',w:'92px'},{f:'t1n7',in:'text',ph:'—'}],
+      ['8','闭眼','__:__',{f:'t1a8',in:'num',ph:'',w:'92px'},{f:'t1n8',in:'text',ph:'—'}]
+     ],v:'t1v',vlabel:'T1 结论'},
+    {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
+    {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。'},
+
+    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',
+     hint:'静坐不动 5 分钟（不看手机、不说话）。重点盯 <b>CP5 / CP6 / O2</b>——09-21 三通道贴底的前科位置。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。',
+     cols:['通道','std（µV）','峰值（µV）','连续 &gt;1min 贴底','质检通道态'],
+     rows:[
+      ['CP5',{f:'t2s_cp5',in:'num',ph:'',w:'80px'},{f:'t2p_cp5',in:'num',ph:'',w:'80px'},{f:'t2f_cp5',in:'select',opt:['无','有']},{f:'t2q_cp5',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['CP6',{f:'t2s_cp6',in:'num',ph:'',w:'80px'},{f:'t2p_cp6',in:'num',ph:'',w:'80px'},{f:'t2f_cp6',in:'select',opt:['无','有']},{f:'t2q_cp6',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['PO3',{f:'t2s_po3',in:'num',ph:'',w:'80px'},{f:'t2p_po3',in:'num',ph:'',w:'80px'},{f:'t2f_po3',in:'select',opt:['无','有']},{f:'t2q_po3',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['PO4',{f:'t2s_po4',in:'num',ph:'',w:'80px'},{f:'t2p_po4',in:'num',ph:'',w:'80px'},{f:'t2f_po4',in:'select',opt:['无','有']},{f:'t2q_po4',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['O1',{f:'t2s_o1',in:'num',ph:'',w:'80px'},{f:'t2p_o1',in:'num',ph:'',w:'80px'},{f:'t2f_o1',in:'select',opt:['无','有']},{f:'t2q_o1',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['Oz',{f:'t2s_oz',in:'num',ph:'',w:'80px'},{f:'t2p_oz',in:'num',ph:'',w:'80px'},{f:'t2f_oz',in:'select',opt:['无','有']},{f:'t2q_oz',in:'select',opt:['ok','warn','bad','unknown']}],
+      ['O2',{f:'t2s_o2',in:'num',ph:'',w:'80px'},{f:'t2p_o2',in:'num',ph:'',w:'80px'},{f:'t2f_o2',in:'select',opt:['无','有']},{f:'t2q_o2',in:'select',opt:['ok','warn','bad','unknown']}]
+     ],v:'t2v',vlabel:'T2 结论'},
+    {k:'fold',title:'贴底了先别急着挪电极——三种成因，先区分再动手',items:[
+      ['滤波前后<b>同步塌</b>','指向源头：电极接触／放大器。→ 重新压实该电极、清洁触点，复测 1 分钟。'],
+      ['只有原始列塌、滤波列正常','指向链路补零／丢包。→ 查线缆与 USB 隔离线，看 T5 的丢包率。'],
+      ['单通道塌、其余通道正常','指向该电极的个体问题。→ 记下位置与当日头型，纳入"佩戴 SOP"改进清单。']
+    ]},
+
+    {k:'grid',title:'T3 耐受性试验',chip:'8 分钟',
+     hint:'依次做：咀嚼×10 → 眨眼×20 → 头部转动×10 → 深呼吸×10，<b>每个动作后静置 30 秒</b>。判据：伪迹后恢复 <b>≤3 s 为佳</b>。回答的是"关系禅修里的微动作会不会把整段数据打脏"。',
+     cols:['动作','伪迹持续（s）','恢复基线（s）','是否 ≤3s','备注'],
+     rows:[
+      ['咀嚼 ×10',{f:'t3a1',in:'num',ph:'',w:'80px'},{f:'t3b1',in:'num',ph:'',w:'80px'},{f:'t3c1',in:'select',opt:['是','否']},{f:'t3d1',in:'text',ph:'—'}],
+      ['眨眼 ×20',{f:'t3a2',in:'num',ph:'',w:'80px'},{f:'t3b2',in:'num',ph:'',w:'80px'},{f:'t3c2',in:'select',opt:['是','否']},{f:'t3d2',in:'text',ph:'—'}],
+      ['头部转动 ×10',{f:'t3a3',in:'num',ph:'',w:'80px'},{f:'t3b3',in:'num',ph:'',w:'80px'},{f:'t3c3',in:'select',opt:['是','否']},{f:'t3d3',in:'text',ph:'—'}],
+      ['深呼吸 ×10',{f:'t3a4',in:'num',ph:'',w:'80px'},{f:'t3b4',in:'num',ph:'',w:'80px'},{f:'t3c4',in:'select',opt:['是','否']},{f:'t3d4',in:'text',ph:'—'}]
+     ],v:'t3v',vlabel:'T3 结论'},
+
+    {k:'grid',title:'T4 工频噪声',chip:'5 分钟',hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
+     cols:['指标','实测','判据'],
+     rows:[['工频残余比',{f:'t4r',in:'num',ph:'如 0.28',w:'110px'},'≤0.35 良好；0.35–0.5 可接受；>0.5 需排查']],
+     v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换 USB 隔离线 → 换插座回路／拔掉附近充电器 → 检查参考耳夹 → 电极重新压实']]},
+
+    {k:'grid',title:'T6 原始流全量核验',chip:'★ 四问生命线',
+     hint:'验的是"它给不给原始档"，不是"它降噪好不好"。<b>若只有加工流、无真原始档 → 触碰 D32 硬条件，走换货／谈判路径。</b>',
+     cols:['核查点','怎么看','期望','记录'],
+     rows:[
+      ['通道数 × 采样率','npz <code>meta</code> 的 channels／sfreq','7 通道 / 250 Hz',{f:'t6a',in:'text',ph:'__ ch / __ Hz'}],
+      ['原始档在不在','npz 是否含 <code>eeg_pre_filter</code> 列','必须有',{f:'t6b',in:'select',opt:['有','无']}],
+      ['有无设备端自动降噪/插值','<code>eeg_pre_filter</code> 与 <code>eeg</code> 逐点对照','如实记录差异',{f:'t6c',in:'text',ph:'差异描述'}],
+      ['通道顺序','列名逐项比对','CP5 CP6 PO3 PO4 O1 Oz O2',{f:'t6d',in:'text',ph:'一致／实际'}]
+     ],v:'t6v',vlabel:'T6 结论'},
+    {k:'hint',tone:'good',t:'★ 场①结束',d:'点「停止采集」→ 保存 → 顺手做 T8 的前两步（保存与入库）→ 回来填「汇总」的记录卡。'}
+  ]},
+
+  /* ══ 场② ══ */
+  { id:'s2', name:'场② 长时程与链路', desc:'60–70 分钟 · 可与一次真实晚课同场，不额外占时间。每 10 分钟低头填一行就行。', acc:'#4A7C59', blocks:[
+    {k:'timer',title:'T5 十分钟提醒',mode:'interval',sec:600,
+     hint:'点「开始」后每到 10 分钟响一声，提醒你低头填一行。T9（端到端延迟）因场次待裁，本场不执行。'},
+    {k:'grid',title:'T5 长时程稳定性',chip:'60–70 分钟',
+     hint:'判据：断包率 <b>&lt;1%</b> 且不集中在开头；每小时塌陷 <b>≤1 分钟</b>；幅值/带宽漂移 <b>≤20%/小时</b>。⚠️ 开机前 2 分钟是重点——09-21 曾出现 205 次断包（疑握手问题），要复现或排除它。',
+     cols:['时间点','累计断包','本段幅值','塌陷段','电池','备注（体位/换线/走动）'],
+     rows:[
+      ['开机 0–2 min ⚠️',{f:'t5c0',in:'num',ph:'',w:'76px'},{f:'t5a0',in:'select',opt:['正常','偏低','偏高']},{f:'t5d0',in:'select',opt:['无','有']},{f:'t5b0',in:'text',ph:'%',w:'70px'},{f:'t5n0',in:'text',ph:'重点段'}],
+      ['10 min',{f:'t5c1',in:'num',ph:'',w:'76px'},{f:'t5a1',in:'select',opt:['正常','偏低','偏高']},{f:'t5d1',in:'select',opt:['无','有']},{f:'t5b1',in:'text',ph:'%',w:'70px'},{f:'t5n1',in:'text',ph:'—'}],
+      ['20 min',{f:'t5c2',in:'num',ph:'',w:'76px'},{f:'t5a2',in:'select',opt:['正常','偏低','偏高']},{f:'t5d2',in:'select',opt:['无','有']},{f:'t5b2',in:'text',ph:'%',w:'70px'},{f:'t5n2',in:'text',ph:'—'}],
+      ['30 min',{f:'t5c3',in:'num',ph:'',w:'76px'},{f:'t5a3',in:'select',opt:['正常','偏低','偏高']},{f:'t5d3',in:'select',opt:['无','有']},{f:'t5b3',in:'text',ph:'%',w:'70px'},{f:'t5n3',in:'text',ph:'—'}],
+      ['40 min',{f:'t5c4',in:'num',ph:'',w:'76px'},{f:'t5a4',in:'select',opt:['正常','偏低','偏高']},{f:'t5d4',in:'select',opt:['无','有']},{f:'t5b4',in:'text',ph:'%',w:'70px'},{f:'t5n4',in:'text',ph:'—'}],
+      ['50 min',{f:'t5c5',in:'num',ph:'',w:'76px'},{f:'t5a5',in:'select',opt:['正常','偏低','偏高']},{f:'t5d5',in:'select',opt:['无','有']},{f:'t5b5',in:'text',ph:'%',w:'70px'},{f:'t5n5',in:'text',ph:'—'}],
+      ['60 min',{f:'t5c6',in:'num',ph:'',w:'76px'},{f:'t5a6',in:'select',opt:['正常','偏低','偏高']},{f:'t5d6',in:'select',opt:['无','有']},{f:'t5b6',in:'text',ph:'%',w:'70px'},{f:'t5n6',in:'text',ph:'—'}],
+      ['结束总计',{f:'t5c7',in:'num',ph:'总断包',w:'86px'},{f:'t5dur',in:'text',ph:'总时长 min',w:'96px'},{f:'t5loss',in:'text',ph:'丢包 %',w:'80px'},{f:'t5eff',in:'text',ph:'有效 Hz',w:'86px'},{f:'t5n7',in:'text',ph:'—'}]
+     ],v:'t5v',vlabel:'T5 结论'},
+
+    {k:'grid',title:'T7 时钟与对齐',chip:'并入 T5 一起算',
+     cols:['核查点','期望','记录'],
+     rows:[
+      ['累计漂移','&lt;1 s / 小时',{f:'t7a',in:'text',ph:'s/h'}],
+      ['单样本间隔 jitter','&lt;±2 ms 占比 &gt;99%',{f:'t7b',in:'text',ph:'%'}],
+      ['采样间隔连续性','无跳变空洞',{f:'t7c',in:'select',opt:['无空洞','有空洞']}]
+     ],v:'t7v',vlabel:'T7 结论'},
+
+    {k:'grid',title:'T8 采集→入库→质检 端到端',chip:'五环节留证',
+     hint:'每个环节都要留下可查证据。这一项同时是 09-21 三个 P0（未入库／QC 矛盾／无事件锚）的回归测试。',
+     cols:['环节','操作','期望证据','记录'],
+     rows:[
+      ['① 保存','控制台「停止采集」→ 保存','生成 npz（+report.html）',{f:'t8a',in:'text',ph:'文件名'}],
+      ['② 归档入库','控制台「档案·入库」页签，或下方命令行','工厂侧出现新会话目录',{f:'t8b',in:'text',ph:'Zen-ID'}],
+      ['③ 登记表','看 <code>01_registry/session_registry.csv</code>','出现新行且 manifest_path 已填',{f:'t8c',in:'select',opt:['已出现','未出现']}],
+      ['④ 质检','看该会话 <code>qc.json</code>','有 recommend ＋ reasons[] 有内容',{f:'t8d',in:'text',ph:'recommend／reasons'}],
+      ['⑤ 契约文件','看该会话目录','session_manifest.json ＋ events.jsonl 俱在',{f:'t8e',in:'select',opt:['俱在','缺件']}]
+     ],v:'t8v',vlabel:'T8 结论'},
+    {k:'cmd',title:'命令行入库（与界面等价；出问题时用它定位）',lines:[
+      '& "$env:LOCALAPPDATA\\Programs\\Python\\Python312\\python.exe" "05_产品与开发\\muse-direct\\tools\\ingest_session.py" `',
+      '  --npz "<会话npz完整路径>" --report "<report.html完整路径>" `',
+      '  --participant P001 --type test --operator tiand --note "NeuraDock 性能测试 场② T5/T8"'
+    ],note:'<code>--type test</code> 按字典默认落隔离区；本场数据是否入工厂，按当场裁定执行（裁定结果填进汇总页）。'},
+
+    {k:'grid',title:'T10 VR 同场共存',chip:'10 分钟',
+     hint:'Pico 连着 WiFi、头环采集中的状态下跑一场完整 VR 场景（mandala 任一变体），对比断包率。判据：有 VR 的断包率不高于无 VR。',
+     cols:['条件','断包率','备注'],
+     rows:[
+      ['无 VR（取 T5 某 10 分钟）',{f:'t10a',in:'text',ph:'%',w:'96px'},{f:'t10n1',in:'text',ph:'—'}],
+      ['有 VR（本项 10 分钟）',{f:'t10b',in:'text',ph:'%',w:'96px'},{f:'t10n2',in:'text',ph:'—'}]
+     ],v:'t10v',vlabel:'T10 结论'},
+
+    {k:'note',tone:'warm',t:'T9 端到端延迟：场次待法师裁定，本场不执行',
+     d:'T9 需要在<b>闭环会话</b>里做（HUD 打点），与场②的监测长采不同源。建议二选一：<b>甲</b>＝插在场②尾段 15 分钟；<b>乙</b>＝单开场④"闭环 15 分钟"。判据：电极→HUD 数值更新 <b>P95 ≤500 ms</b>（因果滤波本身 ~150–250 ms 是已知项）。'},
+    {k:'grid',title:'T9 端到端延迟（裁定后再测）',chip:'待裁',
+     hint:'裁定为甲或乙之后，在闭环会话里用 HUD 打点法测。未裁前这一项留空即可——留空不影响其他项，也不算"没做"。',
+     cols:['项目','操作','期望','记录'],
+     rows:[['电极→HUD 数值更新延迟','屏幕闪烁／蜂鸣与 EEG 事件流同时打点（或双机位拍摄）','P95 ≤500 ms',{f:'t9a',in:'text',ph:'__ ms（测 __ 次）',w:'150px'}],
+           ['测得的延迟构成','记录传输＋渲染部分','与因果滤波 ~150–250 ms 分开记',{f:'t9b',in:'text',ph:'备注'}]],
+     v:'t9v',vlabel:'T9 结论'}
+  ]},
+
+  /* ══ 场③ ══ */
+  { id:'s3', name:'场③ 双设备对照', desc:'30 分钟 · 建议与场①同日。用数据说话，不预设 NeuraDock 占优。', acc:'#3F6B8A', blocks:[
+    {k:'grid',title:'T11 Muse vs NeuraDock 同协议对比',chip:'30 分钟',
+     hint:'同一天、同一协议（T1 睁闭眼 ×2 遍），两设备同时佩戴同时采（电极位置不冲突）。用同一算法、同一时间窗。',
+     cols:['项目','NeuraDock（O1/Oz/O2）','Muse（AF7/TP9 就近替代）','备注'],
+     rows:[
+      ['α 阻断提升幅度',{f:'t11a',in:'text',ph:'%',w:'96px'},{f:'t11b',in:'text',ph:'%',w:'96px'},{f:'t11n1',in:'text',ph:'—'}],
+      ['可用通道数（质检 ok）',{f:'t11c',in:'text',ph:'__ / 7',w:'96px'},{f:'t11d',in:'text',ph:'__ / 4',w:'96px'},{f:'t11n2',in:'text',ph:'—'}],
+      ['佩戴体感（1–5 分）',{f:'t11e',in:'num',ph:'',w:'96px'},{f:'t11f',in:'num',ph:'',w:'96px'},{f:'t11n3',in:'text',ph:'双设备同戴是否可接受'}],
+      ['互相干扰观察','',' ',{f:'t11n4',in:'text',ph:'蓝牙/BLE 共存'}]
+     ],v:'t11v',vlabel:'T11 结论'}
+  ]},
+
+  /* ══ 汇总 ══ */
+  { id:'sum', name:'汇总与总评', desc:'每场做完填一次记录卡；11 项全做完再看总评。这张表就是《验收报告》的骨架。', acc:'#B07C2A', blocks:[
+    {k:'mirror',title:'11 项红绿灯（自动汇总各页结论）',items:[
+      ['t1v','T1 睁闭眼 α 阻断','场①'],['t2v','T2 静息噪声底与贴底复查','场①'],['t3v','T3 耐受性（伪迹恢复）','场①'],
+      ['t4v','T4 工频噪声','场①'],['t6v','T6 原始流全量核验','场①'],['t5v','T5 长时程稳定性','场②'],
+      ['t7v','T7 时钟与对齐','场②'],['t8v','T8 采集→入库→质检端到端','场②'],['t10v','T10 VR 同场共存','场②'],
+      ['t9v','T9 端到端延迟','待裁'],['t11v','T11 Muse 对照','场③']
+    ],hint:'这一栏是自动读取的——上面每点一次结论，这里就亮一盏灯。'},
+    {k:'fields',title:'单场记录卡',chip:'每场一张',items:[
+      ['r_date','日期 / 时间','2026-__-__ __:__'],['r_who','操作者',''],['r_sub','受试者','P001'],
+      ['r_mode','采集模式','USB ／ 蓝牙'],['r_ver','官方软件版本',''],
+      ['r_pol','本场数据是否入工厂','隔离 ／ 入厂'],
+      ['r_zen','Zen-ID',''],['r_dur','总时长 / 样本数',''],
+      ['r_eff','有效采样率（Hz）',''],['r_loss','丢包率（%）',''],
+      ['r_clean','干净比例 clean_ratio',''],['r_bad','通道不合格数（bad）','__ / 7'],
+      ['r_wear','佩戴备注（压迫点、滑移）',''],['r_abn','异常与处置','']
+    ]},
+    {k:'grid',title:'总评三档与对应动作',chip:'一页看结论',
+     cols:['总评','条件','对应动作'],
+     rows:[
+      ['🟢 可用','T1 合格及以上 ＋ T2 无贴底 ＋ T6 原始档齐备 ＋ T5 通过','把 T1 做成 90 秒开机自检；进入长期使用与个人基线积累'],
+      ['🟡 有条件可用','T1 合格但 T2 有贴底／T3 恢复慢／T10 不通过','先落"佩戴 SOP＋开机自检"，贴底位置在 SOP 里重点标注；报告写明适用条件；问题清单回传厂商'],
+      ['🔴 不可用','T6 无真原始档，或 T1 与 T2 双双不达标且排查后仍不合格','触发 D32 硬条件：不进入后续采购谈判，走换货路径；测试记录即谈判材料']
+     ]},
+    {k:'v',id:'sumv',label:'本设备总评'}
+  ]},
+
+  /* ══ 速查 ══ */
+  { id:'ref', name:'速查与处置', desc:'一页数字＋十条故障处置。打印时这一页单独成页，建议带在手边。', acc:'#6B7280', blocks:[
+    {k:'static',title:'判据速查卡',cols:['项目','判据','来源'],rows:[
+      ['T1 α 阻断提升','≥30% 优秀｜≥15% 合格｜<15% 可疑','方案 T1'],
+      ['T2 通道 std','3–30 µV 正常；<2 µV 且 >1 min ＝ 贴底','方案 T2'],
+      ['T3 伪迹恢复','≤3 s 为佳','方案 T3'],
+      ['T4 工频残余比','≤0.35 良好；0.35–0.5 可接受；>0.5 查接地','方案 T4（09-21 实测 0.28）'],
+      ['T5 断包率','<1% 且不集中在开头','方案 T5'],
+      ['T5 塌陷 / 漂移','≤1 分钟/小时 ／ ≤20%/小时','方案 T5'],
+      ['T6 原始档','必须有 eeg_pre_filter；无 → 🔴 红线','方案 T6／D32'],
+      ['T7 漂移 / jitter','<1 s/小时 ／ <±2 ms 占比 >99%','方案 T7'],
+      ['T8 链路','五环节留证（保存→入库→登记表→QC reasons→契约文件）','方案 T8'],
+      ['T9 延迟','P95 ≤500 ms','方案 T9'],
+      ['T10 VR 共存','断包率不高于无 VR','方案 T10'],
+      ['T11 对照','数据说话，不预设结论','方案 T11'],
+      ['质检闸门（自动判定）','时长 ≥30 s｜丢包 ≤20%｜干净比例 ≥60%｜平线 std <0.5 µV｜饱和 >1800 µV｜RMS >500 µV 判 bad｜工频占比 >0.35 判 warn','qc_pipeline.py 阈值版本 20260920'],
+      ['质检三态读法','ingest＝可入库｜quarantine＝建议隔离（看 reasons[]）｜通道 unknown＝测不出，按弃权处理，不写 ok','P6 弃权']
+     ]},
+    {k:'fold',title:'异常处置速查（10 条，点开即可）',items:[
+      ['1 · 点「开始采集」报 Internal Server Error／无波形／关不掉','后台服务已死，或已有会话在跑。→ ① 探活 8777；② 若提示"已有监测会话正在运行"，先在原页面停掉那场再开新场（重复开会返回 <b>409</b> 并说明原因，属保护）。'],
+      ['2 · 连接被拒 ConnectionRefusedError [WinError 10061]','<code>127.0.0.1:9600</code> 无人监听。四步：① 官方软件是否已连上设备（无设备时"打开数据服务"置灰）；② 是否已点『打开数据服务』；③ 端口是否被改成非 9600；④ <b>模拟器是否开着占用了 9600</b>（与真机互斥）。'],
+      ['3 · 通道贴底（std < 2 µV）','电极／放大器／链路三选一。→ 走 T2 的"三种成因区分表"，<b>先区分再动手</b>。'],
+      ['4 · 波形是直线但通道名正常','电极未接触或参考脱落。→ 压实电极、检查耳夹参考，复测 1 分钟；仍直线则记 bad 并排除该通道分析。'],
+      ['5 · 工频（50 Hz）显著','接地／线缆／环境。→ ① 换 50Hz 隔离 USB 线 ② 拔掉附近充电器、换插座回路 ③ 检查耳夹 ④ 电极重压。'],
+      ['6 · 断包集中在开头 2 分钟','开机链路握手。→ 复现并记录次数；报告如实标注"前 2 分钟数据可靠性低"；这是 T5 的重点观察项。'],
+      ['7 · 保存后找不到 npz','保存未触发／路径不对。→ 回控制台确认"已保存"状态；仍无则记录时间点，作为 T8 的失败证据（<b>不要重跑顶替，失败本身是数据</b>）。'],
+      ['8 · 入库后 registry 无新行','入库脚本报错／被隔离。→ 看命令行输出与 <code>qc.json.recommend</code>；隔离是预期行为（见前置 e2），未隔离却无行才是故障。'],
+      ['9 · QC 结果与肉眼判断矛盾','阈值口径。→ 记下 <code>qc.json</code> 的 thresholds 与 reasons[]（阈值版本 20260920），<b>以 reasons 为准逐条核</b>，不凭印象改判。'],
+      ['10 · VR 与采集同时跑后断包升高','BLE／WiFi 共存。→ 记入 T10；试"VR 用有线／关手机热点"再测一次，两次数据都留。']
+    ]},
+    {k:'hint',tone:'good',t:'时间紧？20 分钟最小可用子集',d:'前置勾选 → S0 连接自检 → T1 睁闭眼 → T2 前 2 分钟。这三步就能回答"这台设备今天能不能用"，其余项可留到下次。'},
+    {k:'note',tone:'warm',t:'待法师裁定（4 条）',d:'① 方案整体采/改/缓；② 场②是否并入某次真实共修（哪天）；③ T11 双设备同戴的舒适度；④ <b>本表新发现</b>：方案 §三 场次表未点明 <b>T9 归哪一场</b>（甲＝插场②尾段 15 分钟／乙＝单开场④），未裁前 T9 不执行。'}
+  ]}
+  ]
+};
+
+const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:'⚪ 不可判定','':'—'};
+const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
+
+/* ── 状态 ───────────────────────────────────────────────────────── */
+let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17}};
+let saveTimer = null;
+
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){
+      const o = JSON.parse(raw);
+      if(o && o.v === 1){
+        S.checks = o.checks || {}; S.fields = o.fields || {};
+        S.verdicts = o.verdicts || {};
+        if(o.meta) S.meta = Object.assign(S.meta, o.meta);
+      }
+    }
+  }catch(e){ /* 读不出来就从空白开始，不阻塞使用 */ }
+}
+function save(){
+  S.meta.savedAt = Date.now();
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ toast('本机保存失败（可能是隐私模式）——请用「导出」留档'); }
+  const el = document.getElementById('saved');
+  if(el) el.textContent = '已保存 ' + new Date().toLocaleTimeString('zh-CN', {hour12:false});
+}
+function saveSoon(){ clearTimeout(saveTimer); saveTimer = setTimeout(save, 250); }
+
+/* ── 小工具 ─────────────────────────────────────────────────────── */
+function h(tag, props, ...kids){
+  const e = document.createElement(tag);
+  if(props) for(const k in props){
+    const v = props[k];
+    if(v === null || v === undefined || v === false) continue;
+    if(k === 'class') e.className = v;
+    else if(k === 'text') e.textContent = v;
+    else if(k === 'html') e.innerHTML = v;          // 仅用于本文件内的固定文案（非用户输入）
+    else if(k.slice(0,2) === 'on') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for(const kid of kids.flat()){
+    if(kid === null || kid === undefined || kid === false) continue;
+    e.appendChild(typeof kid === 'object' ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+let toastT = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2400);
+}
+function beep(times){
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return;
+    beep.ctx = beep.ctx || new AC();
+    const ctx = beep.ctx, t0 = ctx.currentTime;
+    for(let i=0;i<(times||2);i++){
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = 880;
+      o.connect(g); g.connect(ctx.destination);
+      const t = t0 + i*0.26;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.22, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.18);
+      o.start(t); o.stop(t+0.2);
+    }
+  }catch(e){}
+}
+
+/* ── 渲染：积木 ─────────────────────────────────────────────────── */
+function card(blk, body, extraChip){
+  const head = [h('h3', null, blk.title)];
+  if(blk.chip) head.push(h('span', {class:'chip' + (blk.gold ? ' gold' : '')}, blk.chip));
+  const c = h('div', {class:'card'}, h('div', null, ...head));
+  if(blk.hint) c.appendChild(h('p', {class:'hint', html:blk.hint}));
+  body.forEach(b => c.appendChild(b));
+  return c;
+}
+function verdictRow(blk){
+  const v = blk.v, row = h('div', {class:'vrow', 'data-vrow':v},
+    h('span', {class:'vl'}, (blk.vlabel || '结论') + '：'));
+  [['pass','🟢 通过'],['cond','🟡 有条件'],['fail','🔴 不通过'],['na','⚪ 不可判定']].forEach(([val,lab])=>{
+    row.appendChild(h('button', {
+      class:'vb', type:'button', 'data-v':val, 'data-vid':v,
+      'aria-pressed': String(S.verdicts[v] === val), onclick:()=>{
+        S.verdicts[v] = (S.verdicts[v] === val) ? '' : val;
+        paintVerdicts(v); saveSoon(); recount(); updateMirror();
+      }
+    }, lab));
+  });
+  return row;
+}
+function paintVerdicts(v){
+  document.querySelectorAll('[data-vid="'+v+'"]').forEach(b=>{
+    b.setAttribute('aria-pressed', String(S.verdicts[v] === b.getAttribute('data-v')));
+  });
+}
+function mkInput(spec){
+  if(spec.in === 'select'){
+    const opts = [''].concat(spec.opt || []);
+    const sel = h('select', {class:'inp', 'data-f':spec.f},
+      ...opts.map(o => h('option', {value:o, selected: (S.fields[spec.f]||'') === o ? 'selected' : null}, o || '—')));
+    return sel;
+  }
+  const t = spec.in === 'num' ? 'text' : 'text';
+  return h('input', {class:'inp', type:t, inputmode:(spec.in==='num'?'decimal':'text'),
+    'data-f':spec.f, placeholder:spec.ph || '', value: S.fields[spec.f] || ''});
+}
+function renderGrid(blk){
+  const thead = h('thead', null, h('tr', null, ...blk.cols.map((c,i)=> h('th', {html:c}))));
+  const tbody = h('tbody');
+  blk.rows.forEach(r=>{
+    const tr = h('tr');
+    r.forEach(cell=>{
+      if(typeof cell === 'object' && cell && cell.f) tr.appendChild(h('td', {'data-cellw':'1'}, mkInput(cell)));
+      else tr.appendChild(h('td', {html: cell === '' ? ' ' : String(cell)}));
+    });
+    tbody.appendChild(tr);
+  });
+  const body = [h('div', {class:'tw'}, h('table', null, thead, tbody))];
+  if(blk.extra) blk.extra.forEach(([k,v])=> body.push(h('p', {class:'tip'}, h('b', null, k+'：'), v)));
+  if(blk.v) body.push(verdictRow(blk));
+  return card(blk, body);
+}
+function renderCheck(blk){
+  const body = [h('div', null, ...blk.items.map(([id, label, det])=>{
+    const cb = h('input', {type:'checkbox', 'data-c':id, checked: S.checks[id] ? 'checked' : null,
+      onchange: e => { S.checks[id] = e.target.checked;
+        e.target.closest('.rowchk').classList.toggle('done', e.target.checked); saveSoon(); recount(); }});
+    return h('label', {class:'rowchk' + (S.checks[id] ? ' done' : '')}, cb,
+      h('span', null, h('span', {html:label}), det ? h('span', {class:'tip', html:'　' + det}) : null));
+  }))];
+  return card(blk, body);
+}
+function renderFold(blk){
+  const body = blk.items.map(([q,a])=>{
+    const d = h('div', {class:'fold'}, 
+      h('button', {type:'button', onclick: e => e.currentTarget.parentNode.classList.toggle('open')}, q),
+      h('div', {class:'fb', html:a}));
+    return d;
+  });
+  return card(blk, body);
+}
+function renderCmd(blk){
+  const text = blk.lines.join('\n');
+  const body = [h('div', {class:'cmdbtns noprint'},
+      h('button', {class:'btn ghost', type:'button', onclick:()=>copy(text,'命令已复制')}, '复制命令'),
+      blk.probe ? h('button', {class:'btn', type:'button', onclick:probe}, '探一下控制台（8777）') : null,
+      blk.probe ? h('a', {class:'btn', href:'http://127.0.0.1:8777', target:'_blank', rel:'noopener'}, '打开控制台') : null),
+    h('pre', {text:text})];
+  if(blk.note) body.push(h('p', {class:'hint', html:blk.note}));
+  if(blk.probe) body.push(h('p', {class:'hint', id:'probeOut'}, ''));
+  return card(blk, body);
+}
+function renderCalc(blk){
+  const d = h('div', {class:'calc', id:'calc-'+blk.id},
+    h('div', {class:'k'}, '还没有数据——填上任意一段的 α 相对功率就会开始算。'));
+  setTimeout(updateCalc, 0);
+  return card({title:blk.title, chip:'自动计算', hint:'填完 8 段数字，这里会自动出「睁眼均值／闭眼均值／提升幅度」与判读，不用你自己算。'}, [d]);
+}
+function renderFields(blk){
+  const body = [];
+  const tw = h('div', {class:'tw'}, h('table', null, h('tbody', null, ...blk.items.map(([f,label,ph],i)=>{
+    return h('tr', null,
+      h('td', {style:'width:34%;color:var(--ink2);font-size:.9em'}, label),
+      h('td', null, mkInput({f:f, in:'text', ph:ph || ''})));
+  }))));
+  body.push(tw);
+  return card(blk, body);
+}
+function renderMirror(blk){
+  const tbody = h('tbody');
+  blk.items.forEach(([vid,name,where])=>{
+    const b = h('span', {class:'badge none', 'data-mir':vid}, '—');
+    tbody.appendChild(h('tr', null,
+      h('td', null, name),
+      h('td', {style:'width:90px'}, h('span', {class:'chip'}, where)),
+      h('td', {style:'width:130px'}, b)));
+  });
+  const body = [h('div', {class:'tw'}, h('table', null, h('thead', null,
+    h('tr', null, h('th', null, '项'), h('th', null, '场次'), h('th', null, '结论'))), tbody))];
+  return card(blk, body);
+}
+function updateMirror(){
+  document.querySelectorAll('[data-mir]').forEach(b=>{
+    const v = S.verdicts[b.getAttribute('data-mir')] || '';
+    b.className = 'badge ' + VCLS[v];
+    b.textContent = VLAB[v];
+  });
+}
+function renderStatic(blk){
+  const body = [h('div', {class:'tw'}, h('table', null,
+    h('thead', null, h('tr', null, ...blk.cols.map(c=> h('th', null, c)))),
+    h('tbody', null, ...blk.rows.map(r=> h('tr', null, ...r.map(c=> h('td', {html:c})))))))];
+  return card(blk, body);
+}
+function renderHint(blk){
+  return h('div', {class:'note ' + (blk.tone || '')},
+    h('b', null, blk.t), h('div', {html:blk.d}));
+}
+function renderNote(blk){ return renderHint(blk); }
+function renderV(blk){
+  return card({title:blk.label, chip:'一页结论', hint:blk.hint}, [verdictRow({v:blk.id, vlabel:blk.label})]);
+}
+
+/* ── 计时器 ─────────────────────────────────────────────────────── */
+function renderTimer(blk){
+  const ring = h('div', {class:'ring', style:'--p:0'}, h('b', null, fmt(blk.mode === 'count' ? blk.sec : 0)));
+  const info = h('div', {class:'tinfo'},
+    h('div', {class:'big'}, blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒'),
+    h('div', {class:'sm'}, blk.mode === 'count' ? '每段 60 秒，响声即打点' : '每 10 分钟响一声，提醒填一行'));
+  const st = {run:false, left: blk.mode === 'count' ? blk.sec : blk.sec, seg:1, id:null};
+  const bStart = h('button', {class:'btn pri', type:'button'}, '开始');
+  const bReset = h('button', {class:'btn ghost', type:'button'}, '重置');
+  const tick = ()=>{
+    st.left -= 0.25;
+    if(st.left <= 0){
+      beep(2); ring.classList.add('flash'); setTimeout(()=>ring.classList.remove('flash'), 1800);
+      if(blk.mode === 'count'){
+        st.seg = st.seg % blk.times + 1;
+        info.firstChild.textContent = '第 ' + st.seg + ' / ' + blk.times + ' 段';
+        toast('第 ' + st.seg + ' 段开始 — 去控制台点一下' + (st.seg % 2 ? ' 👁 睁眼' : ' 🌙 闭眼'));
+      }else{
+        toast('10 分钟到 — 低头填一行');
+      }
+      st.left = blk.sec;
+    }
+    ring.firstChild.textContent = fmt(Math.ceil(st.left));
+    ring.style.setProperty('--p', String(100 * (1 - st.left / blk.sec)));
+  };
+  bStart.onclick = ()=>{
+    st.run = !st.run;
+    if(st.run){ st.id = setInterval(tick, 250); bStart.textContent = '暂停'; bStart.classList.remove('pri'); }
+    else{ clearInterval(st.id); bStart.textContent = '继续'; bStart.classList.add('pri'); }
+  };
+  bReset.onclick = ()=>{ clearInterval(st.id); st.run = false; st.left = blk.sec; st.seg = 1;
+    ring.style.setProperty('--p','0'); ring.firstChild.textContent = fmt(blk.sec);
+    info.firstChild.textContent = blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒';
+    bStart.textContent = '开始'; bStart.classList.add('pri'); };
+  const tm = h('div', {class:'tm noprint'}, ring, info, h('div', {class:'tbtns'}, bStart, bReset));
+  const c = card({title:blk.title, chip:'计时', hint:blk.hint}, [tm]);
+  return c;
+}
+function fmt(s){ s = Math.max(0, Math.round(s)); return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
+
+/* ── T1 计算 ────────────────────────────────────────────────────── */
+function updateCalc(){
+  const box = document.getElementById('calc-t1');
+  if(!box) return;
+  const open = [], close = [];
+  for(let i=1;i<=8;i++){
+    const v = parseFloat(S.fields['t1a'+i]);
+    if(isNaN(v)) continue;
+    (i % 2 ? open : close).push(v);
+  }
+  const clear = (id, val, lab)=>{
+    box.appendChild(h('div', null, h('span', {class:'k'}, lab + '：'), h('span', {class:'v'}, val)));
+  };
+  box.innerHTML = '';
+  if(open.length === 0 && close.length === 0){
+    box.appendChild(h('div', {class:'k'}, '还没有数据——填上任意一段的 α 相对功率就会开始算。'));
+    return;
+  }
+  const mo = open.length ? open.reduce((a,b)=>a+b,0)/open.length : NaN;
+  const mc = close.length ? close.reduce((a,b)=>a+b,0)/close.length : NaN;
+  box.appendChild(h('div', null, h('span', {class:'k'}, '睁眼均值：'), h('span', {class:'v'}, open.length ? mo.toFixed(3) + '（' + open.length + ' 段）' : '待填')));
+  box.appendChild(h('div', null, h('span', {class:'k'}, '闭眼均值：'), h('span', {class:'v'}, close.length ? mc.toFixed(3) + '（' + close.length + ' 段）' : '待填')));
+  if(!isNaN(mo) && !isNaN(mc) && mo > 0){
+    const d = (mc/mo - 1) * 100;
+    const lv = d >= 30 ? ['pass','优秀'] : (d >= 15 ? ['cond','合格'] : ['fail','可疑']);
+    box.appendChild(h('div', {class:'bigres'}, h('span', {class:'k'}, '提升幅度：'),
+      h('span', {class:'v'}, (d>=0?'+':'') + d.toFixed(1) + '%'),
+      ' ', h('span', {class:'badge ' + lv[0]}, lv[1])));
+    box.appendChild(h('div', {class:'tip'}, open.length < 4 || close.length < 4
+      ? '（当前只有 ' + open.length + '/' + close.length + ' 段，继续填会更准）'
+      : '8 段齐了。判读：≥30% 优秀｜≥15% 合格｜<15% 先排查电极接触与是否真闭眼，排查后仍低再下结论。'));
+  }else if(!isNaN(mo) && mo <= 0){
+    box.appendChild(h('div', {class:'tip'}, '睁眼均值为 0 或负值，请检查填写的是相对功率（0–1 之间的小数）。'));
+  }
+}
+
+/* ── 进度 ───────────────────────────────────────────────────────── */
+function recount(){
+  let done = 0, total = 0;
+  document.querySelectorAll('[data-c]').forEach(el=>{ total++; if(S.checks[el.getAttribute('data-c')]) done++; });
+  document.querySelectorAll('[data-f]').forEach(el=>{ total++; if(String(S.fields[el.getAttribute('data-f')] || '').trim()) done++; });
+  document.querySelectorAll('[data-vrow]').forEach(el=>{ total++; if(S.verdicts[el.getAttribute('data-vrow')]) done++; });
+  const pct = total ? Math.round(100*done/total) : 0;
+  document.getElementById('pct').textContent = pct + '%';
+  document.getElementById('pnum').textContent = done + ' / ' + total + ' 项';
+  const bar = document.getElementById('pbar');
+  bar.innerHTML = '';
+  let acc = 0;
+  FLOW.secs.forEach((s,i)=>{
+    let st = 0, tt = 0;
+    document.querySelectorAll('#' + s.id + ' [data-c], #' + s.id + ' [data-f], #' + s.id + ' [data-vrow]').forEach(el=>{
+      tt++;
+      const id = el.getAttribute('data-c') || el.getAttribute('data-f') || el.getAttribute('data-vrow');
+      const val = el.hasAttribute('data-c') ? S.checks[id] : (el.hasAttribute('data-f') ? S.fields[id] : S.verdicts[id]);
+      if(val && String(val).trim()) st++;
+    });
+    const w = total ? 100*tt/total : 0;
+    const seg = h('i', {style:'width:' + w + '%;opacity:' + (0.35 + 0.65*(tt ? st/tt : 0))});
+    bar.appendChild(seg);
+  });
+  /* 分节小计写进导航 */
+  FLOW.secs.forEach(s=>{
+    const chip = document.querySelector('nav a[href="#' + s.id + '"]');
+    if(!chip) return;
+    let st = 0, tt = 0;
+    document.querySelectorAll('#' + s.id + ' [data-c], #' + s.id + ' [data-f], #' + s.id + ' [data-vrow]').forEach(el=>{
+      tt++;
+      const id = el.getAttribute('data-c') || el.getAttribute('data-f') || el.getAttribute('data-vrow');
+      const val = el.hasAttribute('data-c') ? S.checks[id] : (el.hasAttribute('data-f') ? S.fields[id] : S.verdicts[id]);
+      if(val && String(val).trim()) st++;
+    });
+    chip.textContent = s.name + ' ' + st + '/' + tt;
+  });
+  updateMirror();
+}
+
+/* ── 探活 ───────────────────────────────────────────────────────── */
+function probe(){
+  const out = document.getElementById('probeOut');
+  if(!out) return;
+  out.textContent = '正在探 127.0.0.1:8777 …';
+  const ac = new AbortController();
+  const to = setTimeout(()=>ac.abort(), 3500);
+  fetch('http://127.0.0.1:8777/api/monitor/status', {cache:'no-store', signal:ac.signal})
+    .then(r => r.json().then(j => ({ok:r.ok, j:j})))
+    .then(({ok,j})=>{
+      clearTimeout(to);
+      out.innerHTML = ok
+        ? '🟢 <b>控制台在线</b>　状态：' + (j.status||'—') + '　运行中：' + (j.running ? '是' : '否') + '　模式：' + (j.mode||'—') + (j.saved ? '　已保存：' + j.saved : '')
+        : '🟡 端口有响应但返回异常状态码，请看控制台日志。';
+    })
+    .catch(()=>{
+      clearTimeout(to);
+      out.innerHTML = '🔴 <b>没连上控制台</b>。三种可能：① 控制台服务没起（见前置「软件与端口」第 4 条）；② 本页以 <code>file://</code> 打开、浏览器拦了跨域请求 → 点上面「打开控制台」人工确认即可；③ 端口不是 8777。<br>9600（设备数据服务）浏览器探不了，请用前置里的 PowerShell 命令。';
+    });
+}
+
+/* ── 复制 / 导出 / 导入 ─────────────────────────────────────────── */
+function copy(text, okMsg){
+  const done = ()=> toast(okMsg || '已复制');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, ()=>fallbackCopy(text, done));
+  }else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done){
+  const ta = h('textarea', {style:'position:fixed;left:-9999px;top:0'});
+  ta.value = text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){ toast('复制失败，请手动选择文本'); }
+  setTimeout(()=>ta.remove(), 100);
+}
+function toMarkdown(){
+  const L = [];
+  const now = new Date().toLocaleString('zh-CN', {hour12:false});
+  L.push('# NeuraDock 设备性能测试 · 记录（导出自执行面板）', '', '导出时间：' + now, '');
+  FLOW.secs.forEach(sec=>{
+    L.push('## ' + sec.name, '');
+    sec.blocks.forEach(blk=>{
+      if(blk.k === 'check'){
+        L.push('### ' + blk.title);
+        blk.items.forEach(([id,label])=> L.push('- [' + (S.checks[id] ? 'x' : ' ') + '] ' + strip(label)));
+        L.push('');
+      }else if(blk.k === 'grid'){
+        L.push('### ' + blk.title);
+        L.push('| ' + blk.cols.join(' | ') + ' |');
+        L.push('|' + blk.cols.map(()=> '---').join('|') + '|');
+        blk.rows.forEach(r=>{
+          L.push('| ' + r.map(c=> (typeof c === 'object' && c && c.f) ? (S.fields[c.f] || '') : strip(String(c))).join(' | ') + ' |');
+        });
+        if(blk.v) L.push('', '结论：**' + (VLAB[S.verdicts[blk.v]] || '—') + '**');
+        L.push('');
+      }else if(blk.k === 'fields'){
+        L.push('### ' + blk.title);
+        blk.items.forEach(([f,label])=> L.push('- ' + label + '：' + (S.fields[f] || '')));
+        L.push('');
+      }else if(blk.k === 'v'){
+        L.push('### ' + blk.label + '：**' + (VLAB[S.verdicts[blk.id]] || '—') + '**', '');
+      }else if(blk.k === 'mirror'){
+        L.push('### ' + blk.title);
+        blk.items.forEach(([vid,name])=> L.push('- ' + name + '：' + (VLAB[S.verdicts[vid]] || '—')));
+        L.push('');
+      }
+    });
+  });
+  const t1 = document.getElementById('calc-t1');
+  if(t1) L.push('> T1 自动计算：' + t1.textContent.replace(/\s+/g,' ').trim(), '');
+  L.push('---', '判据来源：《NeuraDock 设备性能测试方案（讨论稿 v1）》§二 ＋ qc_pipeline.py（阈值版本 20260920）。本记录未作任何判据改动。');
+  return L.join('\n');
+}
+function strip(s){ return String(s).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim(); }
+function download(name, text, mime){
+  const blob = new Blob([text], {type:(mime||'text/plain') + ';charset=utf-8'});
+  const a = h('a', {href:URL.createObjectURL(blob), download:name});
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 400);
+}
+function openExport(){
+  const md = toMarkdown();
+  const stamp = new Date().toISOString().slice(0,10);
+  const ov = h('div', {class:'card noprint', style:'position:fixed;inset:4% 4% auto 4%;z-index:80;max-height:88%;overflow:auto;max-width:1020px;margin:0 auto'},
+    h('h3', null, '导出记录'),
+    h('p', {class:'hint'}, '三种方式随你挑：复制全文（贴进文档／微信）、下载 Markdown（存档）、下载 JSON（换设备后可用「导入」恢复全部勾选与记录）。'),
+    h('div', {class:'cmdbtns'},
+      h('button', {class:'btn pri', type:'button', onclick:()=>copy(md,'记录已复制到剪贴板')}, '复制全文'),
+      h('button', {class:'btn', type:'button', onclick:()=>{ download('NeuraDock测试记录_' + stamp + '.md', md, 'text/markdown'); toast('已下载 Markdown'); }}, '下载 Markdown'),
+      h('button', {class:'btn', type:'button', onclick:()=>{ download('NeuraDock测试记录_' + stamp + '.json', JSON.stringify(S, null, 1), 'application/json'); toast('已下载 JSON'); }}, '下载 JSON（含勾选）'),
+      h('label', {class:'btn', style:'display:inline-flex;align-items:center'}, '导入 JSON',
+        h('input', {type:'file', accept:'.json', style:'display:none', onchange: e=>importJson(e.target.files[0])})),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>ov.remove()}, '关闭')),
+    h('pre', {text:md.slice(0, 4000) + (md.length > 4000 ? '\n…（预览截断，复制／下载为完整内容）' : '')}));
+  document.body.appendChild(ov);
+}
+function importJson(file){
+  if(!file) return;
+  const fr = new FileReader();
+  fr.onload = ()=>{
+    try{
+      const o = JSON.parse(fr.result);
+      if(!o || o.v !== 1) throw new Error('版本不符');
+      S.checks = o.checks || {}; S.fields = o.fields || {}; S.verdicts = o.verdicts || {};
+      save(); hardRefresh();
+      toast('已恢复记录（' + Object.keys(S.fields).length + ' 项填写）');
+    }catch(e){ toast('导入失败：不是本页导出的 JSON'); }
+  };
+  fr.readAsText(file, 'utf-8');
+}
+
+/* ── 外壳 ───────────────────────────────────────────────────────── */
+function applyTheme(){
+  document.documentElement.classList.toggle('night', !!S.meta.night);
+  document.documentElement.style.setProperty('--fs', (S.meta.fs || 17) + 'px');
+  document.getElementById('bNight').classList.toggle('on', !!S.meta.night);
+}
+function build(){
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  const nav = document.getElementById('nav');
+  nav.innerHTML = '';
+  FLOW.secs.forEach(sec=>{
+    nav.appendChild(h('a', {href:'#' + sec.id}, sec.name));
+    const wrap = h('section', {class:'sec', id:sec.id, style:'--acc:' + sec.acc},
+      h('h2', null, h('span', {class:'dot'}), sec.name),
+      h('p', {class:'sdesc'}, sec.desc));
+    sec.blocks.forEach(blk=>{
+      let el;
+      switch(blk.k){
+        case 'check':   el = renderCheck(blk); break;
+        case 'grid':    el = renderGrid(blk); break;
+        case 'fold':    el = renderFold(blk); break;
+        case 'cmd':     el = renderCmd(blk); break;
+        case 'calc':    el = renderCalc(blk); break;
+        case 'fields':  el = renderFields(blk); break;
+        case 'mirror':  el = renderMirror(blk); break;
+        case 'static':  el = renderStatic(blk); break;
+        case 'timer':   el = renderTimer(blk); break;
+        case 'v':       el = renderV(blk); break;
+        case 'note':
+        case 'hint':    el = renderHint(blk); break;
+        default:        el = null;
+      }
+      if(el) wrap.appendChild(el);
+    });
+    main.appendChild(wrap);
+  });
+  /* 输入事件委托在启动时挂一次（attachDelegates），不随重建重复挂 */
+  /* 导航高亮 */
+  if('IntersectionObserver' in window){
+    const io = new IntersectionObserver(es=>{
+      es.forEach(en=>{
+        const a = document.querySelector('nav a[href="#' + en.target.id + '"]');
+        if(a && en.isIntersecting){
+          document.querySelectorAll('nav a').forEach(x=>x.classList.remove('here'));
+          a.classList.add('here');
+        }
+      });
+    }, {rootMargin:'-140px 0px -60% 0px'});
+    FLOW.secs.forEach(s=>{ const el = document.getElementById(s.id); if(el) io.observe(el); });
+  }
+  recount();
+  updateMirror();
+}
+function hardRefresh(){ build(); updateCalc(); }
+
+/* 事件委托：整个 main 只挂一次，重建 DOM 不会重复绑定 */
+function attachDelegates(){
+  const main = document.getElementById('main');
+  main.addEventListener('input', e=>{
+    const el = e.target;
+    if(el && el.hasAttribute && el.hasAttribute('data-f')){
+      const f = el.getAttribute('data-f');
+      S.fields[f] = el.value;
+      saveSoon(); recount();
+      if(f.indexOf('t1a') === 0) updateCalc();
+    }
+  });
+  main.addEventListener('change', e=>{
+    const el = e.target;
+    if(el && el.tagName === 'SELECT' && el.hasAttribute('data-f')){
+      S.fields[el.getAttribute('data-f')] = el.value; saveSoon(); recount();
+    }
+  });
+}
+
+/* ── 启动 ───────────────────────────────────────────────────────── */
+load();
+applyTheme();
+build();
+attachDelegates();
+updateCalc();
+document.getElementById('bNight').onclick = ()=>{ S.meta.night = !S.meta.night; applyTheme(); saveSoon(); };
+document.getElementById('bFsp').onclick = ()=>{ S.meta.fs = Math.min(FS_MAX, (S.meta.fs||17) + 1); applyTheme(); saveSoon(); };
+document.getElementById('bFsm').onclick = ()=>{ S.meta.fs = Math.max(FS_MIN, (S.meta.fs||17) - 1); applyTheme(); saveSoon(); };
+document.getElementById('bPrint').onclick = ()=> window.print();
+document.getElementById('bOut').onclick = openExport;
+document.getElementById('bReset').onclick = ()=>{
+  if(!confirm('清空全部勾选与记录？此操作不可撤销（建议先「导出」留档）。')) return;
+  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs}};
+  save(); hardRefresh(); toast('已清空');
+};
+window.addEventListener('beforeunload', ()=>{ try{ save(); }catch(e){} });
+</script>
+</body>
+</html>
