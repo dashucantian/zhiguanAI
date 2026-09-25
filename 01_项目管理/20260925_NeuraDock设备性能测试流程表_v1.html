@@ -256,6 +256,18 @@ html.dash .leds{display:flex}
 #kpiLive{display:none;font-variant-numeric:tabular-nums}
 html.dash #kpiLive{display:inline}
 #kpiLive b{color:var(--ink)}
+/* 实时数据桥状态条（2026-09-25：测试须与真实脑电/驾驶舱数据联动） */
+.live{font-size:.72em;color:var(--qing);white-space:nowrap;font-variant-numeric:tabular-nums}
+.live.off{color:var(--ink3)}
+.live .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--qing);
+  margin-right:5px;box-shadow:0 0 7px var(--qing);vertical-align:middle}
+.live.off .dot{background:var(--ink3);box-shadow:none}
+.autob{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.autoout{font-size:.86em;color:var(--ink2);margin-top:8px;min-height:20px}
+.autotab{width:100%;border-collapse:collapse;font-size:.82em;margin-top:8px}
+.autotab th,.autotab td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:left}
+.autotab td.num{font-variant-numeric:tabular-nums}
+.flat{color:var(--bad);font-weight:600}
 #kpiTgl{display:none}
 html.dash #kpiTgl{display:inline-block}
 .kpi-full{display:none}
@@ -316,6 +328,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
         <span id="kpiLive">⏱ 未计时</span>
+        <span id="liveStrip" class="live">○ 未接入实时数据</span>
       </div>
       <span class="saved" id="saved">本机自动保存</span>
       <div class="hbtns">
@@ -409,6 +422,7 @@ const FLOW = {
   /* ══ 场① ══ */
   { id:'s1', name:'场① 信号质量', desc:'约 90 分钟 · 建议与场③同日（同环境同状态，对照才干净）。中途想歇就在 ★ 处歇。', acc:'#B4463C', blocks:[
     {k:'hint',tone:'',t:'本场顺序',d:'连接自检 2 分钟 → <b>T1 睁闭眼</b>（金标准，16 分钟）→ T2 噪声底 5 分钟 → T3 耐受性 8 分钟 → T4 工频 5 分钟 → T6 原始流核验。做完一项点一次结论，页会自动记进度。'},
+    {k:'bridge',title:'实时数据联动',chip:'人机协同'},
     {k:'grid',title:'S0 连接自检',chip:'2 分钟',gold:1,hint:'每场都做。5 秒内出波形就算过。',
      cols:['#','操作','看哪里','判据','记录'],
      rows:[
@@ -435,6 +449,8 @@ const FLOW = {
       ['8','闭眼','__:__',{f:'t1a8',in:'num',ph:'',w:'92px'},{f:'t1n8',in:'text',ph:'—'}]
      ],v:'t1v',vlabel:'T1 结论'},
     {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
+    {k:'t1auto',title:'T1 自动跑（机器计时·自动打点·按段读 α）',chip:'推荐用这个',
+     hint:'点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（O1/Oz/O2 均值，用实时波形自算），你只负责按提示睁眼/闭眼。'},
     {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。'},
 
     {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',
@@ -449,6 +465,8 @@ const FLOW = {
       ['Oz',{f:'t2s_oz',in:'num',ph:'',w:'80px'},{f:'t2p_oz',in:'num',ph:'',w:'80px'},{f:'t2f_oz',in:'select',opt:['无','有']},{f:'t2q_oz',in:'select',opt:['ok','warn','bad','unknown']}],
       ['O2',{f:'t2s_o2',in:'num',ph:'',w:'80px'},{f:'t2p_o2',in:'num',ph:'',w:'80px'},{f:'t2f_o2',in:'select',opt:['无','有']},{f:'t2q_o2',in:'select',opt:['ok','warn','bad','unknown']}]
      ],v:'t2v',vlabel:'T2 结论'},
+    {k:'t2auto',title:'T2 自动采（5 分钟静息·逐通道自动填表）',chip:'推荐用这个',
+     hint:'点「开始 5 分钟」后机器每秒统计一次各通道 std/峰值，结束时自动填入上表并标出贴底通道（连续 60 秒均值 std < 2 µV 判贴底）。你只需静坐不动。'},
     {k:'fold',title:'贴底了先别急着挪电极——三种成因，先区分再动手',items:[
       ['滤波前后<b>同步塌</b>','指向源头：电极接触／放大器。→ 重新压实该电极、清洁触点，复测 1 分钟。'],
       ['只有原始列塌、滤波列正常','指向链路补零／丢包。→ 查线缆与 USB 隔离线，看 T5 的丢包率。'],
@@ -623,7 +641,9 @@ const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
 let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash'}};
-const LIVE = {t1:null, t5:null};   /* 现场计时状态 → 仪表盘 KPI 条的"现场"一行 */
+const LIVE = {t1:null, t5:null,
+  /* ── 实时数据桥字段（2026-09-25 与计时条合并为同一对象）── */
+  on:false, es:null, st:null, tick:null, wave:null, at:0, markers:0, why:''};
 let saveTimer = null;
 
 function load(){
@@ -946,16 +966,7 @@ function paintKpi(done, total){
   }
   paintLive();
 }
-function paintLive(){
-  const el = document.getElementById('kpiLive');
-  if(!el) return;
-  const parts = [];
-  if(LIVE.t1 && LIVE.t1.run) parts.push('T1 第 ' + LIVE.t1.seg + '/' + LIVE.t1.total + ' 段 ' + fmt(LIVE.t1.left));
-  if(LIVE.t5 && LIVE.t5.run) parts.push('T5 距提醒 ' + fmt(LIVE.t5.left));
-  el.innerHTML = '';
-  el.appendChild(h('b', null, '⏱ '));
-  el.appendChild(document.createTextNode(parts.length ? parts.join('　｜　') : '未计时'));
-}
+/* 现场计时＋实时桥的绘制已合并到下方「实时数据桥」段的 paintLive()（单一实现） */
 
 /* ── 进度 ───────────────────────────────────────────────────────── */
 function recount(){
@@ -1109,6 +1120,329 @@ function importJson(file){
   fr.readAsText(file, 'utf-8');
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   实时数据桥 ＋ 人机协同自动化
+   （2026-09-25 法师现场令："测试一定要和真实的脑电、驾驶舱数据结合起来"）
+   数据来源（与驾驶舱同源，故须从 /ndtest 或驾驶舱页签进入）：
+     GET  /api/monitor/status → 会话状态
+     SSE  /api/monitor/stream → 每帧 tick：elapsed/packets/connected/bands/psd/wave
+     POST /api/monitor/marker → 打点（由机器自动打）
+   分工：机器＝计时·打点·按段读 α·填表；人＝按提示睁眼闭眼／静坐／做动作。
+   ══════════════════════════════════════════════════════════════════ */
+const SFREQ = () => (Number(S.meta.sf) > 0 ? Number(S.meta.sf) : 250);
+
+/* 迭代式 radix-2 FFT（就地） */
+function fftRadix2(re, im){
+  const n = re.length;
+  for(let i=1, j=0; i<n; i++){
+    let bit = n >> 1;
+    for(; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if(i < j){
+      let t = re[i]; re[i] = re[j]; re[j] = t;
+      t = im[i]; im[i] = im[j]; im[j] = t;
+    }
+  }
+  for(let len=2; len<=n; len<<=1){
+    const ang = -2*Math.PI/len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for(let i=0; i<n; i+=len){
+      let cr = 1, ci = 0;
+      for(let k=0; k<len/2; k++){
+        const ur = re[i+k], ui = im[i+k];
+        const xr = re[i+k+len/2], xi = im[i+k+len/2];
+        const vr = xr*cr - xi*ci, vi = xr*ci + xi*cr;
+        re[i+k] = ur+vr; im[i+k] = ui+vi;
+        re[i+k+len/2] = ur-vr; im[i+k+len/2] = ui-vi;
+        const ncr = cr*wr - ci*wi; ci = cr*wi + ci*wr; cr = ncr;
+      }
+    }
+  }
+}
+/* 相对 α（8–12Hz ÷ 0.5–45Hz）——与质检同口径（相对功率），窗口为实时 5 秒波形 */
+function alphaRel(sig, sf){
+  const n0 = sig.length;
+  if(!n0 || n0 < 128) return null;
+  let mean = 0;
+  for(let i=0;i<n0;i++) mean += sig[i];
+  mean /= n0;
+  let n = 1; while(n < n0) n <<= 1;
+  const re = new Float64Array(n), im = new Float64Array(n);
+  for(let i=0;i<n0;i++){
+    const w = 0.5 - 0.5*Math.cos(2*Math.PI*i/(n0-1));   // Hann，减泄漏
+    re[i] = (sig[i]-mean)*w;
+  }
+  fftRadix2(re, im);
+  const df = sf / n;
+  let pa = 0, pt = 0;
+  for(let k=1; k<n/2; k++){
+    const f = k*df;
+    if(f > 45) break;
+    if(f < 0.5) continue;
+    const p = re[k]*re[k] + im[k]*im[k];
+    pt += p;
+    if(f >= 8 && f <= 12) pa += p;
+  }
+  return pt > 0 ? pa/pt : null;
+}
+function syncField(f){
+  const el = document.querySelector('[data-f="' + f + '"]');
+  if(el) el.value = (S.fields[f] != null ? S.fields[f] : '');
+}
+function postMarker(label){
+  if(!/^https?:$/.test(location.protocol)) return;
+  fetch('/api/monitor/marker', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({label: label})})
+    .then(r => r.json())
+    .then(j => { LIVE.markers = j.count || (LIVE.markers + 1); paintLive(); })
+    .catch(()=>{});
+}
+function liveConnect(){
+  if(!/^https?:$/.test(location.protocol)){
+    LIVE.on = false;
+    LIVE.why = '本机文件打开（file://）读不到驾驶舱数据——请从 /ndtest 打开';
+    paintLive(); return;
+  }
+  if(!LIVE.es){
+    LIVE.es = new EventSource('/api/monitor/stream');
+    LIVE.es.onmessage = liveTick;
+    LIVE.es.onerror = () => {};
+  }
+  fetch('/api/monitor/status', {cache:'no-store'})
+    .then(r => r.json())
+    .then(st => {
+      LIVE.st = st; LIVE.on = !!st.running;
+      LIVE.why = st.running ? '' : '当前无在采会话（先在驾驶舱开始采集）';
+      paintLive();
+    })
+    .catch(e => { LIVE.on = false; LIVE.why = '连不上驾驶舱服务：' + e.message; paintLive(); });
+}
+function liveTick(ev){
+  let d;
+  try { d = JSON.parse(ev.data); } catch(e){ return; }
+  if(d.type === 'end'){ LIVE.on = false; LIVE.why = '会话已结束'; paintLive(); return; }
+  if(d.type !== 'tick') return;
+  LIVE.tick = d; LIVE.at = Date.now(); LIVE.on = !!d.connected;
+  if(!LIVE.on) LIVE.why = '已连服务但设备未连接';
+  if(d.wave) LIVE.wave = d.wave;
+  paintLive(); T1A.onTick(d); T2A.onTick(d);
+}
+function paintLive(){
+  /* ① 现场计时（T1 分段／T5 十分钟提醒 → 顶栏 KPI 条） */
+  const e1 = document.getElementById('kpiLive');
+  if(e1){
+    const parts = [];
+    if(LIVE.t1 && LIVE.t1.run) parts.push('T1 第 ' + LIVE.t1.seg + '/' + LIVE.t1.total + ' 段 ' + fmt(LIVE.t1.left));
+    if(LIVE.t5 && LIVE.t5.run) parts.push('T5 距提醒 ' + fmt(LIVE.t5.left));
+    e1.innerHTML = '';
+    e1.appendChild(h('b', null, '⏱ '));
+    e1.appendChild(document.createTextNode(parts.length ? parts.join('　｜　') : '未计时'));
+  }
+  /* ② 实时数据桥状态条 */
+  const el = document.getElementById('liveStrip');
+  if(!el) return;
+  el.classList.toggle('off', !LIVE.on);
+  const d = LIVE.tick;
+  let txt = LIVE.on ? '实时' : '离线';
+  if(d) txt += ' ' + fmt(d.elapsed || 0) + ' ｜ 包 ' + (d.packets || 0) + ' ｜ 打点 ' + LIVE.markers;
+  else if(LIVE.why) txt += ' · ' + LIVE.why;
+  el.innerHTML = '';
+  el.appendChild(h('span', {class:'dot'}));
+  el.appendChild(document.createTextNode(txt));
+}
+/* 取本刻 α：优先用实时波形自算 O1/Oz/O2 均值；取不到返回 null（不拿 dB 冒充相对功率） */
+function measureAlpha(){
+  const w = LIVE.wave, sf = SFREQ();
+  if(w){
+    const chs = ['O1','Oz','O2'].filter(c => w[c] && w[c].length > 200);
+    const vals = chs.map(c => alphaRel(w[c], sf)).filter(v => v != null);
+    if(vals.length) return vals.reduce((a,b)=>a+b,0)/vals.length;
+  }
+  return null;
+}
+/* ── T1 自动跑：8 段 × 60 秒，自动打点 + 按段读 α + 自动填表 ── */
+const T1A = {
+  on:false, seg:0, left:0, timer:null, acc:{}, lastCap:0,
+  start(){
+    if(T1A.on) return;
+    if(!LIVE.on){ t1Msg('未接入实时数据：请先在驾驶舱开始采集，再点上面「连接实时数据」', true); return; }
+    T1A.on = true; T1A.seg = 0; T1A.acc = {}; T1A.next();
+  },
+  stop(){ T1A.on = false; clearInterval(T1A.timer); t1Msg('已停止（已完成段落的数据保留）'); },
+  next(){
+    T1A.seg++;
+    if(T1A.seg > 8){ T1A.finish(); return; }
+    const st = (T1A.seg % 2) ? '睁眼' : '闭眼';
+    T1A.acc[T1A.seg] = []; T1A.left = 60;
+    postMarker(st);                         /* 机器自动打点，人不用管 */
+    t1Msg('第 ' + T1A.seg + '/8 段：' + st + '（已自动打点，保持 60 秒）');
+    clearInterval(T1A.timer);
+    T1A.timer = setInterval(() => {
+      T1A.left--;
+      if(T1A.left <= 0){ clearInterval(T1A.timer); T1A.segDone(); }
+      else t1Msg(null);
+    }, 1000);
+  },
+  onTick(){
+    if(!T1A.on) return;
+    const now = Date.now();
+    if(now - T1A.lastCap < 1000) return;    /* 约每秒取一个样 */
+    T1A.lastCap = now;
+    const a = measureAlpha();
+    if(a != null && T1A.acc[T1A.seg]) T1A.acc[T1A.seg].push(a);
+  },
+  segDone(){
+    const st = (T1A.seg % 2) ? '睁眼' : '闭眼';
+    const arr = T1A.acc[T1A.seg] || [];
+    const m = arr.length ? arr.reduce((x,y)=>x+y,0)/arr.length : null;
+    if(m == null){
+      t1Msg('第 ' + T1A.seg + ' 段没取到波形，未自动填数（该段可手动填）', true);
+    } else {
+      S.fields['t1a'+T1A.seg] = m.toFixed(3);
+      syncField('t1a'+T1A.seg);
+      t1Msg('第 ' + T1A.seg + ' 段（' + st + '）α＝' + m.toFixed(3) + '（' + arr.length + ' 个取样）');
+    }
+    updateCalc(); recount(); saveSoon();
+    T1A.next();
+  },
+  finish(){
+    T1A.on = false;
+    t1Msg('✅ 8 段跑完：表已自动填好、幅度已算好——请核对后点 T1 结论');
+    updateCalc();
+  }
+};
+function t1Msg(t, bad){
+  const a = document.getElementById('t1aMsg'), b = document.getElementById('t1aSub');
+  if(t && a){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
+  if(b){
+    b.textContent = T1A.on
+      ? ('本段剩余 ' + T1A.left + ' 秒 · 已取样 ' + ((T1A.acc[T1A.seg] || []).length) + ' 次')
+      : '机器负责计时、打点、读 α、填表；你只管睁眼/闭眼。';
+  }
+}
+/* ── T2 自动采：5 分钟静息，逐通道 std/峰值自动填表 ── */
+const T2A = {
+  on:false, left:300, timer:null, acc:{}, lastCap:0,
+  start(){
+    if(T2A.on) return;
+    if(!LIVE.on){ t2Msg('未接入实时数据：请先在驾驶舱开始采集', true); return; }
+    T2A.on = true; T2A.acc = {}; T2A.left = 300; T2A.lastCap = 0;
+    t2Msg('开始 5 分钟静息采集：坐好、别说话、别动');
+    clearInterval(T2A.timer);
+    T2A.timer = setInterval(() => {
+      T2A.left--;
+      if(T2A.left <= 0) T2A.finish();
+      else t2Msg(null);
+    }, 1000);
+  },
+  stop(){ T2A.on = false; clearInterval(T2A.timer); t2Msg('已停止'); },
+  onTick(){
+    if(!T2A.on) return;
+    const now = Date.now();
+    if(now - T2A.lastCap < 1000) return;
+    T2A.lastCap = now;
+    const w = LIVE.wave;
+    if(!w) return;
+    for(const ch in w){
+      const a = w[ch];
+      if(!a || a.length < 64) continue;
+      let m = 0;
+      for(let i=0;i<a.length;i++) m += a[i];
+      m /= a.length;
+      let v = 0, pk = 0;
+      for(let i=0;i<a.length;i++){
+        const x = a[i]-m; v += x*x;
+        const ax = Math.abs(a[i]); if(ax > pk) pk = ax;
+      }
+      (T2A.acc[ch] = T2A.acc[ch] || []).push({sd: Math.sqrt(v/a.length), pk: pk});
+    }
+  },
+  finish(){
+    T2A.on = false; clearInterval(T2A.timer);
+    const rows = [];
+    for(const ch in T2A.acc){
+      const arr = T2A.acc[ch];
+      if(!arr.length) continue;
+      const std = arr.reduce((a,b)=>a+b.sd,0)/arr.length;
+      const pk = arr.reduce((a,b)=>Math.max(a,b.pk),0);
+      let flat = '无';
+      if(arr.length >= 60){
+        for(let i=0;i+60<=arr.length;i+=15){
+          let s = 0;
+          for(let k=i;k<i+60;k++) s += arr[k].sd;
+          if(s/60 < 2){ flat = '有'; break; }
+        }
+      }
+      const key = ch.toLowerCase();
+      S.fields['t2s_'+key] = std.toFixed(1); syncField('t2s_'+key);
+      S.fields['t2p_'+key] = pk.toFixed(0);  syncField('t2p_'+key);
+      S.fields['t2f_'+key] = flat;           syncField('t2f_'+key);
+      rows.push([ch, std, pk, flat]);
+    }
+    recount(); saveSoon();
+    const box = document.getElementById('t2aTab');
+    if(box){
+      box.innerHTML = '';
+      if(!rows.length){
+        box.appendChild(h('div', {class:'autoout'}, '没采到数据（实时连接断了？）'));
+      } else {
+        box.appendChild(h('table', {class:'autotab'},
+          h('thead', null, h('tr', null, h('th', null,'通道'), h('th', null,'std（µV）'),
+            h('th', null,'峰值（µV）'), h('th', null,'连续>1min 贴底'))),
+          h('tbody', null, ...rows.map(r => h('tr', null,
+            h('td', null, r[0]),
+            h('td', {class:'num'}, r[1].toFixed(1)),
+            h('td', {class:'num'}, r[2].toFixed(0)),
+            h('td', {class: r[3] === '有' ? 'flat' : ''}, r[3]))))));
+      }
+    }
+    t2Msg('✅ 5 分钟完成，已按通道自动填表（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
+  }
+};
+function t2Msg(t, bad){
+  const a = document.getElementById('t2aMsg');
+  if(!a) return;
+  if(t){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
+  else a.textContent = '剩余 ' + fmt(T2A.left) + ' · 已取样 ' + Object.keys(T2A.acc).length + ' 通道';
+}
+/* ── 新积木渲染 ── */
+function renderBridge(blk){
+  const body = [
+    h('div', {class:'autob'},
+      h('button', {class:'btn pri', type:'button', onclick:liveConnect}, '连接实时数据'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>{
+        const w = LIVE.wave || {}, chs = Object.keys(w);
+        toast(chs.length ? ('收到 ' + chs.length + ' 通道波形：' + chs.join('/')) : '还没收到波形帧（先开始采集）');
+      }}, '自检波形'),
+      h('span', {class:'hint', style:'margin:0'}, '采样率'),
+      h('input', {type:'text', inputmode:'decimal', style:'width:72px', value:String(SFREQ()),
+        onchange: e => { const v = Number(e.target.value); if(v > 0){ S.meta.sf = v; saveSoon(); toast('采样率设为 ' + v + ' Hz'); } }}),
+      h('span', {class:'hint', style:'margin:0'}, 'Hz')),
+    h('p', {class:'hint', html:'本页与驾驶舱<b>同源</b>才能自动读数（从 <code>/ndtest</code> 或驾驶舱「设备测试」页签进入）。以本机文件方式打开时浏览器会拦跨源请求，只能手动填写。'})
+  ];
+  return card(blk, body);
+}
+function renderT1Auto(blk){
+  const body = [h('div', {class:'tm'},
+    h('div', {class:'tinfo'},
+      h('div', {class:'big', id:'t1aMsg'}, '未开始'),
+      h('div', {class:'sm', id:'t1aSub'}, '机器负责计时、打点、读 α、填表；你只管睁眼/闭眼。')),
+    h('div', {class:'tbtns'},
+      h('button', {class:'btn pri', type:'button', onclick:()=>T1A.start()}, '▶ 自动跑 8 段'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>T1A.stop()}, '停止')))];
+  return card(blk, body);
+}
+function renderT2Auto(blk){
+  const body = [h('div', {class:'tm'},
+    h('div', {class:'tinfo'},
+      h('div', {class:'big', id:'t2aMsg'}, '未开始'),
+      h('div', {class:'sm'}, '结束时自动填上表 7 行，并标出贴底通道。')),
+    h('div', {class:'tbtns'},
+      h('button', {class:'btn pri', type:'button', onclick:()=>T2A.start()}, '▶ 开始 5 分钟'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>T2A.stop()}, '停止'))),
+    h('div', {class:'autoout', id:'t2aTab'})];
+  return card(blk, body);
+}
+
 /* ── 外壳 ───────────────────────────────────────────────────────── */
 function applyTheme(){
   const dash = S.meta.skin !== 'paper';
@@ -1148,6 +1482,9 @@ function build(){
         case 'static':  el = renderStatic(blk); break;
         case 'timer':   el = renderTimer(blk); break;
         case 'v':       el = renderV(blk); break;
+        case 'bridge':  el = renderBridge(blk); break;
+        case 't1auto':  el = renderT1Auto(blk); break;
+        case 't2auto':  el = renderT2Auto(blk); break;
         case 'note':
         case 'hint':    el = renderHint(blk); break;
         default:        el = null;
@@ -1201,6 +1538,11 @@ applyTheme();
 build();
 attachDelegates();
 updateCalc();
+/* 实时数据桥：启动即接；未接入则每 10 秒重试（人不用管） */
+if(!S.meta.sf) S.meta.sf = 250;
+liveConnect();
+setInterval(paintLive, 1000);
+setInterval(() => { if(!LIVE.on) liveConnect(); }, 10000);
 document.getElementById('bSkin').onclick = ()=>{
   S.meta.skin = (S.meta.skin === 'paper') ? 'dash' : 'paper';
   applyTheme(); saveSoon();
