@@ -1358,14 +1358,32 @@ function liveConnect(){
     LIVE.es.onmessage = liveTick;
     LIVE.es.onerror = () => { LIVE.lastErr = 'SSE 连接异常（浏览器会自动重连）'; };
   }
+  LIVE.tryAt = Date.now();
+  toast('正在连接实时数据…');
   fetch('/api/monitor/status', {cache:'no-store'})
     .then(r => r.json())
     .then(st => {
       LIVE.st = st; LIVE.on = !!st.running;
-      LIVE.why = st.running ? '' : '当前无在采会话（先在驾驶舱开始采集）';
-      paintLive();
+      if(st.running){ LIVE.why = ''; toast('已接入监测会话'); paintLive(); return null; }
+      /* 监测未跑：探测闭环实验路径。闭环流不含原始波形（wave），故不能供自动读数。 */
+      return fetch('/api/experiment/status', {cache:'no-store'})
+        .then(r => r.json())
+        .then(es => {
+          LIVE.est = es;
+          if(es && es.running){
+            LIVE.why = '闭环实验进行中——本面板自动读数需要【监测模式】的波形帧（闭环流不含原始波形）：请在采集工作台把会话模式切「纯监测（只采集）」后重新开始采集';
+            toast('闭环实验进行中：请改用「纯监测（只采集）」模式');
+          } else {
+            LIVE.why = '当前无在采会话（先在驾驶舱开始采集）';
+            toast('未发现进行中的采集会话');
+          }
+          paintLive();
+        });
     })
-    .catch(e => { LIVE.on = false; LIVE.why = '连不上驾驶舱服务：' + e.message; paintLive(); });
+    .catch(e => {
+      LIVE.on = false; LIVE.why = '连不上驾驶舱服务：' + e.message;
+      toast('连接失败：' + e.message); paintLive();
+    });
 }
 function liveTick(ev){
   let d;
@@ -1415,11 +1433,13 @@ function paintLive(){
   const dg = document.getElementById('brDiag');
   if(dg){
     const st = LIVE.st || {};
-    dg.textContent = '诊断：' + (LIVE.on ? '已接入' : '未接入')
-      + '｜running=' + (st.running === undefined ? '—' : st.running)
+    dg.textContent = '诊断：' + (LIVE.on ? '已接入监测流（可自动读数）' : '未接入')
+      + '｜monitor.running=' + (st.running === undefined ? '—' : st.running)
+      + '｜experiment.running=' + ((LIVE.est && LIVE.est.running !== undefined) ? LIVE.est.running : '—')
       + '｜connected=' + (d && d.connected !== undefined ? d.connected : '—')
       + '｜mode=' + (st.mode || '—')
       + '｜包=' + (d ? (d.packets || 0) : '—')
+      + '｜最近尝试 ' + (LIVE.tryAt ? new Date(LIVE.tryAt).toLocaleTimeString('zh-CN', {hour12:false}) : '—')
       + (LIVE.why ? '｜原因：' + LIVE.why : '')
       + (LIVE.lastErr ? '｜取流错误：' + LIVE.lastErr : '');
   }
