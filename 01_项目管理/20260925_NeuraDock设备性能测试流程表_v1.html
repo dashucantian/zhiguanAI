@@ -180,6 +180,39 @@ footer{max-width:1020px;margin:0 auto;padding:8px 16px 40px;color:var(--ink3);fo
   .tm{display:none}
 }
 
+/* ── B1 目录化：左栏闸门大纲 ＋ 右侧单屏（法师 09-25 裁定甲）── */
+nav:empty{display:none}
+.app{display:grid;grid-template-columns:242px minmax(0,1fr);gap:18px;align-items:start}
+.side{position:sticky;top:104px;background:var(--card);border:1px solid var(--line);
+  border-radius:14px;padding:10px 8px;box-shadow:var(--shadow)}
+.side .stitle{font-size:.72em;color:var(--ink3);padding:2px 8px 6px;letter-spacing:.04em}
+.side a{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 10px;
+  border-radius:9px;color:var(--ink2);font-size:.86em;border:0;cursor:pointer;margin-bottom:2px}
+.side a:hover{background:var(--bg2);color:var(--ink)}
+.side a.here{background:var(--acc,var(--qing));color:#06231F;font-weight:600}
+.side a .n{font-size:.78em;opacity:.85;font-variant-numeric:tabular-nums}
+.gate{display:none}
+.gate.active{display:block}
+.chead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.chead h3{margin:0}
+.ctgl{margin-left:auto;border:1px solid var(--line);background:var(--bg2);color:var(--ink2);
+  border-radius:8px;width:26px;height:26px;line-height:1;cursor:pointer;font-family:inherit;flex:none}
+.ctgl:hover{color:var(--ink);border-color:var(--ink3)}
+.card.closed .cbody{display:none}
+.card.closed{padding-bottom:12px}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr}
+  .side{position:static;display:flex;flex-wrap:wrap;gap:4px}
+  .side .stitle{display:none}
+  .side a{flex:none;margin:0}
+}
+@media print{
+  .app{display:block}
+  .side{display:none}
+  .gate{display:block!important}
+  .ctgl{display:none}
+}
+
 /* ══════════════════════════════════════════════════════════════════
    皮肤 B：仪表盘（dash）——数据屏视觉，供"一眼看全局＋手上能操作"
    本块置于最后，故与 html.night 同时存在时以本块为准。
@@ -636,6 +669,40 @@ const FLOW = {
   ]
 };
 
+/* ══ G0–G5 闸门分组（2026-09-25 法师裁定：P0–P5 改称 G0–G5；导航按闸门而非场次）══
+   take ＝ [区段 id, 起始块, 结束块(不含)]，块序即 FLOW 内声明顺序；
+   完整性由静态闸门 _analysis_tmp/check_nd_panel.js 断言：38 块必须恰好各属一个闸门。
+   内容零改动——只改分组与导航；判据、勾选项、记录位一字未动。 */
+const GATES = [
+  {id:'g0', name:'G0 准备', acc:'#8A6A4F',
+   desc:'设备档案、佩戴、端口、边界与合规——把"合法、可复现的开场"先做扎实。',
+   take:[['pre',0,6],['s1',1,2]]},
+  {id:'g1', name:'G1 身份', acc:'#4C9AFF',
+   desc:'接的是谁、给的是不是原始档：连接握手 ＋ 通道数与顺序 ＋ 原始流全量核验（T6）。',
+   take:[['s1',0,1],['s1',2,3],['s1',13,14]]},
+  {id:'g2', name:'G2 质量', acc:'#B4463C',
+   desc:'这台设备今天能不能用：T1 睁闭眼 α 阻断、T2 噪声底与贴底、T3 耐受性、T4 工频。',
+   take:[['s1',3,13],['s1',14,15]]},
+  {id:'g3', name:'G3 稳定', acc:'#4A7C59',
+   desc:'能不能撑一场真实共修：T5 长时程、T7 时钟对齐、T8 采集→入库→质检端到端。',
+   take:[['s2',0,5]]},
+  {id:'g4', name:'G4 协同', acc:'#B07C2A',
+   desc:'与 VR／闭环／现场共存：T10 同场共存、T9 端到端延迟（场次待裁，留位不执行）。',
+   take:[['s2',5,8]]},
+  {id:'g5', name:'G5 验收', acc:'#7C5CBF',
+   desc:'值不值、能否长期用：T11 对照、11 项红绿灯、记录卡与总评三档。',
+   take:[['s3',0,1],['sum',0,4]]},
+  {id:'ref', name:'速查与处置', acc:'#6B7280',
+   desc:'判据速查卡、异常处置 10 条、最小可用子集、待裁清单——工具页，不属任何闸门。',
+   take:[['ref',0,4]]}
+];
+function gateBlocks(g){
+  return g.take.flatMap(([sid, a, b]) => {
+    const sec = FLOW.secs.filter(s => s.id === sid)[0];
+    return sec ? sec.blocks.slice(a, b) : [];
+  });
+}
+
 const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:'⚪ 不可判定','':'—'};
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
@@ -715,9 +782,18 @@ function beep(times){
 function card(blk, body, extraChip){
   const head = [h('h3', null, blk.title)];
   if(blk.chip) head.push(h('span', {class:'chip' + (blk.gold ? ' gold' : '')}, blk.chip));
-  const c = h('div', {class:'card'}, h('div', null, ...head));
-  if(blk.hint) c.appendChild(h('p', {class:'hint', html:blk.hint}));
-  body.forEach(b => c.appendChild(b));
+  /* B1：每张卡可单独收起／展开——"一屏一件事"（法师 09-25 裁定甲） */
+  head.push(h('button', {class:'ctgl noprint', type:'button', title:'收起／展开这张卡',
+    onclick: e => {
+      const c = e.currentTarget.closest('.card');
+      c.classList.toggle('closed');
+      e.currentTarget.textContent = c.classList.contains('closed') ? '＋' : '−';
+    }}, '−'));
+  const c = h('div', {class:'card'}, h('div', {class:'chead'}, ...head));
+  const cb = h('div', {class:'cbody'});
+  if(blk.hint) cb.appendChild(h('p', {class:'hint', html:blk.hint}));
+  body.forEach(b => cb.appendChild(b));
+  c.appendChild(cb);
   return c;
 }
 function verdictRow(blk){
@@ -935,7 +1011,8 @@ function paintMini(secId, st, tt){
   if(!box) return;
   let m = document.getElementById('mini-' + secId);
   if(!m){
-    const sec = FLOW.secs.filter(s=>s.id === secId)[0] || {name:secId, acc:'#2FD4C4'};
+    const g = GATES.filter(x => x.id === secId)[0];
+  const sec = g || FLOW.secs.filter(s => s.id === secId)[0] || {name:secId, acc:'#2FD4C4'};
     m = h('div', {class:'mini', id:'mini-' + secId, style:'--gc:' + sec.acc},
       h('div', {class:'g2'}, h('i', null, '0/0')),
       h('div', {class:'lb'}, sec.name.replace(/\s.*$/, '')));
@@ -979,32 +1056,20 @@ function recount(){
   document.getElementById('pnum').textContent = done + ' / ' + total + ' 项';
   const bar = document.getElementById('pbar');
   bar.innerHTML = '';
-  let acc = 0;
-  FLOW.secs.forEach((s,i)=>{
+  /* B1：进度条与大纲小计一律按闸门（G0–G5＋速查）统计 */
+  GATES.forEach(g=>{
     let st = 0, tt = 0;
-    document.querySelectorAll('#' + s.id + ' [data-c], #' + s.id + ' [data-f], #' + s.id + ' [data-vrow]').forEach(el=>{
+    document.querySelectorAll('#' + g.id + ' [data-c], #' + g.id + ' [data-f], #' + g.id + ' [data-vrow]').forEach(el=>{
       tt++;
       const id = el.getAttribute('data-c') || el.getAttribute('data-f') || el.getAttribute('data-vrow');
       const val = el.hasAttribute('data-c') ? S.checks[id] : (el.hasAttribute('data-f') ? S.fields[id] : S.verdicts[id]);
       if(val && String(val).trim()) st++;
     });
     const w = total ? 100*tt/total : 0;
-    const seg = h('i', {style:'width:' + w + '%;opacity:' + (0.35 + 0.65*(tt ? st/tt : 0))});
-    bar.appendChild(seg);
-  });
-  /* 分节小计写进导航 */
-  FLOW.secs.forEach(s=>{
-    const chip = document.querySelector('nav a[href="#' + s.id + '"]');
-    if(!chip) return;
-    let st = 0, tt = 0;
-    document.querySelectorAll('#' + s.id + ' [data-c], #' + s.id + ' [data-f], #' + s.id + ' [data-vrow]').forEach(el=>{
-      tt++;
-      const id = el.getAttribute('data-c') || el.getAttribute('data-f') || el.getAttribute('data-vrow');
-      const val = el.hasAttribute('data-c') ? S.checks[id] : (el.hasAttribute('data-f') ? S.fields[id] : S.verdicts[id]);
-      if(val && String(val).trim()) st++;
-    });
-    chip.textContent = s.name + ' ' + st + '/' + tt;
-    paintMini(s.id, st, tt);
+    bar.appendChild(h('i', {style:'width:' + w + '%;opacity:' + (0.35 + 0.65*(tt ? st/tt : 0))}));
+    const n = document.getElementById('gn-' + g.id);
+    if(n) n.textContent = st + '/' + tt;
+    paintMini(g.id, st, tt);
   });
   updateMirror();
   paintKpi(done, total);
@@ -1463,13 +1528,20 @@ function build(){
   const main = document.getElementById('main');
   main.innerHTML = '';
   const nav = document.getElementById('nav');
-  nav.innerHTML = '';
-  FLOW.secs.forEach(sec=>{
-    nav.appendChild(h('a', {href:'#' + sec.id}, sec.name));
-    const wrap = h('section', {class:'sec', id:sec.id, style:'--acc:' + sec.acc},
-      h('h2', null, h('span', {class:'dot'}), sec.name),
-      h('p', {class:'sdesc'}, sec.desc));
-    sec.blocks.forEach(blk=>{
+  if(nav) nav.innerHTML = '';            /* B1：顶部页签退役，改用左栏闸门大纲 */
+  const side = h('aside', {class:'side', id:'side'}, h('div', {class:'stitle'}, '闸门大纲（点击切换）'));
+  const pane = h('div', {class:'pane', id:'pane'});
+  main.appendChild(h('div', {class:'app'}, side, pane));
+  const cur = S.meta.gate || GATES[0].id;
+  GATES.forEach(g=>{
+    const act = (g.id === cur);
+    side.appendChild(h('a', {class:'gnav' + (act ? ' here' : ''), 'data-g':g.id, style:'--acc:' + g.acc,
+      onclick: () => showGate(g.id)},
+      h('span', null, g.name), h('span', {class:'n', id:'gn-' + g.id}, '0/0')));
+    const wrap = h('section', {class:'gate sec' + (act ? ' active' : ''), id:g.id, style:'--acc:' + g.acc},
+      h('h2', null, h('span', {class:'dot'}), g.name),
+      h('p', {class:'sdesc'}, g.desc));
+    gateBlocks(g).forEach(blk=>{
       let el;
       switch(blk.k){
         case 'check':   el = renderCheck(blk); break;
@@ -1491,24 +1563,18 @@ function build(){
       }
       if(el) wrap.appendChild(el);
     });
-    main.appendChild(wrap);
+    pane.appendChild(wrap);
   });
   /* 输入事件委托在启动时挂一次（attachDelegates），不随重建重复挂 */
-  /* 导航高亮 */
-  if('IntersectionObserver' in window){
-    const io = new IntersectionObserver(es=>{
-      es.forEach(en=>{
-        const a = document.querySelector('nav a[href="#' + en.target.id + '"]');
-        if(a && en.isIntersecting){
-          document.querySelectorAll('nav a').forEach(x=>x.classList.remove('here'));
-          a.classList.add('here');
-        }
-      });
-    }, {rootMargin:'-140px 0px -60% 0px'});
-    FLOW.secs.forEach(s=>{ const el = document.getElementById(s.id); if(el) io.observe(el); });
-  }
   recount();
   updateMirror();
+}
+/* 闸门切换：只显示当前闸门（右侧单屏），并记住上次所在闸门 */
+function showGate(id){
+  S.meta.gate = id; saveSoon();
+  document.querySelectorAll('.gate').forEach(s => s.classList.toggle('active', s.id === id));
+  document.querySelectorAll('.side a.gnav').forEach(a => a.classList.toggle('here', a.dataset.g === id));
+  window.scrollTo(0, 0);
 }
 function hardRefresh(){ build(); updateCalc(); }
 
