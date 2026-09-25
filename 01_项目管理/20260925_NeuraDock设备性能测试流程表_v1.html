@@ -928,6 +928,16 @@ function devShortName(){                       /* 「Muse（S/2 代，蓝牙）�
   return (s.split(/[（(]/)[0] || s).trim();
 }
 function devTag(){ return devShortName() || '脑电设备'; }   /* 导出标签，档案没填就中性 */
+function dpSf(){                               /* 《设备档案》里的标称采样率 */
+  const v = parseFloat(String(S.fields['dp_sf'] || '').replace(/[^0-9.]/g, ''));
+  return v > 0 ? v : 0;
+}
+function sfSource(){                           /* 当前采样率从哪来（界面如实标注，不冒充"设备实际值"） */
+  if(S.meta.sfManual) return 'manual';        /* 人在「实时数据联动」卡里手填的 */
+  if(S.meta.sfFromLive) return 'live';        /* 实时帧 tick.sfreq 给的（机器读数，最优） */
+  if(dpSf() > 0) return 'profile';            /* 《设备档案》dp_sf */
+  return 'fallback';                          /* 兜底 250：未确认，界面必须说清 */
+}
 function devPort(){                            /* 从档案链路里取端口（NeuraDock 例：9600） */
   const m = String(S.fields['dp_link'] || '').match(/:(\d{2,5})\b/);
   return m ? m[1] : '';
@@ -975,7 +985,8 @@ function mainsCh(){
 }
 /* 函数式提示的自刷新：通道集或档案一变就重算文案，不必整页重建（不丢输入焦点） */
 function refreshDevHints(){
-  const key = deviceChannels().join(',') + '|' + String(S.fields['dp_link'] || '') + '|' + String(S.fields['dp_name'] || '') + '|' + SFREQ();
+  const key = deviceChannels().join(',') + '|' + String(S.fields['dp_link'] || '') + '|' + String(S.fields['dp_name'] || '')
+            + '|' + SFREQ() + '|' + sfSource();
   if(key === refreshDevHints.k) return;
   refreshDevHints.k = key;
   document.querySelectorAll('[data-devhint],[data-devcmd]').forEach(el => {
@@ -987,6 +998,12 @@ function refreshDevHints(){
   if(w) w.textContent = '⚠ 无新帧——数据可能已断：' + devHelpText();
   const si = document.getElementById('sfInp');
   if(si && document.activeElement !== si) si.value = String(SFREQ());
+  const sn = document.getElementById('sfNote');
+  if(sn){
+    const src = sfSource();
+    sn.textContent = 'Hz（' + (src === 'live' ? '实时帧' : src === 'profile' ? '《设备档案》'
+                    : src === 'manual' ? '手填' : '兜底 250·未确认——请填档案') + '）';
+  }
 }
 /* ══ DEV-INFER-END ══ */
 function t2DynRows(cols){
@@ -1074,9 +1091,11 @@ function renderFields(blk){
         if(!vals){
           Object.keys(S.fields).forEach(k => { if(k.indexOf('dp_') === 0) S.fields[k] = ''; });
           Object.keys(S.fields).forEach(k => { if(k.indexOf('dp_') === 0) syncField(k); });
+          S.meta.sfManual = false;                    /* 清空档案＝连"手填采样率"一并作废，别留下他设备的值 */
           toast('设备档案已清空'); recount(); saveSoon(); return;
         }
         Object.keys(vals).forEach(k => { S.fields[k] = vals[k]; syncField(k); });
+        S.meta.sfManual = false;                      /* 载入预设＝档案接管采样率（实时帧仍优先） */
         toast('已载入预设：' + name + '（请按实物核对后再用）');
         recount(); saveSoon();
       }}, name));
@@ -1398,12 +1417,13 @@ function importJson(file){
      POST /api/monitor/marker → 打点（由机器自动打）
    分工：机器＝计时·打点·按段读 α·填表；人＝按提示睁眼闭眼／静坐／做动作。
    ══════════════════════════════════════════════════════════════════ */
-/* 采样率真源：实时帧给的 → 《设备档案》dp_sf → 才轮到 250（NeuraDock 标称，仅作最后兜底） */
+/* 采样率真源：实时帧给的 → 《设备档案》dp_sf → 才轮到 250（NeuraDock 标称，仅作最后兜底）
+   三条来源在界面上**如实标注**（sfSource → 「Hz（实时帧／档案／手填／兜底·未确认）」），
+   不把兜底的 250 冒充成"设备实际采样率"。 */
 const SFREQ = () => {
-  const live = Number(S.meta.sf);
-  if(live > 0) return live;
-  const dp = parseFloat(String(S.fields['dp_sf'] || '').replace(/[^0-9.]/g, ''));
-  return dp > 0 ? dp : 250;
+  if(S.meta.sfFromLive || S.meta.sfManual){ const v = Number(S.meta.sf); if(v > 0) return v; }
+  const dp = dpSf();
+  return dp > 0 ? dp : (Number(S.meta.sf) > 0 ? Number(S.meta.sf) : 250);
 };
 
 /* 迭代式 radix-2 FFT（就地） */
@@ -1527,7 +1547,7 @@ function liveTick(ev){
   if(d.wave) LIVE.wave = d.wave;
   /* 采样率以机器为准（2026-09-26）：服务端 tick 带实际 sfreq 则覆盖面板值；
      旧版服务端不带此字段，此时退回《设备档案》dp_sf（见 SFREQ）。 */
-  if(d.sfreq && Number(d.sfreq) > 0) S.meta.sf = Number(d.sfreq);
+  if(d.sfreq && Number(d.sfreq) > 0){ S.meta.sf = Number(d.sfreq); S.meta.sfFromLive = true; }
   paintLive(); T1A.onTick(d); T2A.onTick(d); T3A.onTick(d);
   /* T4 实时工频预警：约每秒一次，只作预警。
      通道不写死（2026-09-26 系统排查）：工频为共模，任一路皆可 → mainsCh() 取 Oz／任一 O*／首通道。
@@ -1813,8 +1833,8 @@ function renderBridge(blk){
       }}, '自检波形'),
       h('span', {class:'hint', style:'margin:0'}, '采样率'),
       h('input', {type:'text', inputmode:'decimal', id:'sfInp', style:'width:72px', value:String(SFREQ()),
-        onchange: e => { const v = Number(e.target.value); if(v > 0){ S.meta.sf = v; saveSoon(); toast('采样率设为 ' + v + ' Hz'); } }}),
-      h('span', {class:'hint', style:'margin:0'}, 'Hz')),
+        onchange: e => { const v = Number(e.target.value); if(v > 0){ S.meta.sf = v; S.meta.sfManual = true; saveSoon(); toast('采样率设为 ' + v + ' Hz（手填，优先于档案）'); } }}),
+      h('span', {class:'hint', style:'margin:0', id:'sfNote'}, 'Hz')),
     h('p', {class:'hint', html:'本页与驾驶舱<b>同源</b>才能自动读数（从 <code>/ndtest</code> 或驾驶舱「设备测试」页签进入）。以本机文件方式打开时浏览器会拦跨源请求，只能手动填写。'}),
     h('div', {class:'autoout', id:'brDiag'}, '诊断：尚未连接（点「连接实时数据」）')
   ];
