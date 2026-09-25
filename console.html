@@ -217,6 +217,10 @@
   .clipbox select { background: #0d0d18; color: var(--text);
     border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
     font-size: 12px; margin-left: 6px; }
+  /* 2026-09-25 现场抢修：登记必选缺口的高亮定位（旧版只有一行红字，容易漏看） */
+  .flash-req { outline: 2px solid #ffb454; outline-offset: 4px; border-radius: 8px;
+               animation: flashreq 0.9s ease-in-out 3; }
+  @keyframes flashreq { 50% { outline-color: #ff5f4d; } }
 </style>
 </head>
 <body>
@@ -1368,6 +1372,19 @@ function monMsg(text, cls) {
   el.className = "msg" + (cls ? " " + cls : "");
 }
 
+// 2026-09-25 现场抢修：必选缺口定位——把视线带到缺的那一组芯片
+// （旧版只在提示行报"两项必选"，既不说缺哪项、也不指出位置，法师现场即被此卡住）
+function flashReq(id) {
+  const el = $(id);
+  if (!el) return;
+  try { el.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  catch (e) { el.scrollIntoView(); }
+  el.classList.remove("flash-req");
+  void el.offsetWidth;                 // 强制重排，连点也能重播动画
+  el.classList.add("flash-req");
+  setTimeout(() => el.classList.remove("flash-req"), 3200);
+}
+
 function channelQuality(data) {
   // 简易接触质量判定：峰峰值过小（悬空）或过大（运动伪迹）视为异常
   if (!data || !data.length) return null;
@@ -1625,9 +1642,23 @@ $("monStart").onclick = async () => {
       intent: $("monIntent").value || null,
       note: $("monNote").value.trim() || null,
     };
-    // R1 把关：状态/接触必选——未选不冒充真值，也不许空手开始
-    if (!common.pre_state || !common.contact_quality) {
-      return monMsg("请先点选「当下状态」与「接触快检」——两项必选且无默认（未选即不记录）", "err");
+    // R1 把关（2026-09-25 现场抢修）：状态/接触必选、未选不冒充真值。
+    //   ① 链路/设备测试（session_type=test，自动进隔离区）：两项非适用项——
+    //      **放行并如实记 null**（＝裁定"未选＝null"的字面口径），只给非阻断提示；
+    //      法师现场即因本闸门无法开始 NeuraDock 设备测试（截图 09-25 16:0x）。
+    //   ② 正式会话（baseline/training/custom 等）：维持必选，并把缺口高亮＋滚动定位，
+    //      提示点名缺哪一项（旧文案两项并说，看不出到底缺哪一个）。
+    const missReg = [];
+    if (!common.pre_state) missReg.push({ n: "当下状态", id: "monStateChips" });
+    if (!common.contact_quality) missReg.push({ n: "接触快检", id: "monContactChips" });
+    if (missReg.length && common.session_type !== "test") {
+      missReg.forEach(m => flashReq(m.id));
+      return monMsg("请先点选「" + missReg.map(m => m.n).join("」「") +
+                    "」——必选且无默认（未选即不记录）", "err");
+    }
+    if (missReg.length) {
+      monMsg("链路/设备测试：未选「" + missReg.map(m => m.n).join("」「") +
+             "」将如实记为 null（不冒充真值）", "ok");
     }
     if (!common.simulate && !common.participant) {
       return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
