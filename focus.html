@@ -132,15 +132,41 @@ function watchEnd(){
   }).catch(() => {});
 }
 function onEnded(){
+  leaveIdle();
   $("elapsed").textContent = "圆坐"; hint("");
   $("done").textContent = "这一坐已结束 · 自评在驾驶舱窗进行";
   $("markerRow").style.display = "none"; $("finish").style.display = "none";
   setTimeout(() => { try { window.close(); } catch(e){} }, 6000);
 }
+/* 2026-09-25 现场抢修（法师 17:1x 截图：本页显示"当前无在采会话"，而驾驶舱其实正在采集）：
+   原实现只在载入时查一次 /api/monitor/status，`!st.running` 即 enterIdle 并 return——
+   于是"先开本页、后开始采集"（或中途才打开）会永久停在空态，只能关掉重开。
+   现改为：空态下每 3 秒轮询 + 窗口重新获得焦点时复查；一旦有在采会话即自动接入，
+   并恢复打点行与结束钮。计时仍以驾驶舱 SSE 的 elapsed 为准（同一口径，不另算）。 */
+let idleTimer = null;
+function leaveIdle(){ if (idleTimer) { clearInterval(idleTimer); idleTimer = null; } }
 function enterIdle(){
-  $("elapsed").textContent = "--:--"; hint("当前无在采会话。请回驾驶舱开始采集后再入本页。");
+  $("elapsed").textContent = "--:--";
+  hint("就绪 · 尚无在采会话；驾驶舱一开始采集，本页会自动接入");
   $("markerRow").style.display = "none"; $("finish").style.display = "none";
+  if (!idleTimer) idleTimer = setInterval(checkAlive, 3000);
 }
+async function checkAlive(){
+  if (stopped) { leaveIdle(); return; }
+  try {
+    const st = await jget("/api/monitor/status");
+    if (st.running) attachSession(st);
+  } catch (e) { /* 服务暂时不可达：静默候下一轮，不假死也不刷屏 */ }
+}
+function attachSession(st){
+  leaveIdle();
+  $("markerRow").style.display = ""; $("finish").style.display = "";
+  $("done").textContent = "";
+  $("kicker").textContent = "止 · 观";
+  hint("已接入：" + (st.mode || "采集中") + " · 计时随采集走，打点见下方");
+  if (!es) attachStream();
+}
+window.addEventListener("focus", checkAlive);   // 从驾驶舱切回来时立刻复查
 
 function attachStream(){
   es = new EventSource("/api/monitor/stream");
@@ -162,9 +188,9 @@ function attachStream(){
   }
   try {
     const st = await jget("/api/monitor/status");
-    if (!st.running) { enterIdle(); return; }
-    attachStream();
-  } catch (e) { hint("驾驶舱服务未连通：" + e.message); }
+    if (!st.running) { enterIdle(); return; }   // 空态不再"到此为止"——enterIdle 内起轮询
+    attachSession(st);
+  } catch (e) { hint("驾驶舱服务未连通：" + e.message); enterIdle(); }
 })();
 </script>
 </body>

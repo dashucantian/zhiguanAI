@@ -55,7 +55,7 @@
     font-size: 13px; }
   .chip.sel { border-color: var(--accent); color: var(--accent);
     background: rgba(108, 152, 193, .12); font-weight: bold; }
-  .sr-req { color: var(--warn); font-size: 11px; margin-left: 4px; }
+  /* 2026-09-25 法师令：登记两组芯片的"必选 · 无默认"徽标已移除（不硬拦、未选记 null） */
   .sr-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.62);
     z-index: 98; display: none; align-items: center; justify-content: center; }
   .sr-box { background: var(--panel); border: 1px solid var(--border);
@@ -217,10 +217,6 @@
   .clipbox select { background: #0d0d18; color: var(--text);
     border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px;
     font-size: 12px; margin-left: 6px; }
-  /* 2026-09-25 现场抢修：登记必选缺口的高亮定位（旧版只有一行红字，容易漏看） */
-  .flash-req { outline: 2px solid #ffb454; outline-offset: 4px; border-radius: 8px;
-               animation: flashreq 0.9s ease-in-out 3; }
-  @keyframes flashreq { 50% { outline-color: #ff5f4d; } }
 </style>
 </head>
 <body>
@@ -279,7 +275,7 @@
     </div>
     <div class="row">
       <div class="field" style="min-width:auto;">
-        <label>当下状态<span class="sr-req">必选 · 无默认</span></label>
+        <label>当下状态</label>
         <div class="chips" id="monStateChips">
           <button type="button" class="chip" data-val="清醒">清醒</button>
           <button type="button" class="chip" data-val="微困">微困</button>
@@ -289,7 +285,7 @@
         </div>
       </div>
       <div class="field" style="min-width:auto;">
-        <label>接触快检<span class="sr-req">必选 · 无默认</span></label>
+        <label>接触快检</label>
         <div class="chips" id="monContactChips">
           <button type="button" class="chip" data-val="good">良好</button>
           <button type="button" class="chip" data-val="medium">一般</button>
@@ -372,8 +368,6 @@
          会话保存时随契约事件流逐条写成 marker 事件（ts=按下时刻）。 -->
     <div class="toolbar" id="markerBar" style="align-items:center; display:none;">
       <span class="hint" style="margin:0;">📍 事件标记</span>
-      <button class="btn ghost mon-marker" data-label="睁眼" disabled>👁 睁眼</button>
-      <button class="btn ghost mon-marker" data-label="闭眼" disabled>🌙 闭眼</button>
       <input id="markerCustom" placeholder="自定义标记…" style="width:140px" disabled />
       <button class="btn ghost mon-marker" id="markerAdd" disabled>＋记</button>
       <span class="msg" id="markerMsg"></span>
@@ -1372,19 +1366,6 @@ function monMsg(text, cls) {
   el.className = "msg" + (cls ? " " + cls : "");
 }
 
-// 2026-09-25 现场抢修：必选缺口定位——把视线带到缺的那一组芯片
-// （旧版只在提示行报"两项必选"，既不说缺哪项、也不指出位置，法师现场即被此卡住）
-function flashReq(id) {
-  const el = $(id);
-  if (!el) return;
-  try { el.scrollIntoView({ block: "center", behavior: "smooth" }); }
-  catch (e) { el.scrollIntoView(); }
-  el.classList.remove("flash-req");
-  void el.offsetWidth;                 // 强制重排，连点也能重播动画
-  el.classList.add("flash-req");
-  setTimeout(() => el.classList.remove("flash-req"), 3200);
-}
-
 function channelQuality(data) {
   // 简易接触质量判定：峰峰值过小（悬空）或过大（运动伪迹）视为异常
   if (!data || !data.length) return null;
@@ -1642,23 +1623,15 @@ $("monStart").onclick = async () => {
       intent: $("monIntent").value || null,
       note: $("monNote").value.trim() || null,
     };
-    // R1 把关（2026-09-25 现场抢修）：状态/接触必选、未选不冒充真值。
-    //   ① 链路/设备测试（session_type=test，自动进隔离区）：两项非适用项——
-    //      **放行并如实记 null**（＝裁定"未选＝null"的字面口径），只给非阻断提示；
-    //      法师现场即因本闸门无法开始 NeuraDock 设备测试（截图 09-25 16:0x）。
-    //   ② 正式会话（baseline/training/custom 等）：维持必选，并把缺口高亮＋滚动定位，
-    //      提示点名缺哪一项（旧文案两项并说，看不出到底缺哪一个）。
+    // 2026-09-25 法师现场令：**不再硬拦**——两组芯片可点可不点；未选即如实记 null
+    // （不冒充真值），只给一行非阻断提示。旧版直接 return 卡死采集（16:0x 报障），
+    // 随后本窗加过"分型放行＋缺口高亮"，法师明确要求连提示徽标一并去掉，故此处
+    // 收为一行绿字；`必选 · 无默认` 徽标与 flashReq 高亮助手同批移除（不留死代码）。
     const missReg = [];
-    if (!common.pre_state) missReg.push({ n: "当下状态", id: "monStateChips" });
-    if (!common.contact_quality) missReg.push({ n: "接触快检", id: "monContactChips" });
-    if (missReg.length && common.session_type !== "test") {
-      missReg.forEach(m => flashReq(m.id));
-      return monMsg("请先点选「" + missReg.map(m => m.n).join("」「") +
-                    "」——必选且无默认（未选即不记录）", "err");
-    }
+    if (!common.pre_state) missReg.push("当下状态");
+    if (!common.contact_quality) missReg.push("接触快检");
     if (missReg.length) {
-      monMsg("链路/设备测试：未选「" + missReg.map(m => m.n).join("」「") +
-             "」将如实记为 null（不冒充真值）", "ok");
+      monMsg("未选「" + missReg.join("」「") + "」——将如实记为 null（不冒充真值）", "ok");
     }
     if (!common.simulate && !common.participant) {
       return monMsg("真机采集请先选择测试者（模拟模式可留空）", "err");
