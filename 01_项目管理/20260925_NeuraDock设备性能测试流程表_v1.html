@@ -476,15 +476,20 @@ const FLOW = {
     ]},
     {k:'fields',title:'设备档案（Device Profile）',chip:'一次建档·判据参数化',
      hint:'法师 09-25 裁定 D6＝<b>甲：先补设备档案字段</b>（通道命名／参考／无枕区降级规则），以 <b>Muse 实测</b>校验抽象是否成立。本卡即设备无关化的参数落点：换设备只改这里，判据分级不变。',
+     presets:[
+      ['NeuraDock', {dp_name:'NeuraDock（硬件 V2／软件 V2／白皮书 V1.1）', dp_ch:'7 通道：CP5 CP6 PO3 PO4 O1 Oz O2', dp_sf:'250', dp_link:'USB 隔离线（1 样本/行）／TCP 127.0.0.1:9600', dp_ref:'2.5mm 耳夹参考（记左/右侧，跨场次一致）', dp_wear:'三段式自适应；贴合不压', dp_weak:'枕区接触稳定性待考；降噪核心电路不开源', dp_rule:'有枕区（O1/Oz/O2 直接判 α 阻断），无需降级'}],
+      ['Muse', {dp_name:'Muse（S/2 代，蓝牙）', dp_ch:'4 通道：TP9 AF7 AF8 TP10', dp_sf:'256', dp_link:'BLE（内置 bleak／外置 BLED112）', dp_ref:'前额参考（AF7/AF8 侧），无独立耳夹', dp_wear:'头环弹力佩戴；前额两点需贴紧', dp_weak:'**无枕区**；电极位错配顶枕 α/θ 主战场', dp_rule:'**无枕区降级**：以 AF7/TP9 就近替代 α 阻断判定，结论必须标注"替代"、不冒充枕区'}],
+      ['清空', null]
+     ],
      items:[
-      ['dp_name','设备名与固件/软件版本','NeuraDock（硬件 V2／软件 V2／白皮书 V1.1）'],
-      ['dp_ch','通道数与通道名（按索引序）','7 通道：CP5 CP6 PO3 PO4 O1 Oz O2'],
-      ['dp_sf','标称采样率（Hz）','250'],
-      ['dp_link','传输方式与地址','USB 隔离线（1 样本/行）／TCP 127.0.0.1:9600'],
-      ['dp_ref','参考与地位置','2.5mm 耳夹参考（记录左/右侧，跨场次须一致）'],
-      ['dp_wear','佩戴方式与调节范围','三段式自适应；贴合不压'],
-      ['dp_weak','已知弱点','枕区接触稳定性待考；降噪核心电路不开源'],
-      ['dp_rule','无枕区降级规则（他设备用）','无枕区（如 Muse）→ 以 AF7/TP9 就近替代并在结论<b>标注替代</b>，不冒充枕区'],
+      ['dp_name','设备名与固件/软件版本','例：NeuraDock（硬件 V2／软件 V2）；Muse（S/2 代）'],
+      ['dp_ch','通道数与通道名（按索引序）','例：7 通道 CP5 CP6 PO3 PO4 O1 Oz O2；4 通道 TP9 AF7 AF8 TP10'],
+      ['dp_sf','标称采样率（Hz）','例：250（NeuraDock）／256（Muse）'],
+      ['dp_link','传输方式与地址','例：USB 隔离线／TCP 127.0.0.1:9600／BLE'],
+      ['dp_ref','参考与地位置','例：2.5mm 耳夹（记左/右）／前额参考'],
+      ['dp_wear','佩戴方式与调节范围','例：三段式自适应；头环弹力'],
+      ['dp_weak','已知弱点','如：枕区接触稳定性待考；无枕区（Muse）'],
+      ['dp_rule','无枕区降级规则（他设备用）','如：无枕区 → 以 AF7/TP9 就近替代并在结论<b>标注替代</b>、不冒充枕区'],
       ['dp_meta','建档日期与建档人','']
      ]},
     {k:'check',title:'知情同意（G0 必办）',chip:'受试者确认·不代签',
@@ -934,6 +939,23 @@ function renderCalc(blk){
 }
 function renderFields(blk){
   const body = [];
+  /* 预设按钮（可选属性）：一键载入某设备的档案字段，避免"照另一台设备硬填" */
+  if(blk.presets && blk.presets.length){
+    const row = h('div', {class:'autob noprint'}, h('span', {class:'hint', style:'margin:0'}, '设备预设：'));
+    blk.presets.forEach(([name, vals]) => {
+      row.appendChild(h('button', {class:'btn ghost', type:'button', onclick:() => {
+        if(!vals){
+          Object.keys(S.fields).forEach(k => { if(k.indexOf('dp_') === 0) S.fields[k] = ''; });
+          Object.keys(S.fields).forEach(k => { if(k.indexOf('dp_') === 0) syncField(k); });
+          toast('设备档案已清空'); recount(); saveSoon(); return;
+        }
+        Object.keys(vals).forEach(k => { S.fields[k] = vals[k]; syncField(k); });
+        toast('已载入预设：' + name + '（请按实物核对后再用）');
+        recount(); saveSoon();
+      }}, name));
+    });
+    body.push(row);
+  }
   const tw = h('div', {class:'tw'}, h('table', null, h('tbody', null, ...blk.items.map(([f,label,ph],i)=>{
     return h('tr', null,
       h('td', {style:'width:34%;color:var(--ink2);font-size:.9em'}, label),
@@ -1333,7 +1355,7 @@ function liveConnect(){
   if(!LIVE.es){
     LIVE.es = new EventSource('/api/monitor/stream');
     LIVE.es.onmessage = liveTick;
-    LIVE.es.onerror = () => {};
+    LIVE.es.onerror = () => { LIVE.lastErr = 'SSE 连接异常（浏览器会自动重连）'; };
   }
   fetch('/api/monitor/status', {cache:'no-store'})
     .then(r => r.json())
@@ -1389,6 +1411,17 @@ function paintLive(){
   el.appendChild(h('span', {class:'dot'}));
   el.appendChild(document.createTextNode(txt));
   /* 断流横幅＋可选提示音：每次断流只响一次（恢复后重新武装） */
+  const dg = document.getElementById('brDiag');
+  if(dg){
+    const st = LIVE.st || {};
+    dg.textContent = '诊断：' + (LIVE.on ? '已接入' : '未接入')
+      + '｜running=' + (st.running === undefined ? '—' : st.running)
+      + '｜connected=' + (d && d.connected !== undefined ? d.connected : '—')
+      + '｜mode=' + (st.mode || '—')
+      + '｜包=' + (d ? (d.packets || 0) : '—')
+      + (LIVE.why ? '｜原因：' + LIVE.why : '')
+      + (LIVE.lastErr ? '｜取流错误：' + LIVE.lastErr : '');
+  }
   const w = document.getElementById('rtWarn');
   if(w){
     w.classList.toggle('on', !!stale);
@@ -1426,7 +1459,7 @@ const T1A = {
   on:false, seg:0, left:0, timer:null, acc:{}, lastCap:0,
   start(){
     if(T1A.on) return;
-    if(!LIVE.on){ t1Msg('未接入实时数据：请先在驾驶舱开始采集，再点上面「连接实时数据」', true); return; }
+    if(!LIVE.on){ t1Msg('未接入实时数据——原因：' + (LIVE.why || '未知') + '（请看「实时数据联动」卡的诊断行）', true); return; }
     T1A.on = true; T1A.seg = 0; T1A.acc = {}; T1A.next();
   },
   stop(){ T1A.on = false; clearInterval(T1A.timer); t1Msg('已停止（已完成段落的数据保留）'); },
@@ -1591,7 +1624,8 @@ function renderBridge(blk){
       h('input', {type:'text', inputmode:'decimal', style:'width:72px', value:String(SFREQ()),
         onchange: e => { const v = Number(e.target.value); if(v > 0){ S.meta.sf = v; saveSoon(); toast('采样率设为 ' + v + ' Hz'); } }}),
       h('span', {class:'hint', style:'margin:0'}, 'Hz')),
-    h('p', {class:'hint', html:'本页与驾驶舱<b>同源</b>才能自动读数（从 <code>/ndtest</code> 或驾驶舱「设备测试」页签进入）。以本机文件方式打开时浏览器会拦跨源请求，只能手动填写。'})
+    h('p', {class:'hint', html:'本页与驾驶舱<b>同源</b>才能自动读数（从 <code>/ndtest</code> 或驾驶舱「设备测试」页签进入）。以本机文件方式打开时浏览器会拦跨源请求，只能手动填写。'}),
+    h('div', {class:'autoout', id:'brDiag'}, '诊断：尚未连接（点「连接实时数据」）')
   ];
   return card(blk, body);
 }
