@@ -1713,6 +1713,86 @@ def ndtest_page():
         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/api/session/{sid}/posthoc")
+def session_posthoc(sid: str):
+    """事后只读读数（2026-09-26 法师裁定 B3-e）：一次给出 npz-meta／时钟／入库审计三组。
+
+    **纯读**——不写任何数据、不改判据、不新增指标；供面板「事后自动读数」卡自动填
+    T5（时长与丢包）／T7（jitter 与漂移）／T8（四件与质检理由）。
+    """
+    import numpy as np          # 顶层未导入 numpy：本端点自带（只读，用后即弃）
+    d, why = _resolve_session_dir(sid)
+    if not d or not os.path.isdir(d):
+        raise HTTPException(status_code=404, detail=f"找不到会话目录：{sid}（{why}）")
+    out = {"sid": sid, "npz_meta": None, "timing": None, "audit": None}
+
+    npz_path = None
+    try:
+        for f in sorted(os.listdir(d)):
+            if f.endswith(".npz"):
+                npz_path = os.path.join(d, f)
+                if f == "eeg_raw.npz":
+                    break
+    except Exception:
+        npz_path = None
+
+    if npz_path:
+        try:
+            with np.load(npz_path, allow_pickle=True) as z:
+                m = z["meta"].item() if "meta" in z.files else {}
+                chain = m.get("signal_chain")
+                out["npz_meta"] = {
+                    "file": os.path.basename(npz_path),
+                    "channels": list(m.get("channels") or []),
+                    "sfreq": m.get("sfreq"),
+                    "samples": int(z["eeg"].shape[0]) if "eeg" in z.files else m.get("samples"),
+                    "duration_s": m.get("duration"),
+                    "has_pre_filter": bool("eeg_pre_filter" in z.files),
+                    "chain_tag": (chain or {}).get("chain_tag") if isinstance(chain, dict) else chain,
+                    "recording_started_at": m.get("recording_started_at"),
+                    "recording_ended_at": m.get("recording_ended_at"),
+                    "markers_n": len(m.get("markers") or []),
+                }
+                if "timestamps" in z.files:
+                    ts = np.asarray(z["timestamps"], dtype=float)
+                    sf = float(m.get("sfreq") or 250.0)
+                    if ts.size > 2 and sf > 0:
+                        step = 1.0 / sf
+                        dt = np.diff(ts)
+                        jit = np.abs(dt - step)
+                        s0 = m.get("recording_started_at_epoch")
+                        s1 = m.get("recording_ended_at_epoch")
+                        span = float(ts[-1] - ts[0])
+                        sess = (float(s1) - float(s0)) if (s0 and s1) else None
+                        out["timing"] = {
+                            "n": int(ts.size), "span_s": round(span, 1),
+                            "session_span_s": (round(sess, 1) if sess else None),
+                            "drift_s": (round(span - sess, 1) if sess else None),
+                            "jitter_p95_ms": round(float(np.percentile(jit, 95)) * 1000.0, 2),
+                            "jitter_within_2ms_pct": round(float((jit <= 0.002).mean() * 100.0), 2),
+                            "gaps_gt4steps": int((dt > step * 4).sum()),
+                        }
+        except Exception as ex:
+            out["npz_meta"] = {"error": f"{type(ex).__name__}: {ex}"}
+
+    audit = {"manifest": os.path.exists(os.path.join(d, "session_manifest.json")),
+             "events": os.path.exists(os.path.join(d, "session_events.jsonl")),
+             "qc": os.path.exists(os.path.join(d, "qc.json")),
+             "report": any(f.endswith(".html") for f in os.listdir(d))}
+    qc_path = os.path.join(d, "qc.json")
+    if os.path.exists(qc_path):
+        try:
+            with open(qc_path, encoding="utf-8") as fh:
+                q = json.load(fh)
+            for k in ("recommend", "reasons", "clean_ratio", "effective_hz",
+                      "packet_loss_rate", "span_loss_rate", "threshold_version"):
+                audit[k] = q.get(k)
+        except Exception as ex:
+            audit["qc_error"] = f"{type(ex).__name__}: {ex}"
+    out["audit"] = audit
+    return out
+
+
 @app.get("/manifest.webmanifest")
 def pwa_manifest():
     """PWA 清单（PICO Web App 最低要求：name/icons/start_url/display）。
