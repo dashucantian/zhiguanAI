@@ -238,35 +238,64 @@ html.dash .btn.pri{background:var(--qing);border-color:var(--qing);color:#06231F
 html.dash footer{color:#6B7684}
 html.dash footer code{color:#9BA7B4}
 
-/* KPI 仪表区（仅仪表盘皮肤显示） */
-#kpi{display:none}
-html.dash #kpi{display:block;border-top:1px solid var(--line);margin-top:9px;padding:11px 0 3px}
-.kpiwrap{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
-.gauge{position:relative;width:84px;height:84px;flex:none;border-radius:99px;display:grid;place-items:center;
+/* KPI：精简条并入标题行（常显）＋ 可展开仪表（滚动自动收起） */
+#kpi{display:block;margin-top:4px}
+.htop{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px}
+.hbtns{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.hmeta{display:flex;align-items:center;gap:12px;min-width:0;overflow:hidden;white-space:nowrap;
+  font-size:.74em;color:var(--ink2)}
+@media (max-width:900px){
+  .htop{grid-template-columns:minmax(0,1fr) auto}
+  .hmeta{grid-column:1/-1;grid-row:2;flex-wrap:wrap}
+  .hbtns{grid-column:1/-1;grid-row:3;justify-content:flex-start}
+}
+.pcount b{color:var(--ink)}
+.leds{display:none;gap:10px;flex-wrap:nowrap}
+#kpiLive{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40ch}
+html.dash .leds{display:flex}
+#kpiLive{display:none;font-variant-numeric:tabular-nums}
+html.dash #kpiLive{display:inline}
+#kpiLive b{color:var(--ink)}
+#kpiTgl{display:none}
+html.dash #kpiTgl{display:inline-block}
+.kpi-full{display:none}
+html.dash #kpi.open .kpi-full{display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  margin-top:7px;padding-top:7px;border-top:1px dashed var(--line)}
+.gauge{position:relative;width:56px;height:56px;flex:none;border-radius:99px;display:grid;place-items:center;
   background:conic-gradient(var(--gc,var(--qing)) calc(var(--p,0)*1%),#232B36 0);
-  box-shadow:0 0 22px -6px var(--gc,var(--qing))}
-.gauge::after{content:"";position:absolute;inset:9px;border-radius:99px;background:#10161D}
-.gauge b{position:relative;font-size:1.06em;font-variant-numeric:tabular-nums;color:var(--ink)}
-.kpi-mini{display:flex;gap:13px;flex-wrap:wrap}
-.mini{width:58px;text-align:center}
-.mini .g2{position:relative;width:58px;height:58px;border-radius:99px;display:grid;place-items:center;
+  box-shadow:0 0 18px -8px var(--gc,var(--qing))}
+.gauge::after{content:"";position:absolute;inset:6px;border-radius:99px;background:#10161D}
+.gauge b{position:relative;font-size:.86em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.kpi-mini{display:flex;gap:10px;flex-wrap:wrap}
+.mini{width:46px;text-align:center}
+.mini .g2{position:relative;width:46px;height:46px;border-radius:99px;display:grid;place-items:center;
   background:conic-gradient(var(--gc,var(--qing)) calc(var(--p,0)*1%),#232B36 0)}
-.mini .g2::after{content:"";position:absolute;inset:6px;border-radius:99px;background:#10161D}
-.mini .g2 i{position:relative;font-style:normal;font-size:.72em;font-variant-numeric:tabular-nums;color:var(--ink)}
-.mini .lb{font-size:.7em;color:var(--ink2);margin-top:4px;line-height:1.3}
-.kpicol{display:flex;flex-direction:column;gap:8px;min-width:230px}
-.leds{display:flex;gap:11px;flex-wrap:wrap;font-size:.76em;color:var(--ink2)}
-.led{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
-.led i{width:9px;height:9px;border-radius:99px;background:#3A4553;display:inline-block}
+.mini .g2::after{content:"";position:absolute;inset:5px;border-radius:99px;background:#10161D}
+.mini .g2 i{position:relative;font-style:normal;font-size:.64em;font-variant-numeric:tabular-nums;color:var(--ink)}
+.mini .lb{font-size:.6em;color:var(--ink2);margin-top:3px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.led{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums}
+.led i{width:8px;height:8px;border-radius:99px;background:#3A4553;display:inline-block}
 .led.pass i{background:var(--ok);box-shadow:0 0 9px var(--ok)}
 .led.cond i{background:var(--warn);box-shadow:0 0 9px var(--warn)}
 .led.fail i{background:var(--bad);box-shadow:0 0 9px var(--bad)}
 .led.na i{background:var(--na)}
-#kpiLive{font-size:.78em;color:var(--ink2);font-variant-numeric:tabular-nums}
-#kpiLive b{color:var(--ink)}
+/* 仪表盘皮肤：整体收紧顶栏 */
+html.dash .hwrap{padding:7px 16px 5px}
+html.dash .htop{gap:7px}
+html.dash .htitle{font-size:.9em}
+html.dash .htitle small{display:none}
+html.dash .ledlbl{display:none}
+html.dash .led{gap:3px}
+html.dash .led b{font-weight:600;color:var(--ink)}
+html.dash .saved{font-size:.72em}
+html.dash .tbtn{padding:4px 9px;font-size:.75em;min-height:30px}
+html.dash .pbar{height:7px;margin-top:6px}
+html.dash nav{padding:0 16px 6px}
+html.dash nav a{padding:2px 10px;font-size:.75em}
+html.dash header.scrolled .hmeta{opacity:.75}
 @media (max-width:620px){
-  .gauge{width:66px;height:66px}.mini,.mini .g2{width:48px}.mini .g2{height:48px}
-  .kpicol{min-width:0;width:100%}
+  .gauge{width:46px;height:46px}.mini,.mini .g2{width:40px}.mini .g2{height:40px}
+  #kpiLive{display:none!important}
 }
 @media print{
   html.dash{--bg:#fff;--bg2:#fff;--card:#fff;--ink:#111;--ink2:#444;--ink3:#666;--line:#bbb;--shadow:none}
@@ -283,26 +312,27 @@ html.dash #kpi{display:block;border-top:1px solid var(--line);margin-top:9px;pad
   <div class="hwrap">
     <div class="htop">
       <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.1 · 双皮肤（仪表盘／宣纸）· 2026-09-25</small></div>
-      <div class="hspace"></div>
+      <div class="hmeta">
+        <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
+        <span class="leds" id="leds"></span>
+        <span id="kpiLive">⏱ 未计时</span>
+      </div>
+      <span class="saved" id="saved">本机自动保存</span>
+      <div class="hbtns">
+      <button class="tbtn" id="kpiTgl" title="展开／收起仪表（滚动时会自动收起）">⌄ 仪表</button>
       <button class="tbtn" id="bSkin" title="切换皮肤：仪表盘／宣纸">📊 皮肤</button>
       <button class="tbtn" id="bNight" title="夜间模式（宣纸皮肤用；仪表盘恒为暗色数据屏）">🌙 夜间</button>
-      <button class="tbtn" id="bFsp" title="放大字号">A+</button>
-      <button class="tbtn" id="bFsm" title="缩小字号">A−</button>
+      <button class="tbtn" id="bFs" title="字号：点一下换一档（15／17／19／22）">A</button>
       <button class="tbtn" id="bOut" title="导出记录">导出</button>
       <button class="tbtn" id="bPrint" title="打印／存 PDF">打印</button>
       <button class="tbtn" id="bReset" title="清空所有勾选与记录">清空</button>
+      </div>
     </div>
     <div class="pbar" id="pbar"></div>
-    <div class="pmeta"><span>完成度 <b id="pct">0%</b></span><span id="pnum">0 / 0 项</span>
-      <span class="hspace"></span><span class="saved" id="saved">自动保存在本机浏览器</span></div>
     <div id="kpi">
-      <div class="kpiwrap">
+      <div class="kpi-full" id="kpiFull">
         <div class="gauge" id="gAll" style="--p:0"><b id="gAllT">0%</b></div>
         <div class="kpi-mini" id="gSecs"></div>
-        <div class="kpicol">
-          <div class="leds" id="leds"></div>
-          <div id="kpiLive">现场：未启动计时</div>
-        </div>
       </div>
     </div>
   </div>
@@ -350,17 +380,17 @@ const FLOW = {
     ]},
     {k:'check',title:'软件与端口',chip:'7 项',items:[
       ['s1','NeuraDock 官方软件已启动，设备已连上','"打开数据服务"按钮无设备时置灰——这是正常现象，不是故障'],
-      ['s2','官方软件已点『<b>打开数据服务</b>』，端口＝<b>9600</b>','若改端口，控制台地址须同步填一致'],
+      ['s2','官方软件已点『<b>打开数据服务</b>』，端口＝<b>9600</b>','若改端口，实践驾驶舱地址须同步填一致'],
       ['s3','⚠️ <code>NeuraDock模拟器.bat</code> 处于<b>关闭</b>状态','它与真机官方软件互斥占用 9600，同时开会连错对象'],
-      ['s4','控制台已启动（<code>console_server.py --port 8777</code>，须 Python 3.12）','裸 <code>python</code> 是 3.14 且缺依赖'],
-      ['s5','浏览器打开控制台 → 采集工作台 → 设备选「NeuraDock（TCP 数据服务）」','地址填 <code>127.0.0.1:9600</code>'],
+      ['s4','实践驾驶舱已启动（<code>console_server.py --port 8777</code>，须 Python 3.12）','裸 <code>python</code> 是 3.14 且缺依赖'],
+      ['s5','浏览器打开实践驾驶舱 → 采集工作台 → 设备选「NeuraDock（TCP 数据服务）」','地址填 <code>127.0.0.1:9600</code>'],
       ['s6','「📍 事件标记」条就位（👁 睁眼／🌙 闭眼 快捷键可用）','T1 全靠它打点'],
       ['s7','会话登记已填完（参与者 P001、场景、<code>protocol=devtest</code>、事前状态自评）','先登记后采集']
     ]},
     {k:'cmd',title:'端口探活（30 秒，出故障时必跑）',lines:[
       'Test-NetConnection 127.0.0.1 -Port 9600 -InformationLevel Quiet   # 真机数据服务在不在',
       '(Invoke-WebRequest http://127.0.0.1:8777/api/monitor/status -UseBasicParsing).Content'
-    ],note:'第一条 <b>True</b> ＝ 9600 有人监听；第二条能返回 JSON ＝ 控制台活着。两条都通，才谈得上"设备问题"。',
+    ],note:'第一条 <b>True</b> ＝ 9600 有人监听；第二条能返回 JSON ＝ 实践驾驶舱活着。两条都通，才谈得上"设备问题"。',
      probe:true},
     {k:'check',title:'项目侧与记录',chip:'5 项',items:[
       ['p1','本页已打开（手机／平板／电脑皆可），或正本已打印','建议 A4 双面 3 页'],
@@ -382,17 +412,17 @@ const FLOW = {
     {k:'grid',title:'S0 连接自检',chip:'2 分钟',gold:1,hint:'每场都做。5 秒内出波形就算过。',
      cols:['#','操作','看哪里','判据','记录'],
      rows:[
-      ['S0-1','控制台点「开始采集」','状态横幅','5 秒内出现波形；不报 Internal Server Error',{f:'f_s0t',in:'text',ph:'用时 秒',w:'96px'}],
+      ['S0-1','实践驾驶舱点「开始采集」','状态横幅','5 秒内出现波形；不报 Internal Server Error',{f:'f_s0t',in:'text',ph:'用时 秒',w:'96px'}],
       ['S0-2','看采集信息','会话信息条','设备显示 NeuraDock TCP（127.0.0.1:9600）',{f:'f_s0mode',in:'text',ph:'设备/模式'}],
       ['S0-3','静看 30 秒','波形幅值','不贴底（不是直线）、不削顶',{f:'f_s0w',in:'select',opt:['正常','贴底','削顶']}],
       ['S0-4','★ 可安全暂停','—','未产生有效数据，随时可停','']
      ],v:'s0v',vlabel:'S0 结论'},
 
     {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,live:'t1',
-     hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下控制台上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
+     hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下实践驾驶舱上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
 
     {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,
-     hint:'填每段的 α 相对功率（8–12Hz 占比，控制台频段条上读）。主看 <b>O1 / Oz / O2</b>；CP5/CP6/PO3/PO4 作辅助参考，不单独判。',
+     hint:'填每段的 α 相对功率（8–12Hz 占比，实践驾驶舱频段条上读）。主看 <b>O1 / Oz / O2</b>；CP5/CP6/PO3/PO4 作辅助参考，不单独判。',
      cols:['段','状态','打点时刻','α 相对功率','备注（眨眼/困倦/体位）'],
      rows:[
       ['1','睁眼','__:__',{f:'t1a1',in:'num',ph:'如 0.18',w:'92px'},{f:'t1n1',in:'text',ph:'—'}],
@@ -482,8 +512,8 @@ const FLOW = {
      hint:'每个环节都要留下可查证据。这一项同时是 09-21 三个 P0（未入库／QC 矛盾／无事件锚）的回归测试。',
      cols:['环节','操作','期望证据','记录'],
      rows:[
-      ['① 保存','控制台「停止采集」→ 保存','生成 npz（+report.html）',{f:'t8a',in:'text',ph:'文件名'}],
-      ['② 归档入库','控制台「档案·入库」页签，或下方命令行','工厂侧出现新会话目录',{f:'t8b',in:'text',ph:'Zen-ID'}],
+      ['① 保存','实践驾驶舱「停止采集」→ 保存','生成 npz（+report.html）',{f:'t8a',in:'text',ph:'文件名'}],
+      ['② 归档入库','实践驾驶舱「档案·入库」页签，或下方命令行','工厂侧出现新会话目录',{f:'t8b',in:'text',ph:'Zen-ID'}],
       ['③ 登记表','看 <code>01_registry/session_registry.csv</code>','出现新行且 manifest_path 已填',{f:'t8c',in:'select',opt:['已出现','未出现']}],
       ['④ 质检','看该会话 <code>qc.json</code>','有 recommend ＋ reasons[] 有内容',{f:'t8d',in:'text',ph:'recommend／reasons'}],
       ['⑤ 契约文件','看该会话目录','session_manifest.json ＋ events.jsonl 俱在',{f:'t8e',in:'select',opt:['俱在','缺件']}]
@@ -577,7 +607,7 @@ const FLOW = {
       ['4 · 波形是直线但通道名正常','电极未接触或参考脱落。→ 压实电极、检查耳夹参考，复测 1 分钟；仍直线则记 bad 并排除该通道分析。'],
       ['5 · 工频（50 Hz）显著','接地／线缆／环境。→ ① 换 50Hz 隔离 USB 线 ② 拔掉附近充电器、换插座回路 ③ 检查耳夹 ④ 电极重压。'],
       ['6 · 断包集中在开头 2 分钟','开机链路握手。→ 复现并记录次数；报告如实标注"前 2 分钟数据可靠性低"；这是 T5 的重点观察项。'],
-      ['7 · 保存后找不到 npz','保存未触发／路径不对。→ 回控制台确认"已保存"状态；仍无则记录时间点，作为 T8 的失败证据（<b>不要重跑顶替，失败本身是数据</b>）。'],
+      ['7 · 保存后找不到 npz','保存未触发／路径不对。→ 回实践驾驶舱确认"已保存"状态；仍无则记录时间点，作为 T8 的失败证据（<b>不要重跑顶替，失败本身是数据</b>）。'],
       ['8 · 入库后 registry 无新行','入库脚本报错／被隔离。→ 看命令行输出与 <code>qc.json.recommend</code>；隔离是预期行为（见前置 e2），未隔离却无行才是故障。'],
       ['9 · QC 结果与肉眼判断矛盾','阈值口径。→ 记下 <code>qc.json</code> 的 thresholds 与 reasons[]（阈值版本 20260920），<b>以 reasons 为准逐条核</b>，不凭印象改判。'],
       ['10 · VR 与采集同时跑后断包升高','BLE／WiFi 共存。→ 记入 T10；试"VR 用有线／关手机热点"再测一次，两次数据都留。']
@@ -739,8 +769,8 @@ function renderCmd(blk){
   const text = blk.lines.join('\n');
   const body = [h('div', {class:'cmdbtns noprint'},
       h('button', {class:'btn ghost', type:'button', onclick:()=>copy(text,'命令已复制')}, '复制命令'),
-      blk.probe ? h('button', {class:'btn', type:'button', onclick:probe}, '探一下控制台（8777）') : null,
-      blk.probe ? h('a', {class:'btn', href:'http://127.0.0.1:8777', target:'_blank', rel:'noopener'}, '打开控制台') : null),
+      blk.probe ? h('button', {class:'btn', type:'button', onclick:probe}, '探一下实践驾驶舱（8777）') : null,
+      blk.probe ? h('a', {class:'btn', href:'http://127.0.0.1:8777', target:'_blank', rel:'noopener'}, '打开实践驾驶舱') : null),
     h('pre', {text:text})];
   if(blk.note) body.push(h('p', {class:'hint', html:blk.note}));
   if(blk.probe) body.push(h('p', {class:'hint', id:'probeOut'}, ''));
@@ -815,7 +845,7 @@ function renderTimer(blk){
       if(blk.mode === 'count'){
         st.seg = st.seg % blk.times + 1;
         info.firstChild.textContent = '第 ' + st.seg + ' / ' + blk.times + ' 段';
-        toast('第 ' + st.seg + ' 段开始 — 去控制台点一下' + (st.seg % 2 ? ' 👁 睁眼' : ' 🌙 闭眼'));
+        toast('第 ' + st.seg + ' 段开始 — 去实践驾驶舱点一下' + (st.seg % 2 ? ' 👁 睁眼' : ' 🌙 闭眼'));
       }else{
         toast('10 分钟到 — 低头填一行');
       }
@@ -909,7 +939,9 @@ function paintKpi(done, total){
   if(box){
     box.innerHTML = '';
     [['pass','通过'],['cond','有条件'],['fail','不通过'],['na','不可判定'],['none','未判']].forEach(([k,label])=>{
-      box.appendChild(h('span', {class:'led' + (k === 'none' ? '' : ' ' + k)}, h('i'), label + ' ' + cnt[k]));
+      const s = h('span', {class:'led' + (k === 'none' ? '' : ' ' + k), title:label + ' ' + cnt[k]}, h('i'), h('b', null, cnt[k]));
+      s.appendChild(h('span', {class:'ledlbl'}, ' ' + label));
+      box.appendChild(s);
     });
   }
   paintLive();
@@ -921,8 +953,8 @@ function paintLive(){
   if(LIVE.t1 && LIVE.t1.run) parts.push('T1 第 ' + LIVE.t1.seg + '/' + LIVE.t1.total + ' 段 ' + fmt(LIVE.t1.left));
   if(LIVE.t5 && LIVE.t5.run) parts.push('T5 距提醒 ' + fmt(LIVE.t5.left));
   el.innerHTML = '';
-  el.appendChild(h('b', null, '现场：'));
-  el.appendChild(document.createTextNode(parts.length ? ' ' + parts.join('　｜　') : ' 未启动计时（T1 分段／T5 十分钟提醒在页内）'));
+  el.appendChild(h('b', null, '⏱ '));
+  el.appendChild(document.createTextNode(parts.length ? parts.join('　｜　') : '未计时'));
 }
 
 /* ── 进度 ───────────────────────────────────────────────────────── */
@@ -979,12 +1011,12 @@ function probe(){
     .then(({ok,j})=>{
       clearTimeout(to);
       out.innerHTML = ok
-        ? '🟢 <b>控制台在线</b>　状态：' + (j.status||'—') + '　运行中：' + (j.running ? '是' : '否') + '　模式：' + (j.mode||'—') + (j.saved ? '　已保存：' + j.saved : '')
-        : '🟡 端口有响应但返回异常状态码，请看控制台日志。';
+        ? '🟢 <b>实践驾驶舱在线</b>　状态：' + (j.status||'—') + '　运行中：' + (j.running ? '是' : '否') + '　模式：' + (j.mode||'—') + (j.saved ? '　已保存：' + j.saved : '')
+        : '🟡 端口有响应但返回异常状态码，请看实践驾驶舱日志。';
     })
     .catch(()=>{
       clearTimeout(to);
-      out.innerHTML = '🔴 <b>没连上控制台</b>。三种可能：① 控制台服务没起（见前置「软件与端口」第 4 条）；② 本页以 <code>file://</code> 打开、浏览器拦了跨域请求 → 点上面「打开控制台」人工确认即可；③ 端口不是 8777。<br>9600（设备数据服务）浏览器探不了，请用前置里的 PowerShell 命令。';
+      out.innerHTML = '🔴 <b>没连上实践驾驶舱</b>。三种可能：① 实践驾驶舱服务没起（见前置「软件与端口」第 4 条）；② 本页以 <code>file://</code> 打开、浏览器拦了跨域请求 → 点上面「打开实践驾驶舱」人工确认即可；③ 端口不是 8777。<br>9600（设备数据服务）浏览器探不了，请用前置里的 PowerShell 命令。';
     });
 }
 
@@ -1087,6 +1119,10 @@ function applyTheme(){
   if(bs) bs.textContent = dash ? '📜 宣纸皮肤' : '📊 仪表盘皮肤';
   const bn = document.getElementById('bNight');
   if(bn) bn.style.display = dash ? 'none' : '';   /* 仪表盘恒为暗色数据屏 */
+  /* 仪表折叠态：默认收起（顶栏只占一行），滚动时也自动收起 */
+  const kp = document.getElementById('kpi'), tg = document.getElementById('kpiTgl');
+  if(kp) kp.classList.toggle('open', !!S.meta.kpiOpen);
+  if(tg) tg.textContent = S.meta.kpiOpen ? '⌃ 收起' : '⌄ 仪表';
 }
 function build(){
   TIMERS.forEach(id => clearInterval(id)); TIMERS.length = 0;
@@ -1171,10 +1207,22 @@ document.getElementById('bSkin').onclick = ()=>{
   toast(S.meta.skin === 'paper' ? '宣纸皮肤：柔和纸质，适合打印与长读' : '仪表盘皮肤：数据屏视觉，一眼看全局');
 };
 document.getElementById('bNight').onclick = ()=>{ S.meta.night = !S.meta.night; applyTheme(); saveSoon(); };
-document.getElementById('bFsp').onclick = ()=>{ S.meta.fs = Math.min(FS_MAX, (S.meta.fs||17) + 1); applyTheme(); saveSoon(); };
-document.getElementById('bFsm').onclick = ()=>{ S.meta.fs = Math.max(FS_MIN, (S.meta.fs||17) - 1); applyTheme(); saveSoon(); };
+document.getElementById('bFs').onclick = ()=>{
+  const steps = [15, 17, 19, 22];
+  const i = steps.indexOf(S.meta.fs || 17);
+  S.meta.fs = steps[(i + 1) % steps.length];
+  applyTheme(); saveSoon(); toast('字号 ' + S.meta.fs + 'px');
+};
 document.getElementById('bPrint').onclick = ()=> window.print();
 document.getElementById('bOut').onclick = openExport;
+document.getElementById('kpiTgl').onclick = ()=>{ S.meta.kpiOpen = !S.meta.kpiOpen; applyTheme(); saveSoon(); };
+/* 滚动即让位：顶部大仪表自动收起，顶栏只留精简条 */
+window.addEventListener('scroll', ()=>{
+  const y = window.scrollY || 0;
+  const hd = document.querySelector('header');
+  if(hd) hd.classList.toggle('scrolled', y > 60);
+  if(y > 120 && S.meta.kpiOpen){ S.meta.kpiOpen = false; applyTheme(); saveSoon(); }
+}, {passive:true});
 document.getElementById('bReset').onclick = ()=>{
   if(!confirm('清空全部勾选与记录？此操作不可撤销（建议先「导出」留档）。')) return;
   S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin}};
