@@ -268,6 +268,26 @@ def assess(npz_path, thresholds=None):
                     "sfreq": sfreq, "channels": channels,
                     "effective_hz": round(eff, 2),
                     "packet_loss_rate": loss})
+
+    # 会话跨度对账（2026-09-25 法师裁定：**并列显示、不替换**上项口径）
+    #   缘起：09-25 首场真机会话尾段断流 12.6 分钟（末样本 17:36:09.9，会话至 17:48:44），
+    #   而 packet_loss_rate 的分母是"样本自身跨度"（duration），断流后分母同步停住 →
+    #   真丢 39% 只报 1.33%，判据结构性失明（定位报告：…样本差定位报告_尾段断流_v1.md）。
+    #   本处**只新增派生字段供并列显示**；是否据其产生 reasons/影响 recommend，属另一裁定，
+    #   未获裁前**不接入判定链**（守"判据来源唯一"）。
+    _span_s = None
+    _sp_start = meta.get("recording_started_at_epoch")
+    _sp_end = meta.get("recording_ended_at_epoch")
+    try:
+        if _sp_start is not None and _sp_end is not None and float(_sp_end) > float(_sp_start):
+            _span_s = float(_sp_end) - float(_sp_start)
+    except (TypeError, ValueError):
+        _span_s = None
+    if _span_s and _span_s > 0:
+        _span_eff = samples / _span_s
+        metrics["session_span_s"] = round(_span_s, 1)
+        metrics["session_span_hz"] = round(_span_eff, 2)
+        metrics["span_loss_rate"] = round(1.0 - _span_eff / sfreq, 4) if sfreq > 0 else None
     if duration < th["min_duration_s"]:
         reasons.append(f"时长 {duration:.0f}s 低于下限 {th['min_duration_s']:.0f}s")
     if loss is not None and loss > th["max_packet_loss"]:

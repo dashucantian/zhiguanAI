@@ -857,6 +857,41 @@ class MonitorSession:
                 self._emit(payload)
                 VR.push_from_monitor(payload)
                 n_ticks += 1
+                # ── 心跳落盘（2026-09-25 法师裁定"提前做"）──────────────────
+                # 缘起：09-25 首场真机会话尾段断流 12.6 分钟（末样本 17:36:09.9，会话至
+                # 17:48:44），界面全程显示"采集进行中"；本项目此前无文件日志，成因无法定位。
+                # 本处每 5 秒追加一行 JSONL（含 packets/已采样本数/连接态/采集时长），
+                # 落盘失败只提示一次，**绝不影响采集主流程**。
+                if time.time() - getattr(self, "_hb_last", 0.0) >= 5.0:
+                    self._hb_last = time.time()
+                    try:
+                        _hb_dir = os.path.join(SCRIPT_DIR, "diagnostics")
+                        os.makedirs(_hb_dir, exist_ok=True)
+                        try:
+                            _n_samp = len(buf.eeg[buf.channels[0]]) if buf.channels else None
+                        except Exception:
+                            _n_samp = None
+                        _hb = {
+                            "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
+                            "session_started_at": (self.started_at.strftime("%Y-%m-%d %H:%M:%S")
+                                                   if self.started_at else None),
+                            "mode": self.mode, "simulate": bool(simulate),
+                            "elapsed_s": round(buf.duration_seconds(), 1),
+                            "packets": getattr(self.receiver, "packet_count", None),
+                            "samples_in_buffer": _n_samp,
+                            "sfreq": getattr(self.receiver, "sfreq", None),
+                            "connected": (self.receiver.is_connected()
+                                          if hasattr(self.receiver, "is_connected") else None),
+                            "status": self.status,
+                        }
+                        _hb_path = os.path.join(
+                            _hb_dir, "heartbeat_%s.jsonl" % datetime.now().strftime("%Y%m%d"))
+                        with open(_hb_path, "a", encoding="utf-8") as _f:
+                            _f.write(json.dumps(_hb, ensure_ascii=False) + "\n")
+                    except Exception as _hb_err:
+                        if not getattr(self, "_hb_warned", False):
+                            self._hb_warned = True
+                            print(f"[warn] 心跳落盘失败（不影响采集）：{_hb_err}")
                 # 保存请求优先处理（不断连保存）
                 if self._save_req.is_set():
                     self._save_req.clear()

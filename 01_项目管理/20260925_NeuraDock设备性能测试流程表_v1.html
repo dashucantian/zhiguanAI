@@ -294,6 +294,12 @@ html.dash #kpiLive{display:inline}
 .live.off{color:var(--ink3)}
 .live.stale{color:var(--bad);font-weight:600}
 .live.stale .dot{background:var(--bad);box-shadow:0 0 7px var(--bad)}
+/* 断流横幅（2026-09-25 法师裁定②：无新帧告警＝横幅标红＋可选提示音） */
+.rtwarn{display:none;align-items:center;gap:10px;background:var(--badbg);border:1px solid #EFC9C5;
+  color:var(--bad);border-radius:12px;padding:10px 14px;margin:0 0 12px;font-size:.9em;font-weight:600}
+.rtwarn.on{display:flex}
+.rtwarn .btn{margin-left:auto;font-weight:400}
+html.night .rtwarn{border-color:#5A2632}
 .live .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--qing);
   margin-right:5px;box-shadow:0 0 7px var(--qing);vertical-align:middle}
 .live.off .dot{background:var(--ink3);box-shadow:none}
@@ -1257,10 +1263,18 @@ function syncField(f){
 }
 function postMarker(label){
   if(!/^https?:$/.test(location.protocol)) return;
+  /* 2026-09-25 法师裁定：断流期间打点**如实回写"无数据"**，不再静默成功
+     （缘起：09-25 首场尾段断流 12.6 分钟，10 次打点全部落在样本范围之外而界面无提示） */
+  const stale = liveStale();
+  const real = stale ? (label + '（无数据·断流）') : label;
   fetch('/api/monitor/marker', {method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({label: label})})
+    body: JSON.stringify({label: real})})
     .then(r => r.json())
-    .then(j => { LIVE.markers = j.count || (LIVE.markers + 1); paintLive(); })
+    .then(j => {
+      LIVE.markers = j.count || (LIVE.markers + 1);
+      if(stale) toast('⚠ 断流中：已如实记为「' + real + '」');
+      paintLive();
+    })
     .catch(()=>{});
 }
 function liveConnect(){
@@ -1323,6 +1337,21 @@ function paintLive(){
   el.innerHTML = '';
   el.appendChild(h('span', {class:'dot'}));
   el.appendChild(document.createTextNode(txt));
+  /* 断流横幅＋可选提示音：每次断流只响一次（恢复后重新武装） */
+  const w = document.getElementById('rtWarn');
+  if(w){
+    w.classList.toggle('on', !!stale);
+    if(stale && !LIVE._warned){
+      LIVE._warned = true;
+      if(S.meta.beep !== false) beep(2);
+    } else if(!stale && LIVE._warned){
+      LIVE._warned = false;
+    }
+  }
+}
+function applyBeepLabel(){
+  const b = document.getElementById('beepTgl');
+  if(b) b.textContent = (S.meta.beep !== false) ? '🔔 提示音：开' : '🔕 提示音：关';
 }
 /* 取本刻 α：优先用实时波形自算 O1/Oz/O2 均值；取不到返回 null（不拿 dB 冒充相对功率） */
 function measureAlpha(){
@@ -1551,7 +1580,13 @@ function build(){
   if(nav) nav.innerHTML = '';            /* B1：顶部页签退役，改用左栏闸门大纲 */
   const side = h('aside', {class:'side', id:'side'}, h('div', {class:'stitle'}, '闸门大纲（点击切换）'));
   const pane = h('div', {class:'pane', id:'pane'});
+  /* 断流横幅：常驻于版面顶部，仅在无新帧时亮起（法师 09-25 裁定②） */
+  main.appendChild(h('div', {class:'rtwarn noprint', id:'rtWarn'},
+    h('span', null, '⚠ 无新帧——数据可能已断：请查设备电源/佩戴与官方软件『打开数据服务』'),
+    h('button', {class:'btn ghost', type:'button', id:'beepTgl',
+      onclick: () => { S.meta.beep = !(S.meta.beep !== false); saveSoon(); applyBeepLabel(); }}, '🔔')));
   main.appendChild(h('div', {class:'app'}, side, pane));
+  applyBeepLabel();
   const cur = S.meta.gate || GATES[0].id;
   GATES.forEach(g=>{
     const act = (g.id === cur);
