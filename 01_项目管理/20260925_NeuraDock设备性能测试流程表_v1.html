@@ -292,6 +292,8 @@ html.dash #kpiLive{display:inline}
 /* 实时数据桥状态条（2026-09-25：测试须与真实脑电/驾驶舱数据联动） */
 .live{font-size:.72em;color:var(--qing);white-space:nowrap;font-variant-numeric:tabular-nums}
 .live.off{color:var(--ink3)}
+.live.stale{color:var(--bad);font-weight:600}
+.live.stale .dot{background:var(--bad);box-shadow:0 0 7px var(--bad)}
 .live .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--qing);
   margin-right:5px;box-shadow:0 0 7px var(--qing);vertical-align:middle}
 .live.off .dot{background:var(--ink3);box-shadow:none}
@@ -484,7 +486,7 @@ const FLOW = {
     {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
     {k:'t1auto',title:'T1 自动跑（机器计时·自动打点·按段读 α）',chip:'推荐用这个',
      hint:'点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（O1/Oz/O2 均值，用实时波形自算），你只负责按提示睁眼/闭眼。'},
-    {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。'},
+    {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。<br><b>口径（09-25 法师裁定·E1 验证）</b>：此处的"提升"是<b>相对 α 比值</b>（8–12 Hz ÷ 0.5–45 Hz）的相对提升，<b>不等于 α 功率的提升</b>——两者呈亚线性（E1 实测：α 功率 +32% 时报 +28~32%，+69% 时报 +55~61%）。面板实时读数为<b>当场判断</b>用；权威值仍为保存后质检对全量 npz 的计算。'},
 
     {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',
      hint:'静坐不动 5 分钟（不看手机、不说话）。重点盯 <b>CP5 / CP6 / O2</b>——09-21 三通道贴底的前科位置。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。',
@@ -636,7 +638,7 @@ const FLOW = {
   /* ══ 速查 ══ */
   { id:'ref', name:'速查与处置', desc:'一页数字＋十条故障处置。打印时这一页单独成页，建议带在手边。', acc:'#6B7280', blocks:[
     {k:'static',title:'判据速查卡',cols:['项目','判据','来源'],rows:[
-      ['T1 α 阻断提升','≥30% 优秀｜≥15% 合格｜<15% 可疑','方案 T1'],
+      ['T1 α 阻断提升（<b>相对 α 比值</b>，非 α 功率）','≥30% 优秀｜≥15% 合格｜<15% 可疑','方案 T1／E1 验证 2026-09-25'],
       ['T2 通道 std','3–30 µV 正常；<2 µV 且 >1 min ＝ 贴底','方案 T2'],
       ['T3 伪迹恢复','≤3 s 为佳','方案 T3'],
       ['T4 工频残余比','≤0.35 良好；0.35–0.5 可接受；>0.5 查接地','方案 T4（09-21 实测 0.28）'],
@@ -1291,6 +1293,11 @@ function liveTick(ev){
   if(d.wave) LIVE.wave = d.wave;
   paintLive(); T1A.onTick(d); T2A.onTick(d);
 }
+/* 帧龄守卫（2026-09-25 首场会话尾段断流 12.6 分钟而界面照常显示"进行中"）：
+   TCP 活着 ≠ 数据在流。末帧超过 STALE_MS 未更新即视为断流——
+   面板此后不得再用陈旧波形充数（此前会反复算同一帧并照填，属造假风险）。 */
+const STALE_MS = 5000;
+function liveStale(){ return !LIVE.at || (Date.now() - LIVE.at) > STALE_MS; }
 function paintLive(){
   /* ① 现场计时（T1 分段／T5 十分钟提醒 → 顶栏 KPI 条） */
   const e1 = document.getElementById('kpiLive');
@@ -1302,14 +1309,17 @@ function paintLive(){
     e1.appendChild(h('b', null, '⏱ '));
     e1.appendChild(document.createTextNode(parts.length ? parts.join('　｜　') : '未计时'));
   }
-  /* ② 实时数据桥状态条 */
+  /* ② 实时数据桥状态条（断流显式告警，不谎报"实时"） */
   const el = document.getElementById('liveStrip');
   if(!el) return;
-  el.classList.toggle('off', !LIVE.on);
   const d = LIVE.tick;
-  let txt = LIVE.on ? '实时' : '离线';
-  if(d) txt += ' ' + fmt(d.elapsed || 0) + ' ｜ 包 ' + (d.packets || 0) + ' ｜ 打点 ' + LIVE.markers;
-  else if(LIVE.why) txt += ' · ' + LIVE.why;
+  const stale = LIVE.on && liveStale();
+  el.classList.toggle('off', !LIVE.on);
+  el.classList.toggle('stale', stale);
+  let txt;
+  if(!LIVE.on) txt = '离线' + (LIVE.why ? ' · ' + LIVE.why : '');
+  else if(stale) txt = '无新帧 ' + Math.round((Date.now() - LIVE.at) / 1000) + 's —— 数据可能已断（末帧采集时长 ' + fmt(d ? (d.elapsed || 0) : 0) + '）';
+  else txt = '实时 ' + fmt(d ? (d.elapsed || 0) : 0) + ' ｜ 包 ' + (d ? (d.packets || 0) : 0) + ' ｜ 打点 ' + LIVE.markers;
   el.innerHTML = '';
   el.appendChild(h('span', {class:'dot'}));
   el.appendChild(document.createTextNode(txt));
@@ -1352,12 +1362,21 @@ const T1A = {
     const now = Date.now();
     if(now - T1A.lastCap < 1000) return;    /* 约每秒取一个样 */
     T1A.lastCap = now;
+    if(liveStale()) return;                 /* 断流：不拿陈旧帧充数 */
     const a = measureAlpha();
     if(a != null && T1A.acc[T1A.seg]) T1A.acc[T1A.seg].push(a);
   },
   segDone(){
     const st = (T1A.seg % 2) ? '睁眼' : '闭眼';
     const arr = T1A.acc[T1A.seg] || [];
+    if(arr.length === 0){
+      T1A.empty = (T1A.empty || 0) + 1;
+      if(T1A.empty >= 2){
+        T1A.on = false; clearInterval(T1A.timer);
+        t1Msg('连续两段无有效数据——已中止自动跑（疑似断流/未推流）。请检查连接后重试', true);
+        return;
+      }
+    } else { T1A.empty = 0; }
     const m = arr.length ? arr.reduce((x,y)=>x+y,0)/arr.length : null;
     if(m == null){
       t1Msg('第 ' + T1A.seg + ' 段没取到波形，未自动填数（该段可手动填）', true);
@@ -1405,6 +1424,7 @@ const T2A = {
     const now = Date.now();
     if(now - T2A.lastCap < 1000) return;
     T2A.lastCap = now;
+    if(liveStale()) return;                 /* 断流：不计入统计 */
     const w = LIVE.wave;
     if(!w) return;
     for(const ch in w){
