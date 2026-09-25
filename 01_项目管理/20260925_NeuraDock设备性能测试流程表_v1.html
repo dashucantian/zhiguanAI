@@ -532,11 +532,15 @@ const FLOW = {
       ['头部转动 ×10',{f:'t3a3',in:'num',ph:'',w:'80px'},{f:'t3b3',in:'num',ph:'',w:'80px'},{f:'t3c3',in:'select',opt:['是','否']},{f:'t3d3',in:'text',ph:'—'}],
       ['深呼吸 ×10',{f:'t3a4',in:'num',ph:'',w:'80px'},{f:'t3b4',in:'num',ph:'',w:'80px'},{f:'t3c4',in:'select',opt:['是','否']},{f:'t3d4',in:'text',ph:'—'}]
      ],v:'t3v',vlabel:'T3 结论'},
+    {k:'t3auto',title:'T3 自动跑（页面提示＋自动计时＋自动测恢复）',chip:'推荐用这个',
+     hint:'点「自动跑四组」后：页面逐组大字提示（咀嚼 10 次 → 眨眼 20 次 → 头部转动 10 次 → 深呼吸 10 次），每组「动作窗口 10 秒＋静息恢复 30 秒」自动计时；机器按实时波形测伪迹持续时长与恢复用时，结束自动填上表四行。你只需按提示做动作。'},
 
     {k:'grid',title:'T4 工频噪声',chip:'5 分钟',hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
      cols:['指标','实测','判据'],
      rows:[['工频残余比',{f:'t4r',in:'num',ph:'如 0.28',w:'110px'},'≤0.35 良好；0.35–0.5 可接受；>0.5 需排查']],
      v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换 USB 隔离线 → 换插座回路／拔掉附近充电器 → 检查参考耳夹 → 电极重新压实']]},
+    {k:'t4mains',title:'T4 实时工频预警（可选·非判据）',chip:'仅预警',
+     hint:'法师 09-25 裁定「甲＋可选乙」：**权威取保存后质检的 <code>mains_ratio</code>**；本卡为面板侧实时粗估，只用于当场预警。<br>口径：5.12 秒窗（1280 点 @250 Hz）下 50 Hz 恰为整数 bin 256，直接取该 bin 功率 ÷ 0.5–45 Hz 功率。<b>注意</b>：本场信号链为 1–40 Hz 带通，50 Hz 已被衰减 → 此值系统性偏低，**只可作"有没有明显工频"的粗判**。'},
 
     {k:'grid',title:'T6 原始流全量核验',chip:'★ 四问生命线',
      hint:'验的是"它给不给原始档"，不是"它降噪好不好"。<b>若只有加工流、无真原始档 → 触碰 D32 硬条件，走换货／谈判路径。</b>',
@@ -600,9 +604,9 @@ const FLOW = {
       ['有 VR（本项 10 分钟）',{f:'t10b',in:'text',ph:'%',w:'96px'},{f:'t10n2',in:'text',ph:'—'}]
      ],v:'t10v',vlabel:'T10 结论'},
 
-    {k:'note',tone:'warm',t:'T9 端到端延迟：场次待法师裁定，本场不执行',
-     d:'T9 需要在<b>闭环会话</b>里做（HUD 打点），与场②的监测长采不同源。建议二选一：<b>甲</b>＝插在场②尾段 15 分钟；<b>乙</b>＝单开场④"闭环 15 分钟"。判据：电极→HUD 数值更新 <b>P95 ≤500 ms</b>（因果滤波本身 ~150–250 ms 是已知项）。'},
-    {k:'grid',title:'T9 端到端延迟（裁定后再测）',chip:'待裁',
+    {k:'note',tone:'good',t:'T9 端到端延迟：**场②尾段 15 分钟**（法师 09-25 裁定甲）',
+     d:'T9 不再"待裁留位"——**插在场②尾段 15 分钟**，在**闭环会话**里用 HUD 打点法执行（屏幕闪烁／蜂鸣与 EEG 事件流同时打点）。判据：电极→HUD 数值更新 <b>P95 ≤500 ms</b>（因果滤波本身 ~150–250 ms 是已知项）。'},
+    {k:'grid',title:'T9 端到端延迟（场②尾段 15 分钟）',chip:'场②尾段',
      hint:'裁定为甲或乙之后，在闭环会话里用 HUD 打点法测。未裁前这一项留空即可——留空不影响其他项，也不算"没做"。',
      cols:['项目','操作','期望','记录'],
      rows:[['电极→HUD 数值更新延迟','屏幕闪烁／蜂鸣与 EEG 事件流同时打点（或双机位拍摄）','P95 ≤500 ms',{f:'t9a',in:'text',ph:'__ ms（测 __ 次）',w:'150px'}],
@@ -696,10 +700,10 @@ const GATES = [
    take:[['pre',0,6],['s1',1,2]]},
   {id:'g1', name:'G1 身份', acc:'#4C9AFF',
    desc:'接的是谁、给的是不是原始档：连接握手 ＋ 通道数与顺序 ＋ 原始流全量核验（T6）。',
-   take:[['s1',0,1],['s1',2,3],['s1',13,14]]},
+   take:[['s1',0,1],['s1',2,3],['s1',15,16]]},
   {id:'g2', name:'G2 质量', acc:'#B4463C',
    desc:'这台设备今天能不能用：T1 睁闭眼 α 阻断、T2 噪声底与贴底、T3 耐受性、T4 工频。',
-   take:[['s1',3,13],['s1',14,15]]},
+   take:[['s1',3,15],['s1',16,17]]},
   {id:'g3', name:'G3 稳定', acc:'#4A7C59',
    desc:'能不能撑一场真实共修：T5 长时程、T7 时钟对齐、T8 采集→入库→质检端到端。',
    take:[['s2',0,5]]},
@@ -1315,7 +1319,11 @@ function liveTick(ev){
   LIVE.tick = d; LIVE.at = Date.now(); LIVE.on = !!d.connected;
   if(!LIVE.on) LIVE.why = '已连服务但设备未连接';
   if(d.wave) LIVE.wave = d.wave;
-  paintLive(); T1A.onTick(d); T2A.onTick(d);
+  paintLive(); T1A.onTick(d); T2A.onTick(d); T3A.onTick(d);
+  /* T4 实时工频预警：约每秒一次（Oz 通道），只作预警 */
+  if(LIVE.on && Date.now() - M4.at > 1000 && LIVE.wave && LIVE.wave['Oz']){
+    M4.v = mainsRel(LIVE.wave['Oz'], SFREQ()); M4.at = Date.now(); paintMains();
+  }
 }
 /* 帧龄守卫（2026-09-25 首场会话尾段断流 12.6 分钟而界面照常显示"进行中"）：
    TCP 活着 ≠ 数据在流。末帧超过 STALE_MS 未更新即视为断流——
@@ -1567,6 +1575,120 @@ function renderT2Auto(blk){
   return card(blk, body);
 }
 
+/* ── T4 实时工频预警（可选·非判据；法师 09-25 裁定「甲＋可选乙」）── */
+const M4 = {v:null, at:0};
+function mainsRel(sig, sf){
+  const n0 = sig.length;
+  if(n0 < 128) return null;
+  let mean = 0;
+  for(let i=0;i<n0;i++) mean += sig[i];
+  mean /= n0;
+  let n = 1; while(n < n0) n <<= 1;
+  const re = new Float64Array(n), im = new Float64Array(n);
+  for(let i=0;i<n0;i++){ const w = 0.5 - 0.5*Math.cos(2*Math.PI*i/(n0-1)); re[i] = (sig[i]-mean)*w; }
+  fftRadix2(re, im);
+  const df = sf / n, k50 = Math.round(50 / df);
+  let p50 = 0, pref = 0;
+  for(let k=1; k<n/2; k++){
+    const f = k*df;
+    const p = re[k]*re[k] + im[k]*im[k];
+    if(k >= k50-1 && k <= k50+1) p50 += p;
+    if(f >= 0.5 && f <= 45) pref += p;
+  }
+  return pref > 0 ? p50/pref : null;
+}
+function paintMains(){
+  const el = document.getElementById('t4mainsOut');
+  if(!el) return;
+  if(M4.v == null){ el.textContent = LIVE.on ? '候首帧…' : '未接入实时数据（需从 /ndtest 打开并开始采集）'; return; }
+  const lvl = M4.v > 0.5 ? '偏高——当场查接线/接地' : (M4.v > 0.35 ? '略高' : '未见明显工频');
+  el.textContent = '面板侧粗估 50 Hz 占比 ＝ ' + M4.v.toFixed(3) + '（' + lvl + '）· 更新于 '
+    + new Date(M4.at).toLocaleTimeString('zh-CN', {hour12:false}) + '　※ 仅预警，权威取保存后质检 mains_ratio';
+}
+function renderT4Mains(blk){
+  return card(blk, [h('div', {class:'autoout', id:'t4mainsOut'}, '候首帧…')]);
+}
+/* ── T3 自动跑：四组动作，页面提示＋自动计时＋自动测恢复（法师 09-25 裁定甲）── */
+const T3A = {
+  on:false, idx:0, phase:'', left:0, timer:null, lastCap:0, ptp:[], rows:[],
+  ACTIONS:[['咀嚼 ×10','咀嚼'],['眨眼 ×20','眨眼'],['头部转动 ×10','转头'],['深呼吸 ×10','深呼吸']],
+  start(){
+    if(T3A.on) return;
+    if(!LIVE.on){ t3Msg('未接入实时数据：请先在驾驶舱开始采集', true); return; }
+    T3A.on = true; T3A.idx = 0; T3A.rows = []; T3A.next();
+  },
+  stop(){ T3A.on = false; clearInterval(T3A.timer); t3Msg('已停止（已完成组的数据保留）'); },
+  next(){
+    if(T3A.idx >= T3A.ACTIONS.length){ T3A.finish(); return; }
+    T3A.phase = 'act'; T3A.left = 10; T3A.ptp = []; T3A.lastCap = 0;
+    t3Msg('第 ' + (T3A.idx+1) + '/4 组：请做「' + T3A.ACTIONS[T3A.idx][0] + '」');
+    clearInterval(T3A.timer);
+    T3A.timer = setInterval(()=>{
+      T3A.left--;
+      if(T3A.left <= 0){
+        if(T3A.phase === 'act'){ T3A.phase = 'rest'; T3A.left = 30; t3Msg('好——静息 30 秒（正在测恢复时间）'); }
+        else T3A.closeAction();
+      } else t3Msg(null);
+    }, 1000);
+  },
+  onTick(){
+    if(!T3A.on) return;
+    const now = Date.now();
+    if(now - T3A.lastCap < 1000) return;
+    T3A.lastCap = now;
+    if(liveStale()) return;
+    const w = LIVE.wave;
+    if(!w) return;
+    let mx = 0;
+    for(const ch in w){
+      const a = w[ch];
+      if(!a || a.length < 64) continue;
+      let lo = Infinity, hi = -Infinity;
+      for(let i=0;i<a.length;i++){ if(a[i] < lo) lo = a[i]; if(a[i] > hi) hi = a[i]; }
+      if(hi - lo > mx) mx = hi - lo;
+    }
+    T3A.ptp.push(mx);
+  },
+  closeAction(){
+    clearInterval(T3A.timer);
+    const p = T3A.ptp.slice();
+    const base = p.length > 6 ? Math.min.apply(null, p.slice(-6)) : (p.length ? Math.min.apply(null, p) : 0);
+    let dur = 0;
+    for(let i=0;i<p.length && i<10;i++) if(base > 0 && p[i] > base*1.5) dur++;
+    let rec = null;
+    for(let i=10;i<p.length;i++){ if(base > 0 && p[i] <= base*1.2){ rec = p.length - i; break; } }
+    if(rec == null) rec = 30;
+    const k = T3A.idx + 1, name = T3A.ACTIONS[T3A.idx][0];
+    const put = (f, v) => { S.fields[f] = String(v); syncField(f); };
+    put('t3a'+k, dur); put('t3b'+k, rec); put('t3c'+k, rec <= 3 ? '是' : '否');
+    put('t3d'+k, '自动（静息末段基线 ' + (base ? base.toFixed(1) : '—') + ' µV）');
+    T3A.rows.push([name, dur, rec]);
+    recount(); saveSoon();
+    T3A.idx++;
+    setTimeout(() => T3A.next(), 800);
+  },
+  finish(){
+    T3A.on = false;
+    t3Msg('✅ 四组跑完：表已自动填好（伪迹持续／恢复用时／是否 ≤3s）——请核对后点 T3 结论');
+    updateCalc();
+  }
+};
+function t3Msg(t, bad){
+  const a = document.getElementById('t3aMsg');
+  if(!a) return;
+  if(t){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
+  else a.textContent = (T3A.phase === 'act' ? '动作中：还剩 ' + T3A.left + ' 秒' : '静息恢复：还剩 ' + T3A.left + ' 秒');
+}
+function renderT3Auto(blk){
+  return card(blk, [h('div', {class:'tm'},
+    h('div', {class:'tinfo'},
+      h('div', {class:'big', id:'t3aMsg'}, '未开始'),
+      h('div', {class:'sm'}, '机器负责提示、计时、测恢复；你只管按提示做动作。')),
+    h('div', {class:'tbtns'},
+      h('button', {class:'btn pri', type:'button', onclick:()=>T3A.start()}, '▶ 自动跑四组'),
+      h('button', {class:'btn ghost', type:'button', onclick:()=>T3A.stop()}, '停止')))]);
+}
+
 /* ── 外壳 ───────────────────────────────────────────────────────── */
 function applyTheme(){
   const dash = S.meta.skin !== 'paper';
@@ -1626,6 +1748,8 @@ function build(){
         case 'bridge':  el = renderBridge(blk); break;
         case 't1auto':  el = renderT1Auto(blk); break;
         case 't2auto':  el = renderT2Auto(blk); break;
+        case 't3auto':  el = renderT3Auto(blk); break;
+        case 't4mains': el = renderT4Mains(blk); break;
         case 'note':
         case 'hint':    el = renderHint(blk); break;
         default:        el = null;
