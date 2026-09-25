@@ -33,6 +33,8 @@
   nav button .tab-sub { display: block; font-size: 11px; line-height: 1.35;
     color: var(--dim); opacity: .78; letter-spacing: .5px; margin-top: 2px; }
   nav button.active .tab-sub { color: var(--accent); opacity: .88; }
+  /* 导航级外链钮（专注模式↗）：靠右隔离于页签组，表示"跳出"而非"切换" */
+  nav button.nav-ext { margin-left: auto; }
   main { padding: 20px 24px; max-width: 1280px; margin: 0 auto; }
   .tab { display: none; }
   .tab.active { display: block; }
@@ -357,13 +359,14 @@
       <button class="btn" id="monStart">▶ 开始采集</button>
       <button class="btn ghost" id="monSave" disabled>💾 保存（不断连）</button>
       <button class="btn danger" id="monStop" disabled>■ 停止并保存</button>
-      <button class="btn ghost" id="btnFocus" disabled title="单独跳转到专注页（V3 虚空单境独立风格·法师 09-25 裁定：禅修页面不混在本页）；采集后台继续，结束回本页自评">🧘 专注模式</button>
+      <!-- 09-25 法师现场令：采集工具条的专注模式钮删除——导航级「专注模式↗」常驻链接已取代 -->
       <span class="msg" id="monMsg"></span>
     </div>
     <!-- 采集期手打标记（2026-09-24 法师授权，T1 睁闭眼等协议用）：
-         采集中才可点；点击即 POST /api/monitor/marker，服务器打挂钟戳，
+         09-25 法师现场令：登记界面不陈列——采集中自动出现，结束自动收起。
+         点击即 POST /api/monitor/marker，服务器打挂钟戳，
          会话保存时随契约事件流逐条写成 marker 事件（ts=按下时刻）。 -->
-    <div class="toolbar" id="markerBar" style="align-items:center;">
+    <div class="toolbar" id="markerBar" style="align-items:center; display:none;">
       <span class="hint" style="margin:0;">📍 事件标记</span>
       <button class="btn ghost mon-marker" data-label="睁眼" disabled>👁 睁眼</button>
       <button class="btn ghost mon-marker" data-label="闭眼" disabled>🌙 闭眼</button>
@@ -856,7 +859,7 @@ function askConfirm(title, bodyText) {
 
 // ── 点选芯片组（登记 & 自评共用，2026-09-24 交互重设计）──
 // 无默认值：初始一律未选；未选读出 null（数据诚实裁定6，杜绝虚标 good）。
-function bindChips(el, { multi = false } = {}) {
+function bindChips(el, { multi = false, keepSel = false } = {}) {
   const get = () => {
     const s = el.querySelectorAll(".chip.sel");
     if (!multi) return s[0] ? s[0].dataset.val : null;
@@ -869,7 +872,9 @@ function bindChips(el, { multi = false } = {}) {
       } else {
         const on = b.classList.contains("sel");
         el.querySelectorAll(".chip.sel").forEach(x => x.classList.remove("sel"));
-        if (!on) b.classList.add("sel");   // 再点一下可取消，不留误点残留
+        // keepSel（09-25 现场抢修）：必选组再点不置空——法师连点两下即被
+        // 把关拦下且不可自解，故选中态只能被"改选"或"清空重选"钮改变
+        if (!on || keepSel) b.classList.add("sel");
       }
     };
   });
@@ -883,8 +888,15 @@ const selWord = el => {
 };
 
 // ── 事前登记：状态/接触两组芯片（必选，start 前把关）──
-const regStateChips = bindChips($("monStateChips"));
-const regContactChips = bindChips($("monContactChips"));
+const regStateChips = bindChips($("monStateChips"), { keepSel: true });
+const regContactChips = bindChips($("monContactChips"), { keepSel: true });
+// 09-25 法师现场反馈：把关报错在选齐后仍挂着，像坏了——两项选齐即清提示
+$("monStateChips").addEventListener("click", () => {
+  if (regStateChips.get() && regContactChips.get()) $("monMsg").textContent = "";
+});
+$("monContactChips").addEventListener("click", () => {
+  if (regStateChips.get() && regContactChips.get()) $("monMsg").textContent = "";
+});
 // 场景意图"记忆上次"（讨论稿 §三：默认=记忆）；仅 UI 偏好，非数据默认。
 (() => {
   try {
@@ -1722,6 +1734,9 @@ $("monSave").onclick = async () => {
 // 注意：标记只进"当前这一次保存"的会话缓冲（save 幂等、二次保存返回旧路径），
 //       若采集中途点了"保存（不断连）"，之后的标记不会并入已存文件——属已知边界。
 function setMarkerButtons(on) {
+  // 09-25 法师现场令：登记界面不陈列打点条——采集中才出现，结束收起
+  const bar = $("markerBar");
+  if (bar) bar.style.display = on ? "" : "none";
   document.querySelectorAll(".mon-marker").forEach(b => { b.disabled = !on; });
   const c = $("markerCustom");
   if (c) c.disabled = !on;
@@ -1762,11 +1777,12 @@ $("markerCustom").onkeydown = (e) => {
 // 不同风格不混一页——先例 /vr·/mandala"风格完全不同，不要混合在一起"09-15）。
 // 体验层整体移居 focus.html（/focus 路由，V3 虚空单境 tokens 独立样式体系）。
 // 本页职责两条：入口按钮跳出＋专注页结束请求经 monStop 单实现执行（自评必弹不破）。
-$("btnFocus").onclick = () => {
-  if (!$("btnFocus").disabled) window.open("/focus", "fxFocus", "width=680,height=780");
-};
 $("btnFxPreview").onclick = () => {
   window.open("/focus?demo=1", "fxDemo", "width=680,height=780");
+};
+// 09-25 法师令：导航级常驻链接——非采集中也可开（专注页自持空态如实提示）
+$("navFocus").onclick = () => {
+  window.open("/focus", "fxFocus", "width=680,height=780");
 };
 if ("BroadcastChannel" in window) {
   const fxBridge = new BroadcastChannel("fx-bridge");
@@ -2450,7 +2466,8 @@ async function pollStatus() {
     $("monStart").disabled = busy;
     $("monStop").disabled = !busy;
     $("monSave").disabled = !m.running;   // "不断连保存"仅监测模式有意义
-    const bf = $("btnFocus"); if (bf) bf.disabled = !busy;   // 专注模式仅采集中可入
+    // 09-25：打点条随监测会话显隐（刷新页面后仍正确；btnFocus 旧钮已删，导航级链接取代）
+    setMarkerButtons(!!(m && m.running));
     updateVrPill();                        // 顺带刷新 VR 投显胶囊
   } catch (e) { $("statusText").textContent = "服务不可用"; }
 }
