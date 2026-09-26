@@ -1,0 +1,76 @@
+# 测试台验收工具（固定工具目录）
+
+> 建立：2026-09-27｜W1 接力窗口 AI-012·Qoder｜依据：`20260926_交接单_测试台交互重构_致W1接力窗口.md` §六 工程建议＋法师 09-27 落点裁定。
+> 本目录住的是**长期验收闸门**，不是一次性脚本。凡改面板 HTML／正本 md，改完必跑本目录全部闸门（施工方案 §十一）。
+
+## 〇、一条命令跑全部（推荐入口）
+
+```powershell
+cd D:\Project\zhiguanAI
+& "$env:LOCALAPPDATA\deno\node_compat_bin\node.exe" `
+  "01_项目管理/测试台验收工具/run_gates.js" --tag S1 --desc "步 1 只读骨架收口"
+```
+
+总跑器**只跑不改**，顺序跑完下表六道闸，并自动落一份**复审单**：
+
+- `_analysis_tmp/W1D_复审/<tag>_<时间戳>.md` —— 本轮复审单（闸门清单＋守什么＋关键数字＋**逐字原始输出**＋单独复看命令）
+- `_analysis_tmp/W1D_复审/LATEST.md` —— 恒为最近一轮
+
+**任一道闸非 0 退出 → 本步不得收口**，法师只看这一份即可裁决。
+
+## 一、本目录内文件
+
+| 文件 | 作用 | 通过标准 |
+|---|---|---|
+| `run_gates.js` | **闸门总跑器**＋复审单生成（见 §〇） | 末行「总结论：✓ 全过」，退出码 0 |
+| `check_nd_panel.js` | 面板**结构闸门**（10 组：行数／id 唯一／汇总镜像对齐／DOM 引用完整／CSS 配平／实时联动接线／G0–G5 闸门分组／第【10】组**设备无关性行为闸门**／条目计数） | 末行「✓ 全部静态闸门通过」，退出码 0 |
+| `parse_check_panel_script.js` | **语法闸门**（本窗 `node --check` 替身：`new vm.Script()` 只解析不执行） | 「✓ 面板内联脚本纯解析通过」 |
+| `smoke_panel_logic.js` | **离线逻辑冒烟闸门**（`node:vm`＋最小 DOM 替身，整段脚本跑起来＋`build()` 建树＋步 1 骨架行为断言） | 「结论：✓ 逻辑冒烟全过」 |
+| `interaction_cost_baseline.js` | **动作数闸门**（施工方案 §九 ⑤甲 验收指标复算） | 承前基线 **129**；步 2 后 ≤60；步 4 后 **≤20** |
+| `export_roles_config.js` | 角色声明表**导出／校验器**（面板 `ROLES` 为唯一权威源 → `角色声明表.json`；`verify` 模式比对源指纹） | 「✓ 派生文件与面板 ROLES 一致」 |
+| `角色声明表.json` | 上述导出的**派生视图**（11 项／4 场次，含 `_源指纹`） | 由 `verify` 保证，不手改。**注意：仓库 `.gitignore` 全局忽略 `*.json`，本件不入库**——新窗口拉库后先跑 `export_roles_config.js`（无参＝导出现生成），再跑 `verify` |
+
+| `README.md` | 本说明 | — |
+
+**不在本目录、但同属验收链的一件**（保持原位，避免打断其他窗口引用）：
+`05_产品与开发/muse-direct/tools/scan_device_hardcode.py` —— 设备无关化**扫描器**（八分类，A 类非 0 即退出码 1）。
+
+**派生产物**（不入库）：`check_nd_panel.js` 抽出 `_analysis_tmp/_nd_panel_script.js`（供语法闸门）；扫描器写 `_analysis_tmp/scan_W1D.txt`；复审单写 `_analysis_tmp/W1D_复审/`。
+
+## 二、验收命令（分闸手跑，在仓库根目录跑）
+
+```powershell
+cd D:\Project\zhiguanAI
+$NODE = "$env:LOCALAPPDATA\deno\node_compat_bin\node.exe"      # 本窗 node 替代入口，见 §三
+& $NODE "01_项目管理/测试台验收工具/parse_check_panel_script.js"
+& $NODE "01_项目管理/测试台验收工具/check_nd_panel.js"                       # 结构闸门（含第【10】组行为闸门）
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" `
+  "05_产品与开发/muse-direct/tools/scan_device_hardcode.py" `
+  "01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.html" "_analysis_tmp\scan_W1D.txt"   # A 类须为 0
+& $NODE "01_项目管理/测试台验收工具/interaction_cost_baseline.js"             # 动作数：129 → 步2 ≤60 → 步4 ≤20
+& $NODE "01_项目管理/测试台验收工具/export_roles_config.js" verify
+& $NODE "01_项目管理/测试台验收工具/smoke_panel_logic.js"
+```
+
+**一致性数字**：基线（步 1 之前，交接单口径）＝输入位 **155**／勾选 **30**／判定块 **13**／镜像 **11**／**44 块 / 7 闸门**／CSS **{295}**／动作总量 **129**。
+步 1 收口（2026-09-27 03:02 复跑，S1 复审单）＝前四项**一字未变**，块数 **44 → 46**（新增派生视图卡＋角色分工卡），CSS **{295} → {311}**（新增 `.hostbar` 系列，仍配平），动作数 **129 未退步**（步 1 明确不压动作，压缩在步 2／步 4）。
+
+## 三、本机运行时注意（W1 接力窗口 09-27 实测登记）
+
+本窗 PATH 中 **`node` 不可得**（bash／cmd／PowerShell 三通道均查无）。可用替代入口：
+`%LOCALAPPDATA%\deno\node_compat_bin\node.exe`（deno 2.9.0 的 node 兼容层）——
+上表**结构／扫描／动作数三道闸门经它复核，结果与交接单逐字一致**。
+
+**一处不等价**：该入口下 `--check` 会**实际执行**脚本，面板脚本引用浏览器 `document` 必然 `ReferenceError`，失去"只解析不执行"语义。
+故本目录改立 `parse_check_panel_script.js`（`vm.Script` 只解析）为**语法闸门正式口径**；**是否长期认可，待法师裁定**（见 `登记分片/D-0926-W1d.md` §四）。
+
+**浏览器级渲染冒烟在本沙箱不可用**：无头 Edge `--dump-dom`（`=new`／`=old` 两档）**不执行 JS**——dump 与源文件等长、`<main>` 仍为空。
+替身即 `smoke_panel_logic.js`。它**首跑就抓到面板一处真实语法错**（`renderDerived` 少一括号，此前整段脚本无法执行），证明有独立价值；
+但它**不验像素与真实布局**，界面级实测仍须待 8777 有活数据时由人做（施工方案 §十一 该格如实记「未验」）。
+
+## 四、边界
+
+1. 本目录只住**校验与复算**脚本，**不含判据、不含阈值**（判据权威仍在 `qc_pipeline.py`，阈值版本 20260920）。
+2. ⑮ 质量门禁阈值（≈82%）将来若落文件，须**单列登记、不进 `qc.json` 判定链**（施工方案 §七）。
+3. 迁移动作本身**不改脚本判定逻辑**——仅改文件位置与内部路径常量（`__dirname` 定位）。
+4. `run_gates.js` 与 `smoke_panel_logic.js` 是本窗新增的**校验工具**，不新增任何判据；派生视图内的三档建议逐字取自正本 §6.3，非自写规则。

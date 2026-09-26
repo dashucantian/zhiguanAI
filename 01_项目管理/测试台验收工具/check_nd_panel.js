@@ -1,13 +1,15 @@
-/* NeuraDock 执行面板 · 静态闸门（一次性校验脚本，_ 前缀不入库）
-   1) 抽出内联脚本 → node --check 语法
+/* NeuraDock 执行面板 · 静态闸门（入库件：2026-09-26 交接起为标准验收闸门，非一次性脚本）
+   1) 抽出内联脚本 → 交语法闸门另行 `node --check`
    2) 抽出 FLOW 数据 → 结构不变量：列行数一致、字段/勾选 id 唯一、判定 id 与汇总镜像一致
-   3) 打印条目计数，供与正本（md）逐项对照 */
+   3) 打印条目计数，供与正本（md）逐项对照
+   路径以本文件所在目录定位，任意工作目录下 `node 01_项目管理/测试台验收工具/check_nd_panel.js` 皆可跑 */
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const HTML = '01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.html';
-const TMP = '_analysis_tmp/_nd_panel_script.js';
+const REPO = path.join(__dirname, '..', '..');
+const HTML = path.join(REPO, '01_项目管理', '20260925_NeuraDock设备性能测试流程表_v1.html');
+const TMP = path.join(REPO, '_analysis_tmp', '_nd_panel_script.js');
 let bad = 0;
 const fail = m => { bad++; console.log('  ✗ ' + m); };
 const ok = m => console.log('  ✓ ' + m);
@@ -66,7 +68,9 @@ FLOW.secs.forEach(sec => {
       const has = (typeof b.lines === 'function') ? true : (b.lines && b.lines.length);
       if (!has) fail(at + ' 命令块为空');
     }
-    else if (['hint', 'note', 'fold', 'static', 'calc', 'bridge', 't1auto', 't2auto', 't3auto', 't4mains', 'posthoc', 'dossier'].indexOf(b.k) < 0) fail(at + ' 未知积木类型 ' + b.k);
+    else if (['hint', 'note', 'fold', 'static', 'calc', 'bridge', 't1auto', 't2auto', 't3auto', 't4mains', 'posthoc', 'dossier',
+      /* 步 1·只读骨架（2026-09-27 W1 接力窗口）新增两类只读派生积木 */
+      'derived', 'roletable'].indexOf(b.k) < 0) fail(at + ' 未知积木类型 ' + b.k);
   });
 });
 const dup = a => a.filter((x, i) => a.indexOf(x) !== i);

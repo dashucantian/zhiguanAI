@@ -202,6 +202,28 @@ nav:empty{display:none}
 .gnext[disabled]{opacity:.5;cursor:not-allowed}
 .gate h2{flex-wrap:wrap}
 .gsum{font-size:.74em;color:var(--ink3);margin:2px 0 10px}
+/* ── 主持人条（步 1·只读骨架，①甲／③甲，D-0926-W1c）──
+   顶部一句话＋唯一动作；**只读**：不接管流程、不改任何填写与判定（接管在步 2）。
+   两轴并存：左栏导航仍按闸门 G0–G5（守 09-25 裁定），本条只显示"当前场次"这一时间轴。 */
+.hostbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;background:var(--card);
+  border:1px solid var(--line);border-left:4px solid var(--qing);border-radius:14px;
+  padding:12px 16px;margin:0 0 12px}
+.hostbar .hsess{display:flex;align-items:center;gap:6px;flex:none}
+.hostbar .hsname{font-weight:600;font-size:.95em}
+.hostbar .hstepper{border:1px solid var(--line);background:var(--bg2);color:var(--ink2);
+  border-radius:9px;cursor:pointer;line-height:1;padding:5px 9px}
+.hostbar .hmsg{flex:1 1 260px;min-width:0;font-size:.92em}
+.hostbar .hmsg b{font-weight:600}
+.hostbar .hsub{display:block;font-size:.74em;color:var(--ink3);margin-top:2px}
+.hostbar .hacts{display:flex;gap:6px;flex:none;align-items:center;flex-wrap:wrap}
+.hostbar .hpips{display:flex;gap:6px;flex:none;align-items:center;font-size:.76em;color:var(--ink3)}
+.hostbar .hpip{width:9px;height:9px;border-radius:99px;background:var(--line);border:1px solid var(--line)}
+.hostbar .hpip.cur{background:var(--qing);border-color:var(--qing)}
+.hostbar .hpip.done{background:var(--jin);border-color:var(--jin)}
+.hostbar.closed > *{display:none}
+.hostbar.closed{padding:8px 16px}
+.hostbar.closed > span,.hostbar.closed > button{display:flex}
+.card.htarget{box-shadow:0 0 0 2px var(--qing)}
 /* 受试者提示条（B4）：大字显示"现在做什么/还有多久"，不显评价性数字 */
 .ptbar{display:none;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--line);
   border-radius:14px;padding:14px 18px;margin:0 0 12px}
@@ -380,7 +402,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.1 · 双皮肤（仪表盘／宣纸）· 2026-09-25</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.2 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -528,7 +550,7 @@ const FLOW = {
     {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,live:'t1',
      hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下实践驾驶舱上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
 
-    {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,
+    {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,drawer:1,
      hint: () => '填每段的 α 相对功率（8–12Hz 占比，实践驾驶舱频段条上读）。主看 ' + mainAlphaText() + '；其余通道作辅助参考，不单独判。',
      cols:['段','状态','打点时刻','α 相对功率','备注（眨眼/困倦/体位）'],
      rows:[
@@ -546,7 +568,7 @@ const FLOW = {
      hint: () => '点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（主看 ' + mainAlphaText() + '，用实时波形自算），你只负责按提示睁眼/闭眼。'},
     {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。<br><b>口径（09-25 法师裁定·E1 验证）</b>：此处的"提升"是<b>相对 α 比值</b>（8–12 Hz ÷ 0.5–45 Hz）的相对提升，<b>不等于 α 功率的提升</b>——两者呈亚线性（E1 实测：α 功率 +32% 时报 +28~32%，+69% 时报 +55~61%）。面板实时读数为<b>当场判断</b>用；权威值仍为保存后质检对全量 npz 的计算。'},
 
-    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',
+    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',drawer:1,
      hint: () => '静坐不动 5 分钟（不看手机、不说话）。<b>行按本设备实际通道自动生成</b>（来自实时通道名或《设备档案》）；重点盯<b>后部／枕区通道</b>（NeuraDock 前科：CP5／CP6／O2；Muse 无枕区则以 TP9／TP10 替代并标注）。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。'
        + (deviceChannels().length ? '' : '<br><b>⚠ 尚未识别设备</b>：下表暂列的是 <b>NeuraDock 预设 7 通道</b>（兜底行）——若本场测的是别的设备，请先填《设备档案》或先开始采集，行会按实际通道自动重建；<b>别按预设行照填他设备的值</b>。'),
      cols:['通道','std（µV）','峰值（µV）','连续 &gt;1min 贴底','质检通道态'],
@@ -567,7 +589,7 @@ const FLOW = {
       ['单通道塌、其余通道正常','指向该电极的个体问题。→ 记下位置与当日头型，纳入"佩戴 SOP"改进清单。']
     ]},
 
-    {k:'grid',title:'T3 耐受性试验',chip:'8 分钟',
+    {k:'grid',title:'T3 耐受性试验',chip:'8 分钟',drawer:1,
      hint:'依次做：咀嚼×10 → 眨眼×20 → 头部转动×10 → 深呼吸×10，<b>每个动作后静置 30 秒</b>。判据：伪迹后恢复 <b>≤3 s 为佳</b>。回答的是"关系禅修里的微动作会不会把整段数据打脏"。',
      cols:['动作','伪迹持续（s）','恢复基线（s）','是否 ≤3s','备注'],
      rows:[
@@ -579,7 +601,7 @@ const FLOW = {
     {k:'t3auto',title:'T3 自动跑（页面提示＋自动计时＋自动测恢复）',chip:'推荐用这个',
      hint:'点「自动跑四组」后：页面逐组大字提示（咀嚼 10 次 → 眨眼 20 次 → 头部转动 10 次 → 深呼吸 10 次），每组「动作窗口 10 秒＋静息恢复 30 秒」自动计时；机器按实时波形测伪迹持续时长与恢复用时，结束自动填上表四行。你只需按提示做动作。'},
 
-    {k:'grid',title:'T4 工频噪声',chip:'5 分钟',hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
+    {k:'grid',title:'T4 工频噪声',chip:'5 分钟',drawer:1,hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
      cols:['指标','实测','判据'],
      rows:[['工频残余比',{f:'t4r',in:'num',ph:'如 0.28',w:'110px'},'≤0.35 良好；0.35–0.5 可接受；>0.5 需排查']],
      v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换隔离数据线（有线设备）／排除蓝牙适配器占用（蓝牙设备） → 换插座回路／拔掉附近充电器 → 检查参考电极接触 → 电极重新压实']]},
@@ -689,7 +711,11 @@ const FLOW = {
       ['t7v','T7 时钟与对齐','场②'],['t8v','T8 采集→入库→质检端到端','场②'],['t10v','T10 VR 同场共存','场②'],
       ['t9v','T9 端到端延迟','待裁'],['t11v','T11 Muse 对照','场③']
     ],hint:'这一栏是自动读取的——上面每点一次结论，这里就亮一盏灯。'},
-    {k:'fields',title:'单场记录卡',chip:'每场一张',items:[
+    {k:'derived',title:'汇总派生视图（机器算给人看，人只核对）',chip:'步 1·只读派生',
+     hint:'本卡不录入任何新数据：总评建议由 11 项结论按下方三档条件算出，缺料即写「不可判定」——人若不同意，直接在下面「本设备总评」按自己的判断点按钮（判定权在人，⑥甲 退出判据）。'},
+    {k:'roletable',title:'角色分工与场次（角色声明表的当前视图）',chip:'步 1·派生自 §三 表',
+     hint:'下表整块派生自面板内的<b>角色声明表</b>（唯一权威源，导出件 <code>01_项目管理/测试台验收工具/角色声明表.json</code>）；本卡不含判据、不含阈值。'},
+    {k:'fields',title:'单场记录卡',chip:'每场一张',drawer:1,items:[
       ['r_date','日期 / 时间','2026-__-__ __:__'],['r_who','操作者',''],['r_sub','受试者','P001'],
       ['r_mode','采集模式','USB ／ 蓝牙'],['r_ver','官方软件版本',''],
       ['r_pol','本场数据是否入工厂','隔离 ／ 入厂'],
@@ -768,7 +794,7 @@ const GATES = [
    take:[['s2',5,8]]},
   {id:'g5', name:'G5 验收', acc:'#7C5CBF',
    desc:'值不值、能否长期用：T11 对照、11 项红绿灯、记录卡与总评三档。',
-   take:[['s3',0,1],['sum',0,5]]},
+   take:[['s3',0,1],['sum',0,7]]},
   {id:'ref', name:'速查与处置', acc:'#6B7280',
    desc:'判据速查卡、异常处置 10 条、最小可用子集、待裁清单——工具页，不属任何闸门。',
    take:[['ref',0,4]]}
@@ -780,11 +806,94 @@ function gateBlocks(g){
   });
 }
 
+/* ══ 角色声明表（施工方案 §三 · D-0926-W1c「①至⑮皆选甲」）════════════
+   **唯一权威配置（正本）**：面板主持人条、汇总派生视图、闸门脚本一律从这一块派生。
+   改这里即改行为；外部投影文件由 `tools/export_roles_config.js` 从本块重生成（勿手改那份）。
+   本表**不含判据、不含阈值**（判据权威仍是 qc_pipeline.py，阈值版本 20260920）；
+   它只声明"谁做／谁看／谁判／何时问人／失败怎么办／可否续跑／属哪一场"。
+   字段：actor 人／机／both｜observer 观察通道 focused·ambient·none｜judge rule·rule_then_human·human_signoff｜
+        sess 场次 0 入场核验／1 一次坐下来／2 陪着坐／3 择日对照（数组＝跨场）｜
+        gateWhen 打断触发（三态默认「先问」，⑫甲）｜note 附加口径
+   ── 三条硬约束（施工方案 §三）：T5 的 observer 必须是 none；T6 的 judge 是 human_signoff；伪迹两分（⑬）只作用于 T3 ── */
+const ROLES = [
+  {t:'t1', name:'T1 睁闭眼 α 阻断', sess:[1], order:2, card:'T1', vid:'t1v',
+   actor:'human', observer:'focused', judge:'rule_then_human',
+   minAct:'按 8 段提示睁／闭眼',
+   gateWhen:'闭眼段 α 无提升且 std 异常 → 问',
+   retry:'自动重跑该段 1 次 → 仍疑则转 T2', resume:'段'},
+  {t:'t2', name:'T2 静息噪声底与贴底复查', sess:[1], order:1, card:'T2', vid:'t2v',
+   actor:'both', observer:'ambient', judge:'rule',
+   minAct:'静坐不动 5 分钟',
+   gateWhen:'噪声底越阈 → 问「是否重贴电极」',
+   retry:'自动重跑 1 次 → 转查电极', resume:'分片'},
+  {t:'t3', name:'T3 耐受性（伪迹恢复）', sess:[1], order:3, card:'T3', vid:'t3v',
+   actor:'human', observer:'focused', judge:'rule_then_human',
+   minAct:'做四组动作（提示走屏幕大字＋提示音，②甲）',
+   gateWhen:'动作段伪迹异常 → 问',
+   retry:'自动重跑该组 1 次', resume:'动作',
+   note:'⑬ 伪迹两分：生理性伪迹如实记录但不计设备缺陷；设备性伪迹计缺陷（结论分列）'},
+  {t:'t4', name:'T4 工频噪声', sess:[1], order:1, card:'T4', vid:'t4v',
+   actor:'machine', observer:'ambient', judge:'rule',
+   minAct:'无',
+   gateWhen:'越阈 → 提示查线（不打断）',
+   retry:'记录＋提示', resume:'是'},
+  {t:'t5', name:'T5 长时程稳定性', sess:[2], order:1, card:'T5', vid:'t5v',
+   actor:'both', observer:'none', judge:'rule＋中途一次询问',
+   minAct:'正常静坐（不许要求盯屏）',
+   gateWhen:'中途一次「你还在吗」；断流／丢包越线 → 打断',
+   retry:'据答续或停', resume:'是（最需续跑）',
+   note:'③甲场次 2＝陪着坐：observer 必须为 none，警戒性衰退有硬数字依据'},
+  {t:'t6', name:'T6 原始流全量核验', sess:[0], order:2, card:'T6', vid:'t6v',
+   actor:'human', observer:'focused', judge:'human_signoff',
+   minAct:'查设备端配置并报「有无原始档」',
+   gateWhen:'无原始档 → 上报，不 retry',
+   retry:'否（一次性）', resume:'否',
+   note:'「给不给原始档」机器无法自证，故判定权在人'},
+  {t:'t7', name:'T7 时钟与对齐', sess:[1, 2], order:3, card:'T7', vid:'t7v',
+   actor:'machine', observer:'ambient', judge:'rule',
+   minAct:'无',
+   gateWhen:'jitter／漂移越阈 → 打断',
+   retry:'提示＋记录', resume:'是'},
+  {t:'t8', name:'T8 采集→入库→质检端到端', sess:[2], order:3, card:'T8', vid:'t8v',
+   actor:'machine', observer:'none', judge:'rule',
+   minAct:'无',
+   gateWhen:'QC_ERROR → 自动重跑脚本 1 次',
+   retry:'幂等重算', resume:'是'},
+  {t:'t9', name:'T9 端到端延迟', sess:[3], order:3, card:'T9', vid:'t9v',
+   actor:'machine', observer:'none', judge:'rule（结论默认「待核」⑩）',
+   minAct:'外部打点 1 次（真值须外部基准）',
+   gateWhen:'打点失败 → 问',
+   retry:'自动重打点 3 次取中位', resume:'是'},
+  {t:'t10', name:'T10 VR 同场共存', sess:[3], order:1, card:'T10', vid:'t10v',
+   actor:'human', observer:'ambient', judge:'rule_then_human',
+   minAct:'戴 VR 跑完一场',
+   gateWhen:'VR 中断 → INVALID（非设备失败）',
+   retry:'否', resume:'否'},
+  {t:'t11', name:'T11 双设备同协议对照', sess:[3], order:2, card:'T11', vid:'t11v',
+   actor:'human', observer:'ambient', judge:'rule_then_human',
+   minAct:'同时戴两台静坐',
+   gateWhen:'单台掉线 → 该台 INVALID＋问',
+   retry:'掉线重启即不可续', resume:'不确定',
+   note:'⑭ 对照口径（正本 §八.14 为准）：镜像蒙太奇＋统一重采样到同一采样率＋只比相对特征＋对照前不清洗；对照设备的阻抗项记「不可得」'}
+];
+const SESS = [
+  {id:0, name:'场次 0 入场核验', once:true, dur:'约 10 分钟',
+   desc:'建档＋设备自报字段核验＋试跑态验证——一次性，以后各场不再重复。'},
+  {id:1, name:'场次 1 一次坐下来', dur:'30–35 分钟',
+   desc:'一次坐下来跑完 T2＋T4＋T7（并行）→ T1 → T3；人只静坐、睁闭眼、做四组动作、收口按一次。'},
+  {id:2, name:'场次 2 陪着坐', dur:'60–70 分钟',
+   desc:'T5＋T7（漂移续测）＋T8 全自动；人什么都不做（observer=none），异常才被叫。可与真实晚课同场。'},
+  {id:3, name:'场次 3 择日对照', dur:'约 45 分钟',
+   desc:'T10＋T11＋T9：戴 VR 跑一场、同时戴两台静坐、T9 外部打点一次。'}
+];
+function rolesOfSess(sid){ return ROLES.filter(r => r.sess.indexOf(sid) >= 0).sort((a, b) => a.order - b.order); }
+function roleCardTitle(r){ return r.card + ' '; }   /* 卡标题前缀匹配（面板内标题形如「T1 睁闭眼 α 阻断试验」） */
+
 const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:'⚪ 不可判定','':'—'};
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
-let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash'}};
+let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash', sess:0, hostClosed:false, drawerOpen:false}};
 const LIVE = {t1:null, t5:null,
   /* ── 实时数据桥字段（2026-09-25 与计时条合并为同一对象）── */
   on:false, es:null, st:null, tick:null, wave:null, at:0, markers:0, why:''};
@@ -866,7 +975,14 @@ function card(blk, body, extraChip){
       c.classList.toggle('closed');
       e.currentTarget.textContent = c.classList.contains('closed') ? '＋' : '−';
     }}, '−'));
-  const c = h('div', {class:'card'}, h('div', {class:'chead'}, ...head));
+  const c = h('div', {class:'card'});
+  /* ①甲 证据抽屉：标了 drawer 的卡＝机器代填／事后查阅的证据位，默认收起（人不必填表）；
+     收起只是视觉收拢，控件仍在 DOM 里，完成度与闸门统计口径不变。 */
+  if(blk.drawer && !S.meta.drawerOpen){
+    c.classList.add('drawer', 'closed');
+    head[head.length - 1].textContent = '＋';
+  } else if(blk.drawer) c.classList.add('drawer');
+  c.appendChild(h('div', {class:'chead'}, ...head));
   const cb = h('div', {class:'cbody'});
   /* hint 可为字符串（固定文案）或函数（依赖《设备档案》/实时通道 → 由 refreshDevHints 自动重算） */
   if(blk.hint){
@@ -887,7 +1003,7 @@ function verdictRow(blk){
       class:'vb', type:'button', 'data-v':val, 'data-vid':v,
       'aria-pressed': String(S.verdicts[v] === val), onclick:()=>{
         S.verdicts[v] = (S.verdicts[v] === val) ? '' : val;
-        paintVerdicts(v); saveSoon(); recount(); updateMirror();
+        paintVerdicts(v); saveSoon(); recount(); updateMirror(); paintDerived();
       }
     }, lab));
   });
@@ -1136,6 +1252,135 @@ function renderStatic(blk){
     h('tbody', null, ...blk.rows.map(r=> h('tr', null, ...r.map(c=> h('td', {html:c})))))))];
   return card(blk, body);
 }
+/* ══ 步 1·只读骨架 ②：汇总改为派生视图（施工方案 §十 步1②／§九）════════
+   原则：**只搬运已算出的读数，不新增指标、不新增算法**（红线5 不造平行路径）。
+   原料只有两处——《事后自动读数》读回来的 PH（服务端 /posthoc 纯读接口），
+   以及面板里已有的各项结论 S.verdicts；两者缺料即如实写「待补录／不可判定」，不猜。 */
+const REC_MAP = [
+  {f:'r_date', label:'日期 / 时间', src:'会话开始时刻', get:ph => {
+    const s = ph && ph.npz_meta && ph.npz_meta.recording_started_at;
+    return s ? String(s) : ''; }},
+  {f:'r_mode', label:'采集模式', src:'《设备档案》链路', get:() => {
+    const k = String(S.fields['dp_link'] || '').trim();
+    return k ? k.split(/[（(：:,\/]/)[0].trim() : ''; }},
+  {f:'r_dur', label:'总时长 / 样本数', src:'npz 时长＋样本数', get:ph => {
+    const m = ph && ph.npz_meta; if(!m) return '';
+    const dur = m.duration_s != null ? (Math.round(m.duration_s * 10) / 10 + ' s') : '—';
+    const n = m.samples != null ? m.samples : (m.timing && m.timing.n);
+    return dur + '／样本 ' + (n != null ? n : '—'); }},
+  {f:'r_eff', label:'有效采样率（Hz）', src:'qc 审计 effective_hz', get:ph => {
+    const v = ph && ph.audit && ph.audit.effective_hz; return v == null ? '' : String(v); }},
+  {f:'r_loss', label:'丢包率（%）', src:'qc 审计 span／packet loss', get:ph => {
+    const a = ph && ph.audit; if(!a) return '';
+    const v = (a.span_loss_rate != null ? a.span_loss_rate : a.packet_loss_rate);
+    return v == null ? '' : (Number(v) * 100).toFixed(1); }},
+  {f:'r_clean', label:'干净比例 clean_ratio', src:'qc 审计 clean_ratio', get:ph => {
+    const v = ph && ph.audit && ph.audit.clean_ratio; return v == null ? '' : String(v); }},
+  {f:'r_pol', label:'本场数据是否入工厂', src:'隔离区判据 recommend', get:ph => {
+    const v = ph && ph.audit && ph.audit.recommend;
+    return v === 'quarantine' ? '隔离' : (v ? '隔离 ／ 入厂（按 qc：' + v + '）' : ''); }}
+];
+function derivedRows(ph){
+  return REC_MAP.map(m => {
+    let v = '';
+    try{ v = m.get(ph) || ''; }catch(e){ v = ''; }
+    return {f:m.f, label:m.label, src:m.src, val:v, has:!!v};
+  });
+}
+function autoFillRecord(){
+  const ph = PH;
+  if(!ph){ toast('还没读入会话——先到「场② 事后自动读数」列会话并读入'); return; }
+  const filled = [];
+  derivedRows(ph).forEach(r => {
+    if(r.has && !String(S.fields[r.f] || '').trim()){ S.fields[r.f] = r.val; syncField(r.f); filled.push(r.label); }
+  });
+  recount(); saveSoon();
+  toast(filled.length ? ('记录卡已代填 ' + filled.length + ' 位：' + filled.join('、') + '（请核对）')
+                      : '记录卡相应位已有值，未覆盖（机器不覆盖人填的内容）');
+}
+function sumSuggest(){
+  /* 三档条件逐字取自正本 §6.3（不增不减、不设新阈值）：
+     可用＝T1 合格及以上＋T2 无贴底＋T6 原始档齐备＋T5 通过；
+     有条件可用＝T1 合格但 T2 有贴底／T3 恢复慢／T10 不通过；
+     不可用＝T6 无真原始档，或 T1 与 T2 双双不达标且排查后仍不合格。
+     这里只做一件事：结论未判的项一律不推（⚪ 不可判定），推出来的只是建议，判定权在人。 */
+  const V = S.verdicts;
+  const NAME = {t1v:'T1',t2v:'T2',t3v:'T3',t5v:'T5',t6v:'T6',t10v:'T10'};   /* 给人看项名，不给字段名 */
+  const bad = k => (V[k] === 'fail' || V[k] === 'na');
+  const need = ['t1v','t2v','t6v','t5v'];
+  const missing = need.filter(k => !V[k]).map(k => NAME[k]);
+  if(missing.length) return {lab:'⚪ 不可判定', why:'结论未判：' + missing.join('、')};
+  if(V.t6v === 'fail' || V.t6v === 'na') return {lab:'🔴 不可用', why:'T6 无真原始档（正本 §6.3 第三档；D32 硬条件）'};
+  if(bad('t1v') && bad('t2v')) return {lab:'🔴 不可用', why:'T1 与 T2 双双不达标（正本 §6.3 第三档；D32 硬条件）'};
+  const down = [];
+  if(bad('t2v')) down.push('T2 有贴底');
+  if(bad('t3v')) down.push('T3 恢复慢');
+  if(bad('t10v')) down.push('T10 不通过');
+  if(down.length) return {lab:'🟡 有条件可用', why:'降级项：' + down.join('／') + '（正本 §6.3 第二档）'};
+  const green = ['t1v','t2v','t6v','t5v'].every(k => V[k] === 'pass');
+  if(green){
+    const pend = ['t3v','t10v'].filter(k => !V[k]).map(k => NAME[k]);
+    return {lab:'🟢 可用', why:'T1 合格＋T2 无贴底＋T6 原始档齐备＋T5 通过（正本 §6.3 第一档）'
+      + (pend.length ? '　｜注意：' + pend.join('／') + ' 尚未判，若判为不通过则按第二档降为「有条件可用」' : '')};
+  }
+  return {lab:'🟡 有条件可用', why:'核心四项未全达「可用」，但够不上「不可用」——按正本 §6.3 逐条核对适用条件'};
+}
+function renderDerived(blk){
+  const body = [h('div', {class:'autob noprint'},
+    h('button', {class:'btn pri', type:'button', onclick:autoFillRecord}, '机器代填记录卡'),
+    h('span', {class:'hint', style:'margin:0'}, '代填只补空位，不覆盖人已填的内容'))];
+  const tw = h('div', {class:'tw'}, h('table', null,
+    h('thead', null, h('tr', null, h('th', null, '记录位'), h('th', null, '机器算出的值'), h('th', null, '来源'))),
+    h('tbody', {id:'dvBody'})));
+  body.push(tw);
+  const sug = sumSuggest();
+  body.push(h('div', {class:'note ' + (sug.lab.indexOf('🟢') === 0 ? 'good' : (sug.lab.indexOf('🔴') === 0 ? 'warm' : ''))},
+    h('b', null, '总评建议（派生，不替你判）：' + sug.lab),
+    h('div', {html:'依据：' + sug.why + '　｜　要改就在下面「本设备总评」按你的判断点按钮——<b>判定权在人</b>。'})));
+  body.push(h('p', {class:'tip', id:'dvMiss', text:''}));
+  const c = card(blk, body);
+  setTimeout(() => paintDerived(c), 0);
+  return c;
+}
+function paintDerived(cardEl){
+  const tb = (cardEl && cardEl.querySelector('#dvBody')) || document.getElementById('dvBody');
+  if(!tb) return;
+  tb.innerHTML = '';
+  const rows = derivedRows(PH);
+  const empty = rows.filter(r => !r.has).map(r => r.label);
+  rows.forEach(r => {
+    const human = String(S.fields[r.f] || '').trim();
+    tb.appendChild(h('tr', null,
+      h('td', {style:'width:30%;color:var(--ink2);font-size:.9em'}, r.label),
+      h('td', {html: r.has
+          ? (human && human !== r.val ? ('<b>' + r.val + '</b>　<span class="tip">（你已填：' + human + '，以你的为准）</span>') : r.val)
+          : '<span class="tip">待补录</span>'}),
+      h('td', {class:'tip', style:'width:34%'}, r.has ? r.src : '机器拿不到（未读会话或该读数不存在）')));
+  });
+  const m = (cardEl && cardEl.querySelector('#dvMiss')) || document.getElementById('dvMiss');
+  if(m) m.textContent = empty.length
+    ? ('仍需人提供的 ' + empty.length + ' 位：' + empty.join('、') + '　（这几项机器无法自证，按⑥甲保留给人）')
+    : '记录卡全部位已由机器备齐，人只需核对。';
+}
+function renderRoleTable(blk){
+  const rows = ROLES.slice().sort((a, b) => (sessOf(a) - sessOf(b)) || (a.order - b.order));
+  const body = [h('div', {class:'tw'}, h('table', null,
+    h('thead', null, h('tr', null, ...['项', '场次', '谁做', '谁看', '谁判', '人的最小动作', '失败处置', '可续跑'].map(c => h('th', null, c)))),
+    h('tbody', null, ...rows.map(r => h('tr', null,
+      h('td', null, r.name),
+      h('td', null, r.sess.join('、')),
+      h('td', null, ({human:'人', machine:'机器', both:'人＋机'})[r.actor] || r.actor),
+      h('td', null, ({focused:'盯屏', ambient:'旁路', none:'不看'})[r.observer] || r.observer),
+      h('td', null, r.judge),
+      h('td', null, r.minAct),
+      h('td', null, r.retry),
+      h('td', null, r.resume))))))];
+  const n = rows.filter(r => r.actor !== 'human').length;
+  body.push(h('p', {class:'tip'}, h('b', null, '本表读数：'),
+    '11 项里 ' + n + ' 项人不必动手（actor＝机器或只看结果）；人真正要做的动作见「人的最小动作」列——验收指标就是把它们压到 ≤20 次（⑤甲）。'));
+  return card(blk, body);
+}
+
 function renderHint(blk){
   return h('div', {class:'note ' + (blk.tone || '')},
     h('b', null, blk.t), h('div', {html:blk.d}));
@@ -1296,6 +1541,8 @@ function recount(){
   refreshGates();
   updateMirror();
   paintKpi(done, total);
+  renderHostBar();   /* 主持人条随状态刷新（步 1·只读派生，不写业务字段） */
+  paintDerived();
 }
 
 /* ── 探活 ───────────────────────────────────────────────────────── */
@@ -2135,6 +2382,8 @@ function build(){
   if(nav) nav.innerHTML = '';            /* B1：顶部页签退役，改用左栏闸门大纲 */
   const side = h('aside', {class:'side', id:'side'}, h('div', {class:'stitle'}, '闸门大纲（点击切换）'));
   const pane = h('div', {class:'pane', id:'pane'});
+  /* 主持人条（步 1·只读骨架）：常驻版面顶部，在闸门区之上；不接管流程 */
+  main.appendChild(h('div', {class:'hostbar noprint', id:'hostBar'}));
   /* 断流横幅：常驻于版面顶部，仅在无新帧时亮起（法师 09-25 裁定②） */
   main.appendChild(h('div', {class:'rtwarn noprint', id:'rtWarn'},
     h('span', {id:'rtWarnWhy'}, '⚠ 无新帧——数据可能已断：' + devHelpText()),
@@ -2169,6 +2418,8 @@ function build(){
         case 'calc':    el = renderCalc(blk); break;
         case 'fields':  el = renderFields(blk); break;
         case 'mirror':  el = renderMirror(blk); break;
+        case 'derived': el = renderDerived(blk); break;
+        case 'roletable': el = renderRoleTable(blk); break;
         case 'static':  el = renderStatic(blk); break;
         case 'timer':   el = renderTimer(blk); break;
         case 'v':       el = renderV(blk); break;
@@ -2255,6 +2506,108 @@ function nextGate(id){
   showGate(nx.id);
   toast('已通过 ' + GATES[i].name + ' → 进入 ' + nx.name);
 }
+
+/* ── 主持人条（步 1·只读骨架）──────────────────────────────────────────
+   ①甲：一屏一句话＋一个动作。步 1 **只读**——只做"看"和"带我去那张卡"，
+   不接管计时/提示/填写（那是步 2 的事），也不写 S 里任何业务字段。
+   ③甲：场次＝时间主轴；导航仍按闸门（两轴并存，D-0926-W1c §三.1 法师知情同意）。
+   ⑥甲 退出判据：本条可整条收起（右上「⌄ 主持」），收起后一切照旧。 */
+function sessOf(r){ return r.sess[0]; }
+function findRoleCards(r){
+  /* 同一项可能在两个场次各有一张卡（如 T7 并入 T2／并入 T5），按卡标题前缀找 */
+  const hits = [];
+  document.querySelectorAll('.gate .card').forEach(c => {
+    const h3 = c.querySelector('h3');
+    if(h3 && h3.textContent.trim().indexOf(roleCardTitle(r).trim()) === 0) hits.push(c);
+  });
+  return hits;
+}
+function roleState(r){
+  if(S.verdicts[r.vid]) return 'done';
+  const cards = findRoleCards(r);
+  let tt = 0, st = 0;
+  cards.forEach(c => {
+    c.querySelectorAll('[data-c],[data-f]').forEach(el => {
+      tt++;
+      const id = el.getAttribute('data-c') || el.getAttribute('data-f');
+      const val = el.hasAttribute('data-c') ? S.checks[id] : S.fields[id];
+      if(val && String(val).trim()) st++;
+    });
+  });
+  if(tt === 0) return 'todo';
+  return st === 0 ? 'todo' : (st >= tt ? 'ready' : 'doing');
+}
+function hostNext(sid){
+  /* 本场次里第一个未收口的项（ROLES 已按 order 排好＝施工方案 §二 的并行→串行顺序） */
+  const list = rolesOfSess(sid);
+  const notDone = list.filter(r => roleState(r) !== 'done');
+  return {list, next: notDone[0] || null, doneN: list.length - notDone.length, total: list.length};
+}
+function hostFocus(sid){
+  const n = hostNext(sid);
+  if(!n.next){ toast('本场次各项结论均已判定——去「汇总与总评」收口'); showGate('g5'); return; }
+  const cards = findRoleCards(n.next);
+  if(!cards.length){ toast('未找到该项的卡（角色声明表与卡标题失配，请核对 §三 表）'); return; }
+  const c = cards[0];
+  const gate = c.closest('.gate');
+  if(gate && !gate.classList.contains('active')) showGate(gate.id);
+  /* 证据抽屉里收起的卡先展开，再定位 */
+  if(c.classList.contains('closed')){
+    const t = c.querySelector('.ctgl');
+    c.classList.remove('closed'); if(t) t.textContent = '−';
+  }
+  document.querySelectorAll('.card.htarget').forEach(e => e.classList.remove('htarget'));
+  c.classList.add('htarget');
+  setTimeout(() => c.classList.remove('htarget'), 2600);
+  c.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function renderHostBar(){
+  const el = document.getElementById('hostBar');
+  if(!el) return;
+  const collapsed = !!S.meta.hostClosed;
+  el.classList.toggle('closed', collapsed);
+  el.innerHTML = '';
+  const tgBtn = h('button', {class:'hstepper', type:'button', title:'收起／展开主持人条（⑥ 退出判据：可关）',
+    onclick: () => { S.meta.hostClosed = !S.meta.hostClosed; saveSoon(); renderHostBar(); }},
+    collapsed ? '⌃ 主持' : '⌄ 主持');
+  if(collapsed){
+    el.appendChild(h('span', {class:'hsname'}, '主持人条（已收起）'));
+    el.appendChild(tgBtn);
+    return;
+  }
+  const sid = S.meta.sess || 0;
+  const sess = SESS.filter(s => s.id === sid)[0] || SESS[0];
+  const n = hostNext(sid);
+  const head = h('div', {class:'hsess'},
+    h('button', {class:'hstepper', type:'button', title:'上一场次', onclick: () => { S.meta.sess = Math.max(0, sid - 1); saveSoon(); renderHostBar(); }}, '◀'),
+    h('span', {class:'hsname'}, sess.name),
+    h('button', {class:'hstepper', type:'button', title:'下一场次', onclick: () => { S.meta.sess = Math.min(SESS.length - 1, sid + 1); saveSoon(); renderHostBar(); }}, '▶'),
+    h('span', {class:'hpips'}, SESS.map(s => h('i', {
+      class:'hpip' + (s.id === sid ? ' cur' : (hostNext(s.id).doneN === hostNext(s.id).total ? ' done' : '')),
+      title:s.name + '（' + hostNext(s.id).doneN + '/' + hostNext(s.id).total + ' 已收口）'}))));
+  const line = n.next
+    ? h('div', {class:'hmsg'},
+        h('b', null, '🤖 第 ' + (n.doneN + 1) + '/' + n.total + ' 项 · ' + n.next.name),
+        h('span', {class:'hsub'}, '人做：' + n.next.minAct
+          + '　｜　谁判：' + n.next.judge
+          + '　｜　' + (n.next.actor === 'machine' ? '机器自跑，不打断' : '机器陪着跑')) )
+    : h('div', {class:'hmsg'},
+        h('b', null, '🤖 ' + sess.name + ' 各项结论已判'),
+        h('span', {class:'hsub'}, '下一步：到「汇总与总评」收口（' + sess.dur + '）'));
+  const acts = h('div', {class:'hacts'},
+    n.next ? h('button', {class:'btn pri', type:'button', onclick: () => hostFocus(sid)}, '带我去这一项') : null,
+    h('button', {class:'btn ghost', type:'button', title:'展开／收起全部证据抽屉卡',
+      onclick: () => {
+        const open = !S.meta.drawerOpen; S.meta.drawerOpen = open; saveSoon();
+        document.querySelectorAll('.card.drawer').forEach(c => {
+          c.classList.toggle('closed', !open);
+          const t = c.querySelector('.ctgl'); if(t) t.textContent = open ? '−' : '＋';
+        });
+        toast(open ? '证据抽屉已全部展开（再点收起）' : '证据抽屉已收起');
+      }}, '🗂 证据抽屉'),
+    tgBtn);
+  el.appendChild(head); el.appendChild(line); el.appendChild(acts);
+}
 function hardRefresh(){ build(); updateCalc(); }
 
 /* 事件委托：整个 main 只挂一次，重建 DOM 不会重复绑定 */
@@ -2313,7 +2666,7 @@ window.addEventListener('scroll', ()=>{
 }, {passive:true});
 document.getElementById('bReset').onclick = ()=>{
   if(!confirm('清空全部勾选与记录？此操作不可撤销（建议先「导出」留档）。')) return;
-  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin}};
+  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin, sess:0, hostClosed:false, drawerOpen:false}};
   save(); hardRefresh(); toast('已清空');
 };
 window.addEventListener('beforeunload', ()=>{ try{ save(); }catch(e){} });

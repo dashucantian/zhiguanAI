@@ -1,7 +1,10 @@
-/* 交互成本基线（一次性分析，_ 前缀不入库）
-   目的：把"现在很机械"变成可核对的数字——今天这套面板要人动手多少次、其中多少其实机器能自己填。 */
+/* 交互成本基线／动作数闸门（入库件：施工方案 §九 ⑤甲 验收指标由本脚本复算）
+   目的：把"现在很机械"变成可核对的数字——今天这套面板要人动手多少次、其中多少其实机器能自己填。
+   承前基线 129 次（2026-09-26）；闸门标准：步 2 后 ≤60，步 4 后 ≤20。
+   路径以本文件所在目录定位，任意工作目录下皆可跑 */
 const fs = require('fs');
-const HTML = '01_项目管理/20260925_NeuraDock设备性能测试流程表_v1.html';
+const path = require('path');
+const HTML = path.join(__dirname, '..', '20260925_NeuraDock设备性能测试流程表_v1.html');
 const src = fs.readFileSync(HTML, 'utf8');
 const js = src.match(/<script>([\s\S]*?)<\/script>/)[1];
 const i0 = js.indexOf('const FLOW ='), i1 = js.indexOf('const GATES =');
