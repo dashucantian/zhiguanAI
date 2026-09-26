@@ -13,8 +13,13 @@ let d = 0, end = -1;
 for (let k = s0; k < js.length; k++) { if (js[k] === '{') d++; else if (js[k] === '}') { d--; if (!d) { end = k; break; } } }
 FLOW = eval('(' + js.slice(s0, end + 1) + ')');
 
-/* 机器能自己填的字段前缀（来自面板内的自动跑器：T1A / T2A / T3A / posthoc） */
-const AUTO = [/^t1a\d$/, /^t1t?\d$/, /^t2(s|p|f|q)_/, /^t3(a|b|c)\d$/, /^ph/, /^t5c\d$/, /^t6/, /^t7/, /^t8/];
+/* 机器能自己填的字段前缀（**逐个对过面板源码的写入语句**，无人点击即自动写入者才计）：
+   T1A（t1a*）／T2A（t2s_/t2p_/t2f_）／T3A（t3a-t3d*）／posthoc 自动读数（ph*／t5dur/eff/loss／t5c*／t6*／t7*／t8*）
+   ／派生视图机器代填（r_date 等 7 位，见 REC_MAP）。
+   09-27 步 2 收口时补：t3d*（T3A.put('t3d'+k) 自动写基线说明）、t5dur/eff/loss（读会话即自动填）、r_*（代填记录卡）。
+   不补：dp_*（须人点「设备预设」载档）、t1n*（每段人工备注）、t5a/b/n*（T5 分片人工格）、t4r、f_s0*。 */
+const AUTO = [/^t1a\d$/, /^t1t?\d$/, /^t2(s|p|f|q)_/, /^t3(a|b|c|d)\d$/, /^ph/, /^t5c\d$/, /^t5(dur|eff|loss)$/,
+              /^r_(date|mode|dur|eff|loss|clean|pol)$/, /^t6/, /^t7/, /^t8/];
 const isAuto = f => AUTO.some(r => r.test(f));
 
 let totalF = 0, autoF = 0, ck = 0, vd = 0;

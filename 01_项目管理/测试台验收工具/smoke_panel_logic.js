@@ -14,7 +14,10 @@ const HTML = path.join(REPO, '01_项目管理', '20260925_NeuraDock设备性能�
 const src = fs.readFileSync(HTML, 'utf8');
 const js = src.match(/<script>([\s\S]*?)<\/script>/)[1]
   /* 顶层 const/let 绑在不进 globalThis，补一句具名导出供本闸门断言（不改面板文件） */
-  + '\n;globalThis.__X = {ROLES, SESS, S, FLOW, build, hostNext, sumSuggest, autoFillRecord, derivedRows, renderHostBar, recount};\n';
+  + '\n;globalThis.__X = {ROLES, SESS, S, FLOW, build, hostNext, sumSuggest, autoFillRecord, derivedRows,'
+  + ' renderHostBar, recount, guideNow, hostGuidePulse, T1A, T2A, T3A, LIVE, OBS, obsTick, obsPaint, obsInit,'
+  + ' HGATES, HG, askHuman, hgAnswer, hgTick, hgRoles, hgWhen, rerunOnce, rerunUsed, buildDossier,'
+  + ' UNDO, undoLast, pauseGuide};\n';
 
 /* ── 最小 DOM 替身 ── */
 let created = 0;
@@ -98,6 +101,7 @@ doc.querySelectorAll = sel => findAll(doc, sel);
 doc.querySelector = sel => findAll(doc, sel)[0] || null;
 doc.addEventListener = () => {};
 doc.body = mkNode('body');
+doc.appendChild(doc.body);   /* body 必须挂在树上，否则 body 级节点（观察窗）整树遍历看不见 */
 
 /* 静态骨架：把 HTML 正文（脚本块之外）里真实存在的 id 全部建出来，
    这样面板新增静态节点时本闸门不需要跟着改清单。 */
@@ -238,6 +242,171 @@ X.S.verdicts.sumv ? fail('派生视图擅自写了总评判定（越权）') : o
 /* ── 角色分工卡在位 ── */
 const rt = cls('card').filter(n => { const t = n.querySelector('h3'); return t && /角色分工与场次/.test(t.textContent); });
 rt.length === 1 ? ok('【9】角色分工卡在位（面板可见，不靠外部文件）') : fail('角色分工卡缺失');
+/* ── 步 2①：主持人条接管 T1/T2/T3 提示与计时 ── */
+X.guideNow() === null ? ok('【10】无人跑时主持人条不显引导态') : fail('空闲时不应有引导');
+X.T1A.on = true; X.T1A.seg = 3; X.T1A.left = 42;
+let gd = X.guideNow();
+gd && gd.item === 't1' && gd.big === '请睁眼' && gd.left === 42
+  ? ok('【10】T1A 跑到第 3 段 → 主持人条提示「请睁眼·剩 42 秒」') : fail('T1 引导派生错：' + JSON.stringify(gd));
+X.renderHostBar();
+const re = []; walk(doc, re);
+const hg = re.filter(n => clsHas(n, 'hguide'));
+hg.length === 1 ? ok('【10】引导态在主持人条内渲染（1 处）') : fail('引导态渲染异常：' + hg.length);
+const bigN = re.filter(n => n.attrs.id === 'hgBig').pop();
+const stepN = re.filter(n => n.attrs.id === 'hgStep').pop();
+const txtAll = [bigN, stepN].map(n => String(n && n.textContent)).join(' ');
+/µV|α＝|[\d.]+\s*µV/.test(txtAll) ? fail('引导态露出波形数值，违 §十二.5：' + txtAll)
+  : ok('【10】引导态只显词与秒，不显波形数值（§十二.5）');
+/T1 睁闭眼/.test(stepN.textContent) && /第 3\/8 段/.test(stepN.textContent)
+  ? ok('【10】引导态标出项名与段进度') : fail('引导态缺项名/段进度：' + stepN.textContent);
+X.T1A.on = false; X.T2A.on = true; X.T2A.left = 288;
+gd = X.guideNow();
+gd.item === 't2' && gd.big === '请静坐不动' && gd.left === 288
+  ? ok('【10】T2A 在跑 → 提示「请静坐不动·剩 288 秒」') : fail('T2 引导派生错：' + JSON.stringify(gd));
+X.T2A.on = false; X.T3A.on = true; X.T3A.idx = 1; X.T3A.phase = 'rest'; X.T3A.left = 21;
+gd = X.guideNow();
+gd.big === '放松静息，别动' && /第 2\/4 组/.test(gd.step) && gd.total === 30
+  ? ok('【10】T3A 静息期 → 提示切换为「放松静息」，按组报进度') : fail('T3 引导派生错：' + JSON.stringify(gd));
+X.T3A.on = false;
+X.renderHostBar(); X.hostGuidePulse();
+const re2 = []; walk(doc, re2);
+re2.filter(n => clsHas(n, 'hguide')).length === 0
+  ? ok('【10】全部机器停 → 主持人条自动回落为「下一步」行（不留僵住的引导）') : fail('停机后引导未回收');
+
+/* ── 步 2②：独立可观察通道（⑦甲）── 关键是"不同源"，故断言全部避开自测层 ── */
+X.OBS.n = 0; X.OBS.paintAt = 0;
+const frame = (wave, extra) => ({data: JSON.stringify(Object.assign({type:'tick', connected:true, sfreq:250}, {wave}, extra || {}))});
+X.obsTick(frame({Fp1:[1, -2, 30, -4], TP9:[0.5, 1.5, -2.5]}));
+X.OBS.n === 1 && X.LIVE.tick === null && X.LIVE.at === 0
+  ? ok('【11】观察窗吃帧不借自测层：OBS 计数 +1，LIVE.tick／LIVE.at 分毫未动（两条路真分开）')
+  : fail('观察通道与自测层同源：OBS.n=' + X.OBS.n + ' LIVE.tick=' + X.LIVE.tick + ' LIVE.at=' + X.LIVE.at);
+X.OBS.chs.map(c => c.ch).join(',') === 'Fp1,TP9'
+  ? ok('【11】通道名取自帧本身（换设备即换名，不写死）') : fail('通道名非来自帧：' + JSON.stringify(X.OBS.chs));
+Math.round(X.OBS.chs[0].pk) === 30 ? ok('【11】原始幅值按帧自算（|峰值|），不读 qc.json') : fail('幅值算错：' + X.OBS.chs[0].pk);
+X.OBS.paintAt = 0; X.obsPaint();
+const ob1 = []; walk(doc, ob1);
+ob1.filter(n => clsHas(n, 'obsrow')).length === 2
+  ? ok('【11】每通道一条幅值条在位（2 通道 → 2 行）') : fail('观察行渲染数不符');
+X.OBS.paintAt = 0; X.obsTick({data: '{ 解不开的二进制'});
+/解不开/.test(X.OBS.err) ? ok('【11】坏帧不抛错，如实报"解不开"（互为见证）') : fail('坏帧处理不符：' + X.OBS.err);
+X.OBS.paintAt = 0; X.OBS.last = Date.now() - 9000; X.obsPaint();
+const ob2 = []; walk(doc, ob2);
+const silentTxt = ob2.filter(n => clsHas(n, 'obsline')).map(n => n.textContent).join(' ');
+/静默 9 秒/.test(silentTxt) ? ok('【11】静默用本窗自己的表判（9 秒即报，不依赖 liveStale）')
+  : fail('静默判定未生效：' + silentTxt.slice(0, 60));
+X.S.meta.obsClosed = true; X.OBS.paintAt = 0; X.obsPaint();
+const ob3 = []; walk(doc, ob3);
+ob3.filter(n => clsHas(n, 'obs')).every(n => clsHas(n, 'closed'))
+  ? ok('【11】观察窗可收起（⑥甲 退出判据·可关其一）') : fail('收起态未生效');
+X.S.meta.obsOff = true; X.OBS.paintAt = 0; X.obsPaint();
+const ob4 = []; walk(doc, ob4);
+ob4.filter(n => clsHas(n, 'obs')).every(n => clsHas(n, 'gone'))
+  ? ok('【11】观察窗可整窗关闭') : fail('关闭态未生效');
+X.S.meta.obsOff = false; X.S.meta.obsClosed = false; X.OBS.paintAt = 0; X.obsPaint();
+
+/* ── 步 2③：human_gate 三类触发＋四元组 ── */
+const badKind = X.HGATES.filter(g => [1, 2, 3].indexOf(g.kind) < 0);
+badKind.length === 0 && X.HGATES.length >= 3
+  ? ok('【12】触发只落三类（①/②/③），共 ' + X.HGATES.length + ' 条') : fail('有触发不属三类：' + JSON.stringify(badKind.map(g => g.id)));
+const miss4 = X.HGATES.filter(g => !g.ask || !g.schema || !g.schema.length || !(g.ttl > 0) || !g.dflt);
+miss4.length === 0 ? ok('【12】每条四元组齐（问什么／schema／ttl／默认）') : fail('四元组缺件：' + JSON.stringify(miss4.map(g => g.id)));
+const badDflt = X.HGATES.filter(g => g.dflt !== 'none' && !g.schema.some(o => o.k === g.dflt));
+badDflt.length === 0 ? ok('【12】超时默认动作必落在自家 schema 内（不越权发明第三步）') : fail('默认动作不在 schema：' + JSON.stringify(badDflt.map(g => g.id)));
+/µV|\d+\.\d+/.test(X.HGATES.map(g => g.ask).join(' '))
+  ? fail('提示文案露出数值（§十二.5 只显词不显数）') : ok('【12】提示文案只说事不摆数值（§十二.5）');
+const t1g = X.HGATES.filter(g => g.id === 'hg_t1_gray')[0];
+/rule_then_human/.test(X.hgRoles(t1g))
+  ? ok('【12】roles 派生自 §三 声明表 judge（非另写一套）') : fail('roles 未取自 ROLES：' + X.hgRoles(t1g));
+const r1 = X.ROLES.filter(r => r.t === 't1')[0];
+X.hgWhen(t1g) === r1.gateWhen ? ok('【12】触发条件取 ROLES.gateWhen 原文') : fail('触发条件与声明表分叉');
+X.HG.pending = null; X.HG.queue.length = 0; X.S.meta.hgLog = [];
+X.askHuman('hg_t1_gray') ? ok('【12】首次触发成功挂起') : fail('首次触发被吞');
+X.renderHostBar();
+const q1 = []; walk(doc, q1);
+const prom = q1.filter(n => clsHas(n, 'hgprompt'));
+prom.length === 1 ? ok('【12】提示渲染在主持人条一处（不另开弹窗）') : fail('提示渲染数：' + prom.length);
+const howRow = prom.length ? prom[0].children.filter(n => clsHas(n, 'hghow')) : [];
+const nBtn = howRow.length ? howRow[0].children.length : 0;
+nBtn === t1g.schema.length ? ok('【12】答案按钮数＝schema 数（' + nBtn + ' 个，只接受这些）') : fail('schema 按钮数不符：' + nBtn);
+prom[0].children.some(b => /忽略/.test(b.textContent))
+  ? ok('【12】「✕ 忽略」在位（⑥甲 退出判据·可忽略）') : fail('缺忽略出口');
+X.askHuman('hg_t1_gray') === false ? ok('【12】同一条不重复问（不反复打断）') : fail('重复触发未去重');
+X.askHuman('hg_nodata') === false && X.HG.queue.length === 1
+  ? ok('【12】前一条未答时后来者排队，不同时开两条') : fail('排队机制失效：' + JSON.stringify(X.HG.queue));
+X.hgAnswer('hg_t1_gray', 'note', false);
+X.S.meta.hgLog[X.S.meta.hgLog.length - 1].key === 'note'
+  ? ok('【12】人答即记账（key／超时否／剩余秒／时刻）') : fail('应答未记账');
+X.HG.pending === 'hg_nodata' ? ok('【12】前一条答完自动放出队列里那条') : fail('队列未接续：' + X.HG.pending);
+X.HG.dueAt = Date.now() - 1;
+X.hgTick();
+const last = X.S.meta.hgLog[X.S.meta.hgLog.length - 1];
+last.timeout === true && last.key === 'none'
+  ? ok('【12】ttl 到点按四元组默认执行并记为超时（不静默）') : fail('超时默认未生效：' + JSON.stringify(last));
+X.HG.pending === null && X.S.verdicts.t1v === 'pass'
+  ? ok('【12】提示链收尾不残留 pending') : fail('pending 未清');
+
+/* ── 步 2④：自动重跑一次＋如实记（④甲）── */
+X.S.meta.rerunLog = []; X.HG.pending = null; X.HG.queue.length = 0; X.S.meta.hgLog = [];
+let ran = 0;
+X.rerunOnce('probe', '探针', () => { ran++; }) ? ok('【13】首次不达标 → 允许自动重跑一次') : fail('首跑未被允许');
+ran === 1 ? ok('【13】重跑动作确实被执行') : fail('重跑回调未跑');
+X.rerunOnce('probe', '探针', () => { ran++; }) === false && ran === 1
+  ? ok('【13】同一粒度只重跑一次（不得无限重跑）') : fail('重跑次数失控：' + ran);
+const rl = X.S.meta.rerunLog[0];
+rl && rl.key === 'probe' && rl.label && rl.at ? ok('【13】重跑如实记（粒度／内容／时刻）') : fail('重跑未记账');
+
+X.T1A.on = true; X.T1A.seg = 3; X.T1A.acc = {3: []}; X.T1A.empty = 0;
+X.T1A.segDone();
+X.S.meta.rerunLog.some(e => e.key === 't1seg3') && X.T1A.seg === 3 && !X.HG.pending
+  ? ok('【13】T1 空段 → 自动重跑该段一次，且此时不打扰人') : fail('T1 按段重跑不符：seg=' + X.T1A.seg + ' pending=' + X.HG.pending);
+X.T1A.acc = {3: []};
+X.T1A.segDone();
+X.T1A.segDone();
+X.HG.pending === 'hg_nodata'
+  ? ok('【13】重跑后仍无数据 → 升级 human_gate（不静默继续）') : fail('未升级到人：' + X.HG.pending);
+
+/* T2 整场重跑一次；仍贴底才问人。前置：知情同意已确认，免得 consent 抢占 pending */
+const arr = []; for(let i=0;i<100;i++) arr.push({sd: 1, pk: 5});
+X.S.checks.cs5 = true;
+X.LIVE.on = false; X.S.meta.rerunLog = []; X.S.meta.hgLog = []; X.HG.pending = null; X.HG.queue.length = 0;
+X.T2A.on = true; X.T2A.acc = {ChA: arr};
+X.T2A.finish();
+X.S.meta.rerunLog.some(e => e.key === 't2') && !X.HG.pending
+  ? ok('【13】T2 贴底 → 先整场自动重跑一次，未先问人') : fail('T2 首次应重跑：' + JSON.stringify(X.S.meta.rerunLog) + ' pending=' + X.HG.pending);
+X.T2A.on = true; X.T2A.acc = {ChA: arr};
+X.T2A.finish();
+X.HG.pending === 'hg_t2_floor'
+  ? ok('【13】重跑后仍贴底 → 升级 human_gate') : fail('T2 未升级到人：' + X.HG.pending);
+X.hgAnswer('hg_t2_floor', 'reelectrode', false);
+
+/* 档案导出：机器代做的动作（重跑＋提问应答）必须随档案列出 */
+const dos = X.buildDossier();
+/自动重跑 1 次/.test(dos) ? ok('【13】档案列出「自动重跑」行（含粒度与时刻）') : fail('档案未列重跑行');
+/human_gate/.test(dos) && /reelectrode/.test(dos)
+  ? ok('【13】档案列出「向人提问与应答」行（人答／超时均留痕）') : fail('档案未列提问应答');
+
+/* ── 步 2⑤：撤销／重来＋为什么（猜错要便宜）── */
+X.renderHostBar();
+const q9 = []; walk(doc, q9);
+const hbtns = q9.filter(n => n.tagName === 'BUTTON').map(n => n.textContent);
+['⏸ 暂停', '⤺ 撤销上一步', '❓为什么'].every(t => hbtns.some(x => String(x).indexOf(t) === 0))
+  ? ok('【14】三件常在控制在位：⏸ 暂停／⤺ 撤销上一步／❓为什么') : fail('缺常在控制：' + hbtns.join(','));
+X.UNDO.stack.length = 0; X.S.fields = {}; X.S.verdicts.t1v = 'pass';
+X.T1A.on = true; X.T1A.seg = 2; X.T1A.acc = {2: [0.5, 0.6]}; X.T1A.empty = 0;
+X.T1A.segDone();
+X.S.fields.t1a2 === '0.550' && X.UNDO.stack.length === 1
+  ? ok('【14】机器代写即留可撤销帧（T1 第 2 段 α＝0.550）') : fail('未留撤销帧：' + JSON.stringify(X.UNDO.stack));
+X.undoLast();
+!X.S.fields.t1a2 ? ok('【14】撤销＝还原机器写的那一格（字段已清空）') : fail('撤销未还原：' + X.S.fields.t1a2);
+X.S.verdicts.t1v === 'pass' ? ok('【14】撤销不碰人已判的结论（只撤机器代写）') : fail('撤销越界改了人的判定');
+(X.S.meta.undoLog || []).length === 1 ? ok('【14】撤销本身也留痕（档案可查）') : fail('撤销未记账');
+X.undoLast() === false ? ok('【14】无帧可撤时如实拒绝，不乱动数据') : fail('空栈撤销行为异常');
+X.T1A.on = false; X.T2A.on = false; X.T3A.on = false;
+X.pauseGuide() === false ? ok('【14】没有机器在跑时「暂停」如实说无事可停') : fail('空暂停被当成成功');
+X.T2A.on = true; X.T2A.left = 120; X.T2A.timer = null; X.T2A.acc = {};
+X.pauseGuide() === true && X.T2A.on === false
+  ? ok('【14】跑动中「暂停」即停本机（已完成部分数据保留）') : fail('暂停未生效');
+
 console.log('\n（本次共创建 ' + created + ' 个节点）');
 console.log(bad ? '结论：✗ 逻辑冒烟 ' + bad + ' 处问题' : '结论：✓ 逻辑冒烟全过');
 process.exit(bad ? 1 : 0);

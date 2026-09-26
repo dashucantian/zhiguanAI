@@ -220,6 +220,39 @@ nav:empty{display:none}
 .hostbar .hpip{width:9px;height:9px;border-radius:99px;background:var(--line);border:1px solid var(--line)}
 .hostbar .hpip.cur{background:var(--qing);border-color:var(--qing)}
 .hostbar .hpip.done{background:var(--jin);border-color:var(--jin)}
+/* 步 2①：引导态——大字提示＋剩余秒＋本段进度条（只显词与秒，不显波形数值） */
+.hostbar .hguide{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.hostbar .hgbig{font-size:1.5em;font-weight:700;letter-spacing:.02em;color:var(--qing)}
+.hostbar .hgleft{font-size:1.05em;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2)}
+.hostbar .hgbar{flex:1 1 120px;min-width:80px;height:5px;border-radius:99px;background:var(--bg2);
+  border:1px solid var(--line);overflow:hidden;align-self:center}
+.hostbar .hgbar > i{display:block;height:100%;background:var(--qing)}
+/* 步 2③：human_gate 提示行（占主持人条一处，不另开弹窗；可忽略·可关·超时按四元组默认） */
+.hostbar .hgprompt{flex:1 1 100%;border:1px solid var(--jin);border-left:4px solid var(--jin);
+  background:var(--bg2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+.hostbar .hgq{font-size:1.02em}
+.hostbar .hgmeta,.hostbar .hgttl{font-size:.76em;color:var(--ink3)}
+.hostbar .hgttl{font-variant-numeric:tabular-nums}
+.hostbar .hghow{display:flex;gap:6px;flex-wrap:wrap}
+.hostbar .hgwhy{font-size:.78em;color:var(--ink2);border-top:1px dashed var(--line);padding-top:5px}
+/* 步 2②：独立可观察通道小窗（常驻右下角，body 级，不随闸门切换重建） */
+.obs{position:fixed;right:14px;bottom:14px;z-index:60;width:290px;max-width:44vw;
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 6px 22px rgba(0,0,0,.14);padding:8px 10px;font-size:.78em;line-height:1.5}
+.obs.gone{display:none}
+.obs.closed{width:auto;padding:6px 10px}
+.obs .obshead{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.obs .obssub{font-size:.86em;color:var(--ink3)}
+.obs .obsbtn{padding:1px 7px;font-size:.9em}
+.obs .obsline{margin-top:4px;color:var(--ink2)}
+.obs .obsgood{color:var(--qing)}
+.obs .obswarn{color:var(--bad);font-weight:600}
+.obs .obsrows{margin-top:5px;max-height:34vh;overflow:auto}
+.obs .obsrow{display:flex;align-items:center;gap:6px}
+.obs .obSch{flex:none;width:58px;font-size:.9em;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.obs .obsbar{flex:none;height:7px;border-radius:3px;background:var(--qing);opacity:.75;min-width:2px}
+.obs .obsnum{flex:none;font-size:.86em;color:var(--ink3);font-variant-numeric:tabular-nums}
+@media print{.obs{display:none}}
 .hostbar.closed > *{display:none}
 .hostbar.closed{padding:8px 16px}
 .hostbar.closed > span,.hostbar.closed > button{display:flex}
@@ -402,7 +435,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.2 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.3 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -889,11 +922,164 @@ const SESS = [
 function rolesOfSess(sid){ return ROLES.filter(r => r.sess.indexOf(sid) >= 0).sort((a, b) => a.order - b.order); }
 function roleCardTitle(r){ return r.card + ' '; }   /* 卡标题前缀匹配（面板内标题形如「T1 睁闭眼 α 阻断试验」） */
 
+/* ── 步 2③：human_gate（施工方案 §六 · ⑫甲）──
+   只允许三类触发：① 只有人能做的 ② 判据落在灰区 ③ 数据有效性有风险；
+   每条写死四元组：问什么 ask ＋ 只接受什么答案 schema ＋ 多久不回默认做什么 ttl/dflt ＋ 谁有权答 roles。
+   触发条件与判定权（when／roles）一律**从 §三 角色声明表 ROLES 取**，本表不另立一套判据（§四ter AI 不自写规则）。
+   默认动作一律是"不擅动、记下未答"——除知情同意（伦理优先，未答即不得继续）。 */
+const HG_KIND = {1:'① 只有人能做的', 2:'② 判据落在灰区', 3:'③ 数据有效性有风险'};
+const HGATES = [
+  {id:'hg_t1_gray', item:'t1', kind:2, ttl:120, dflt:'none',
+   ask:'闭眼段 α 相对功率没提起来（未达 T1 卡上"≥15% 合格"这条既有判读线）——是电极接触问题，还是没真闭眼？',
+   schema:[{k:'reelectrode', label:'重贴电极，重跑该段'}, {k:'note', label:'受试者状态原因，记下继续'},
+           {k:'invalid', label:'该段作废，标 INVALID'}]},
+  {id:'hg_t2_floor', item:'t2', kind:3, ttl:120, dflt:'none',
+   ask:'噪声底出现连续贴底段——先重贴电极再重跑，还是记为环境干扰继续？',
+   schema:[{k:'reelectrode', label:'重贴电极后重跑 5 分钟'}, {k:'note', label:'环境干扰，记下继续'},
+           {k:'invalid', label:'本项作废'}]},
+  {id:'hg_t3_art', item:'t3', kind:3, ttl:90, dflt:'none',
+   ask:'这一组动作没测到有效伪迹／恢复数据——是采集断了，还是动作没做到位？',
+   schema:[{k:'retrygroup', label:'查连接后重跑该组'}, {k:'invalid', label:'该组无效，标 INVALID'},
+           {k:'skip', label:'跳过该组，继续下一组'}]},
+  {id:'hg_nodata', item:null, kind:3, ttl:90, dflt:'none', whenText:'自动跑连续两段取不到波形（既有中止条件）',
+   ask:'连续两段取不到波形——采集是不是已经断了？（可先看右下角观察窗是否报静默）',
+   schema:[{k:'restart', label:'去驾驶舱重启采集'}, {k:'checklink', label:'查线／查设备'},
+           {k:'abort', label:'中止本场，保留已采数据'}]},
+  {id:'hg_consent', item:null, kind:1, ttl:60, dflt:'stop', whenText:'知情同意 cs5 未确认（只有人能答）',
+   ask:'知情同意还没确认——这一项只有人能答：本人是否已同意按本流程采集？',
+   schema:[{k:'agreed', label:'已同意（去勾「知情同意」）'}, {k:'stop', label:'未同意 → 停止采集'}]}
+];
+const HG = {pending:null, dueAt:0, queue:[], openWhy:false};
+function hgOf(id){ return HGATES.filter(g => g.id === id)[0] || null; }
+function hgRoles(g){
+  const r = g.item ? ROLES.filter(x => x.t === g.item)[0] : null;
+  return r ? (r.judge + '（依 §三 表）') : '操作者（人）';
+}
+function hgWhen(g){
+  const r = g.item ? ROLES.filter(x => x.t === g.item)[0] : null;
+  return g.whenText || (r ? r.gateWhen : '—');
+}
+function hgAsked(id){ return (S.meta.hgLog || []).some(e => e.id === id && !e.timeout); }
+/* 触发入口：一次只问一条（§六 两宽限之"不反复打断"），后来的排队等前一条答完 */
+function askHuman(id, ctx){
+  const g = hgOf(id);
+  if(!g) return false;
+  if(hgAsked(id) || HG.pending === id || HG.queue.indexOf(id) >= 0) return false;
+  if(HG.pending){ HG.queue.push(id); return false; }
+  HG.pending = id; HG.dueAt = Date.now() + g.ttl * 1000; HG.ctx = ctx || null;
+  renderHostBar();
+  return true;
+}
+function hgAnswer(id, key, timedOut){
+  const g = hgOf(id) || {ttl:0};
+  S.meta.hgLog = S.meta.hgLog || [];
+  S.meta.hgLog.push({id, item:g.item || '-', kind:g.kind, key,
+                     timeout:!!timedOut, left_s: Math.max(0, Math.round((HG.dueAt - Date.now()) / 1000)),
+                     at: new Date().toLocaleString('zh-CN', {hour12:false})});
+  HG.pending = null; HG.dueAt = 0; HG.openWhy = false;
+  saveSoon();
+  toast(timedOut ? ('提示超时（' + g.ttl + ' 秒无人答）→ 按四元组默认动作执行：' + hgDfltText(g))
+                 : ('已记下：' + key));
+  const nx = HG.queue.shift();
+  if(nx) askHuman(nx);
+  else renderHostBar();
+  return key;
+}
+function hgDfltText(g){
+  return g.dflt === 'stop' ? '视为未同意，停止采集' : '不擅动作，只记"提示过期未答"';
+}
+function hgTick(){
+  if(!HG.pending) return;
+  const t = document.getElementById('hgTtl');
+  const left = Math.max(0, Math.round((HG.dueAt - Date.now()) / 1000));
+  if(left <= 0){ const g = hgOf(HG.pending); hgAnswer(HG.pending, g.dflt, true); return; }
+  if(t) t.textContent = '剩 ' + left + ' 秒未答 → ' + hgDfltText(hgOf(HG.pending));
+}
+/* 提示行渲染进主持人条（人只用看一处；可忽略／可关，⑥甲 退出判据） */
+function renderHgPrompt(){
+  const g = hgOf(HG.pending);
+  if(!g) return null;
+  const btns = g.schema.map(o => h('button', {class:'btn', type:'button',
+    onclick: () => hgAnswer(g.id, o.k, false)}, o.label));
+  const row = h('div', {class:'hgprompt'},
+    h('b', {class:'hgq'}, '❓ ' + g.ask),
+    h('span', {class:'hgmeta'}, '谁有权答：' + hgRoles(g)),
+    h('span', {class:'hgttl', id:'hgTtl'}, '剩 ' + Math.max(0, Math.round((HG.dueAt - Date.now()) / 1000)) + ' 秒未答 → ' + hgDfltText(g)),
+    h('span', {class:'hghow'}, btns),
+    h('button', {class:'btn ghost', type:'button', onclick: () => { HG.openWhy = !HG.openWhy; renderHostBar(); }},
+      HG.openWhy ? '▾ 为什么问我' : '▸ 为什么问我'),
+    h('button', {class:'btn ghost', type:'button', title:'忽略本条（不代答，仍会记"未答"）',
+      onclick: () => hgAnswer(g.id, 'ignored', false)}, '✕ 忽略'));
+  if(HG.openWhy) row.appendChild(h('div', {class:'hgwhy'},
+    '触发类别：' + HG_KIND[g.kind] + '　｜　触发条件（§三 表原文）：' + hgWhen(g)
+    + '　｜　出处：施工方案 §六 四元组＋§三 角色声明表'));
+  return row;
+}
+
+/* ── 步 2④：自动重跑一次＋如实记（施工方案 §五.3 · ④甲）──
+   阈值内允许自动重跑**一次**，粒度＝§三 声明表 retry 列（T1 按段／T2 整场／T3 按组）；
+   第二次仍不达标即升级 human_gate——**不得静默继续，也不得无限重跑**。
+   "如实记"走既有通道：postMarker（打点即会话事件流）＋面板 S.meta.rerunLog（导出档案时列明），
+   不新增记录文件、不另立平行路径（红线5）。 */
+function rerunOnce(key, label, fn){
+  S.meta.rerunLog = S.meta.rerunLog || [];
+  if(S.meta.rerunLog.some(e => e.key === key)) return false;        /* 只此一次 */
+  S.meta.rerunLog.push({key, label, at: new Date().toLocaleString('zh-CN', {hour12:false})});
+  postMarker('自动重跑：' + label);                                  /* 进会话事件流，事后可查 */
+  toast('第 1 次不达标 → 自动重跑一次：' + label + '（已如实记入打点与记录）');
+  saveSoon();
+  fn();
+  return true;
+}
+function rerunUsed(key){ return (S.meta.rerunLog || []).some(e => e.key === key); }
+
+/* ── 步 2⑤：撤销／重来（施工方案 §一 · Horvitz 第 6/7 条"猜错要便宜"）──
+   机器**代写的每一个字段**都可一句话撤回：写入前先压一帧快照，撤销即整帧还原并如实记一笔。
+   只撤"机器代做的写"，不动人已填／人已判的东西（撤销也不得覆盖人的判断）。 */
+const UNDO = {stack: [], max: 30};
+function undoPush(label, fields){
+  const snap = {};
+  (fields || []).forEach(f => { snap[f] = Object.prototype.hasOwnProperty.call(S.fields, f) ? S.fields[f] : null; });
+  UNDO.stack.push({label, fields: (fields || []).slice(), snap, at: new Date().toLocaleString('zh-CN', {hour12:false})});
+  while(UNDO.stack.length > UNDO.max) UNDO.stack.shift();
+}
+function undoLast(){
+  const e = UNDO.stack.pop();
+  if(!e){ toast('没有机器代写的动作可撤（人自己填／自己判的，机器不代撤）'); return false; }
+  e.fields.forEach(f => {
+    if(e.snap[f] === null) delete S.fields[f]; else S.fields[f] = e.snap[f];
+    syncField(f);
+  });
+  S.meta.undoLog = S.meta.undoLog || [];
+  S.meta.undoLog.push({label: e.label, fields: e.fields.length, at: new Date().toLocaleString('zh-CN', {hour12:false})});
+  updateCalc(); recount(); saveSoon();
+  toast('已撤销：' + e.label + '（还原 ' + e.fields.length + ' 个字段；此动作已记入档案）');
+  return true;
+}
+function pauseGuide(){
+  const gd = guideNow();
+  if(!gd){ toast('当前没有机器在跑——无需暂停'); return false; }
+  gd.stop(); renderHostBar();
+  toast('已暂停：' + gd.name + '（已完成部分的数据保留，可再手动开始）');
+  return true;
+}
+function whyNext(){
+  const sid = S.meta.sess || 0;
+  const n = hostNext(sid);
+  if(!n.next){ toast('本场次各项结论已判——下一步是到「汇总与总评」收口'); return; }
+  const r = n.next;
+  toast('为什么是这一项：' + r.name + ' 排在第 ' + r.order + ' 位（§二 并行→串行顺序）'
+    + '｜人最少要做：' + r.minAct + '｜判定权：' + r.judge + '｜中断代价：' + r.retry, 9000);
+}
+
+
+
+
 const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:'⚪ 不可判定','':'—'};
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
-let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash', sess:0, hostClosed:false, drawerOpen:false}};
+let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash', sess:0, hostClosed:false, drawerOpen:false, obsClosed:false, obsOff:false, hgLog:[], rerunLog:[]}};
 const LIVE = {t1:null, t5:null,
   /* ── 实时数据桥字段（2026-09-25 与计时条合并为同一对象）── */
   on:false, es:null, st:null, tick:null, wave:null, at:0, markers:0, why:''};
@@ -940,10 +1126,10 @@ function h(tag, props, ...kids){
   return e;
 }
 let toastT = null;
-function toast(msg){
+function toast(msg, ms){
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('on');
-  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), 2400);
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), ms || 2400);
 }
 function beep(times){
   try{
@@ -1290,10 +1476,13 @@ function derivedRows(ph){
 function autoFillRecord(){
   const ph = PH;
   if(!ph){ toast('还没读入会话——先到「场② 事后自动读数」列会话并读入'); return; }
-  const filled = [];
+  const filled = [], filledF = [];
   derivedRows(ph).forEach(r => {
-    if(r.has && !String(S.fields[r.f] || '').trim()){ S.fields[r.f] = r.val; syncField(r.f); filled.push(r.label); }
+    if(r.has && !String(S.fields[r.f] || '').trim()){ S.fields[r.f] = r.val; syncField(r.f); filled.push(r.label); filledF.push(r.f); }
   });
+  /* 步 2⑤：代填只补空位，故撤销帧快照整帧留空（撤销＝清回空位），不动人已填的内容 */
+  if(filledF.length) UNDO.stack.push({label:'机器代填记录卡 ' + filledF.length + ' 位', fields: filledF.slice(),
+                                       snap:{}, at:new Date().toLocaleString('zh-CN', {hour12:false})});
   recount(); saveSoon();
   toast(filled.length ? ('记录卡已代填 ' + filled.length + ' 位：' + filled.join('、') + '（请核对）')
                       : '记录卡相应位已有值，未覆盖（机器不覆盖人填的内容）');
@@ -1358,6 +1547,7 @@ function paintDerived(cardEl){
       h('td', {class:'tip', style:'width:34%'}, r.has ? r.src : '机器拿不到（未读会话或该读数不存在）')));
   });
   const m = (cardEl && cardEl.querySelector('#dvMiss')) || document.getElementById('dvMiss');
+  if(!S.checks.cs5) askHuman('hg_consent');   /* 步 2③：① 类触发——知情同意只有人能答，未答不代判 */
   if(m) m.textContent = empty.length
     ? ('仍需人提供的 ' + empty.length + ' 位：' + empty.join('、') + '　（这几项机器无法自证，按⑥甲保留给人）')
     : '记录卡全部位已由机器备齐，人只需核对。';
@@ -1437,15 +1627,25 @@ function renderTimer(blk){
 function fmt(s){ s = Math.max(0, Math.round(s)); return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
 
 /* ── T1 计算 ────────────────────────────────────────────────────── */
-function updateCalc(){
-  const box = document.getElementById('calc-t1');
-  if(!box) return;
+/* α 阻断增幅与判级：**唯一一处算**（updateCalc 显示与 human_gate 触发共用，防两处线值分叉）。
+   判读线 30%／15% 出自 T1 卡既有文案（正本 §T1 判读），此处只是收拢，不新设阈值。 */
+function t1BlockStat(){
   const open = [], close = [];
   for(let i=1;i<=8;i++){
     const v = parseFloat(S.fields['t1a'+i]);
     if(isNaN(v)) continue;
     (i % 2 ? open : close).push(v);
   }
+  const mo = open.length ? open.reduce((a,b)=>a+b,0)/open.length : NaN;
+  const mc = close.length ? close.reduce((a,b)=>a+b,0)/close.length : NaN;
+  const ok = !isNaN(mo) && !isNaN(mc) && mo > 0;
+  const d = ok ? (mc/mo - 1) * 100 : null;
+  return {open, close, mo, mc, d, lv: d === null ? null : (d >= 30 ? 'pass' : (d >= 15 ? 'cond' : 'fail'))};
+}
+function updateCalc(){
+  const box = document.getElementById('calc-t1');
+  if(!box) return;
+  const st = t1BlockStat(), open = st.open, close = st.close, mo = st.mo, mc = st.mc;
   const clear = (id, val, lab)=>{
     box.appendChild(h('div', null, h('span', {class:'k'}, lab + '：'), h('span', {class:'v'}, val)));
   };
@@ -1454,12 +1654,10 @@ function updateCalc(){
     box.appendChild(h('div', {class:'k'}, '还没有数据——填上任意一段的 α 相对功率就会开始算。'));
     return;
   }
-  const mo = open.length ? open.reduce((a,b)=>a+b,0)/open.length : NaN;
-  const mc = close.length ? close.reduce((a,b)=>a+b,0)/close.length : NaN;
   box.appendChild(h('div', null, h('span', {class:'k'}, '睁眼均值：'), h('span', {class:'v'}, open.length ? mo.toFixed(3) + '（' + open.length + ' 段）' : '待填')));
   box.appendChild(h('div', null, h('span', {class:'k'}, '闭眼均值：'), h('span', {class:'v'}, close.length ? mc.toFixed(3) + '（' + close.length + ' 段）' : '待填')));
-  if(!isNaN(mo) && !isNaN(mc) && mo > 0){
-    const d = (mc/mo - 1) * 100;
+  if(st.d !== null){
+    const d = st.d;
     const lv = d >= 30 ? ['pass','优秀'] : (d >= 15 ? ['cond','合格'] : ['fail','可疑']);
     box.appendChild(h('div', {class:'bigres'}, h('span', {class:'k'}, '提升幅度：'),
       h('span', {class:'v'}, (d>=0?'+':'') + d.toFixed(1) + '%'),
@@ -1809,6 +2007,90 @@ function liveTick(ev){
    面板此后不得再用陈旧波形充数（此前会反复算同一帧并照填，属造假风险）。 */
 const STALE_MS = 5000;
 function liveStale(){ return !LIVE.at || (Date.now() - LIVE.at) > STALE_MS; }
+/* ══ 步 2②：独立可观察通道（施工方案 §五.2 · ⑦甲）══
+   常驻原始波形小窗：**自己一条 SSE、自己解析、自己判静默**——不经 liveTick／measureAlpha，不读 qc.json。
+   依据 Bowden 2025：自测层与观察通道同源失效时漏检率跳到 .52 量级，故两边互为见证——
+   任一边挂了、卡住了、拿陈旧帧充数了，另一边仍可见。小窗可关可收起（⑥甲 退出判据：可关）。
+   本通道不判好坏、不设阈值（不新增判据），只把"帧有没有在来、来的原始幅值多大"摆给人看。 */
+const OBS = {es:null, n:0, last:0, prev:0, gap:0, chs:[], err:'', connected:null, sfreq:null,
+             ageTimer:null, paintAt:0};
+let OBS_EL = null;      /* 小窗节点走闭包引用，不占 document id（与自测层零共享） */
+function obsEnsure(){
+  if(OBS_EL && OBS_EL.parentNode) return OBS_EL;
+  OBS_EL = h('div', {class:'obs noprint', id:'obsWin'});
+  document.body.appendChild(OBS_EL);
+  return OBS_EL;
+}
+function obsInit(){
+  if(!/^https?:$/.test(location.protocol)){ OBS.err = 'file:// 打不到流——请从 /ndtest 打开本面板'; obsPaint(); return; }
+  if(!OBS.es){
+    try{
+      OBS.es = new EventSource('/api/monitor/stream');    /* 自成一条，不与 LIVE.es 共用 */
+      OBS.es.onmessage = obsTick;
+      OBS.es.onerror = () => { OBS.err = '观察通道 SSE 异常（浏览器会自动重连）'; };
+    }catch(e){ OBS.err = '观察通道建不起来：' + e.message; }
+  }
+  if(!OBS.ageTimer) OBS.ageTimer = setInterval(obsPaint, 1000);   /* 独立计时：自己的表判静默 */
+  obsPaint();
+}
+function obsTick(ev){
+  let d;
+  try{ d = JSON.parse(ev.data); }                          /* 独立解析：不取 LIVE.tick 的现成对象 */
+  catch(e){ OBS.err = '观察通道收到解不开的帧（此刻自测层若照常出数，即以本窗为准查它）'; return; }
+  if(!d) return;
+  if(d.type === 'end'){ OBS.err = '服务端报会话已结束'; obsPaint(); return; }
+  if(d.type !== 'tick') return;
+  const now = Date.now();
+  OBS.n++; OBS.prev = OBS.last; OBS.last = now; OBS.gap = OBS.prev ? (now - OBS.prev) : 0;
+  OBS.connected = !!d.connected; OBS.sfreq = d.sfreq || null;
+  const w = d.wave || {};
+  OBS.chs = Object.keys(w).map(k => {
+    const a = w[k] || [];
+    let pk = 0;
+    for(let i=0;i<a.length;i++){ const x = a[i] < 0 ? -a[i] : a[i]; if(x > pk) pk = x; }
+    return {ch:k, n:a.length, pk:pk};
+  });
+  obsPaint();
+}
+function obsPaint(){
+  const el = obsEnsure(); if(!el) return;
+  const now = Date.now();
+  if(now - OBS.paintAt < 400 && OBS.n > 1) return;         /* 限流：帧可 10Hz，画 2.5Hz 足够 */
+  OBS.paintAt = now;
+  const silent = OBS.last ? Math.round((now - OBS.last) / 1000) : null;
+  el.innerHTML = '';
+  const closed = !!S.meta.obsClosed;
+  el.classList.toggle('closed', closed);
+  const head = h('div', {class:'obshead'},
+    h('b', null, '🔭 原始波形观察窗'),
+    h('span', {class:'obssub'}, closed ? '（已收起）' : '不经自测脚本·自己一条流·自己判静默'),
+    h('button', {class:'btn ghost obsbtn', type:'button',
+      title:'收起／展开观察窗（⑥甲：可关）',
+      onclick: () => { S.meta.obsClosed = !S.meta.obsClosed; saveSoon(); obsPaint(); }},
+      closed ? '⌃' : '⌄'),
+    h('button', {class:'btn ghost obsbtn', type:'button', title:'关掉观察窗（本轮不再显示，重开面板回来）',
+      onclick: () => { S.meta.obsOff = true; saveSoon(); el.classList.add('gone'); }}, '✕'));
+  if(S.meta.obsOff){ el.classList.add('gone'); el.appendChild(head); return; }
+  el.appendChild(head);
+  if(closed) return;
+  const state = !OBS.last
+    ? (OBS.err || '还没收到帧——这条通道自己也没看见数据')
+    : (silent > 3 ? ('⚠ 静默 ' + silent + ' 秒（本窗自己的表）' + (OBS.err ? '｜' + OBS.err : ''))
+       : ('在流：末帧距今 ' + silent + ' 秒｜帧间隔 ' + Math.round(OBS.gap) + ' ms'));
+  el.appendChild(h('div', {class:'obsline'}, h('span', {class: (!OBS.last || silent > 3) ? 'obswarn' : 'obsgood'}, state)));
+  el.appendChild(h('div', {class:'obsline'},
+    '累计帧 ' + OBS.n + '｜设备连接：' + (OBS.connected === null ? '—' : (OBS.connected ? '已连' : '未连'))
+    + '｜服务端报采样率：' + (OBS.sfreq ? (OBS.sfreq + ' Hz') : '—')));
+  if(!OBS.chs.length){
+    el.appendChild(h('div', {class:'obsline'}, '本帧不含原始波形（观察窗如实显示"无波形帧"）'));
+    return;
+  }
+  const mx = OBS.chs.reduce((a, c) => Math.max(a, c.pk), 0) || 1;
+  el.appendChild(h('div', {class:'obsrows'}, ...OBS.chs.map(c => h('div', {class:'obsrow'},
+    h('span', {class:'obSch'}, c.ch),
+    h('i', {class:'obsbar', style:'width:' + Math.max(2, Math.round(c.pk / mx * 100)) + '%'}),
+    h('span', {class:'obsnum'}, c.pk.toFixed(0) + ' µV／' + c.n + ' 点')))));
+}
 function paintLive(){
   /* ⓪ 设备相关文案自刷新（通道集／档案／采样率一变即重算，不整页重建） */
   refreshDevHints();
@@ -1863,6 +2145,8 @@ function paintLive(){
 }
 function setPt(text, clear){
   const bar = document.getElementById('ptBar'), w = document.getElementById('ptWhat');
+  /* 三台自动跑机每秒都经过这里 → 顺手脉冲刷新主持人条（步 2①，不另立计时器） */
+  hostGuidePulse();
   if(!bar || !w) return;
   if(clear){ bar.classList.remove('on'); w.textContent = ''; return; }
   if(!text){ return; }
@@ -1938,11 +2222,15 @@ const T1A = {
     const arr = T1A.acc[T1A.seg] || [];
     if(arr.length === 0){
       T1A.empty = (T1A.empty || 0) + 1;
+      /* 步 2④：空段先自动重跑该段一次（§三 T1 retry＝自动重跑该段 1 次），只此一次 */
+      if(rerunOnce('t1seg' + T1A.seg, 'T1 第 ' + T1A.seg + ' 段（未取到波形）',
+                   () => { const k = T1A.seg; T1A.seg = k - 1; T1A.next(); })) return;
       if(T1A.empty >= 2){
         T1A.on = false; clearInterval(T1A.timer);
         t1SetBtn(false);
         t1Msg('连续两段无有效数据——已中止自动跑。核查顺序：①「实时数据联动」诊断行（monitor.running/connected）'
           + '②本设备实际通道名（当前 α 主看通道：' + (ALPHA_BASIS || '尚未确定') + '）③若通道名与设备不符请回报', true);
+        askHuman('hg_nodata');   /* 步 2③：③ 类触发（数据有效性）——问人，不猜 */
         return;
       }
     } else { T1A.empty = 0; }
@@ -1950,6 +2238,7 @@ const T1A = {
     if(m == null){
       t1Msg('第 ' + T1A.seg + ' 段没取到波形，未自动填数（该段可手动填）', true);
     } else {
+      undoPush('T1 第 ' + T1A.seg + ' 段自动填 α', ['t1a' + T1A.seg]);
       S.fields['t1a'+T1A.seg] = m.toFixed(3);
       syncField('t1a'+T1A.seg);
       t1Msg('第 ' + T1A.seg + ' 段（' + st + '）α＝' + m.toFixed(3) + '（' + arr.length + ' 个取样）');
@@ -1961,6 +2250,7 @@ const T1A = {
     T1A.on = false; t1SetBtn(false);
     t1Msg('✅ 8 段跑完：表已自动填好、幅度已算好——请核对后点 T1 结论');
     updateCalc();
+    if(t1BlockStat().lv === 'fail') askHuman('hg_t1_gray');   /* 步 2③：② 类触发（判据落灰区，与卡片同一处判读线） */
   }
 };
 function t1Msg(t, bad){
@@ -2029,6 +2319,7 @@ const T2A = {
         }
       }
       const key = ch.toLowerCase();
+      undoPush('T2 通道 ' + ch + ' 噪声底自动填表', ['t2s_'+key, 't2p_'+key, 't2f_'+key]);
       S.fields['t2s_'+key] = std.toFixed(1); syncField('t2s_'+key);
       S.fields['t2p_'+key] = pk.toFixed(0);  syncField('t2p_'+key);
       S.fields['t2f_'+key] = flat;           syncField('t2f_'+key);
@@ -2052,6 +2343,9 @@ const T2A = {
       }
     }
     t2Msg('✅ 5 分钟完成，已按通道自动填表（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
+    if(rows.some(r => r[3] === '有')){                                        /* 步 2③／④ */
+      if(!rerunOnce('t2', 'T2 静息 5 分钟（连续贴底）', () => T2A.start()))
+        askHuman('hg_t2_floor');   /* 重跑过一次仍贴底 → 升级到人，不再自己转圈 */ }
   }
 };
 /* 通道集变了就重建表格（只重画界面，S 里的数据不动）。
@@ -2193,6 +2487,9 @@ const T3A = {
   closeAction(){
     clearInterval(T3A.timer);
     const p = T3A.ptp.slice();
+    const k0 = T3A.idx + 1;
+    if(!p.length && rerunOnce('t3g' + k0, 'T3 第 ' + k0 + ' 组（未采到伪迹）',
+                              () => setTimeout(() => T3A.next(), 400))) return;   /* 步 2④：按组重跑一次 */
     const base = p.length > 6 ? Math.min.apply(null, p.slice(-6)) : (p.length ? Math.min.apply(null, p) : 0);
     let dur = 0;
     for(let i=0;i<p.length && i<10;i++) if(base > 0 && p[i] > base*1.5) dur++;
@@ -2201,9 +2498,11 @@ const T3A = {
     if(rec == null) rec = 30;
     const k = T3A.idx + 1, name = T3A.ACTIONS[T3A.idx][0];
     const put = (f, v) => { S.fields[f] = String(v); syncField(f); };
+    undoPush('T3 第 ' + k + ' 组动作自动填表', ['t3a'+k, 't3b'+k, 't3c'+k, 't3d'+k]);
     put('t3a'+k, dur); put('t3b'+k, rec); put('t3c'+k, rec <= 3 ? '是' : '否');
     put('t3d'+k, '自动（静息末段基线 ' + (base ? base.toFixed(1) : '—') + ' µV）');
     T3A.rows.push([name, dur, rec]);
+    if(!p.length) T3A.bad = (T3A.bad || 0) + 1;   /* 该组根本没采到数据（与 T1 无波形同类） */
     recount(); saveSoon();
     T3A.idx++;
     setTimeout(() => T3A.next(), 800);
@@ -2212,6 +2511,7 @@ const T3A = {
     T3A.on = false;
     t3Msg('✅ 四组跑完：表已自动填好（伪迹持续／恢复用时／是否 ≤3s）——请核对后点 T3 结论');
     updateCalc();
+    if(T3A.bad) askHuman('hg_t3_art');   /* 步 2③：有组没测到数据 → 问人，不代填 */
   }
 };
 function t3Msg(t, bad){
@@ -2314,6 +2614,14 @@ function buildDossier(){
     if(b.k === 'grid' && b.v) L.push('| ' + b.title + ' | ' + (VLAB[S.verdicts[b.v]] || '—') + ' |');
     else if(b.k === 'v') L.push('| ' + b.label + ' | ' + (VLAB[S.verdicts[b.id]] || '—') + ' |');
   }));
+  /* 步 2④：机器自己做过的动作必须摆在档案里（自动重跑＋人的应答），人不必翻界面就能审 */
+  const rr = S.meta.rerunLog || [], hg = S.meta.hgLog || [];
+  L.push('', '## 一之二 机器代做的动作（自动重跑／向人提问与应答）', '');
+  L.push('| 类别 | 粒度标识 | 内容 | 时刻 | 备注 |', '|---|---|---|---|---|');
+  rr.forEach(e => L.push('| 自动重跑 1 次 | ' + e.key + ' | ' + e.label + ' | ' + e.at + ' | 已同步打点进会话事件流 |'));
+  hg.forEach(e => L.push('| human_gate | ' + e.id + ' | 第 ' + e.kind + ' 类触发 | ' + e.at    + ' | 答：' + e.key + (e.timeout ? '（超时按默认，未获人答）' : '（人答，剩 ' + e.left_s + ' 秒）') + ' |'));
+  if(!rr.length && !hg.length) L.push('| — | — | 本轮机器未代做任何动作，也未向人提问 | — | — |');
+  L.push('');
   L.push('', '## 二 关键读数（纯读：npz／逐样本时间戳／qc.json）', '', '| 读数 | 值 |', '|---|---|');
   L.push('| 通道数／标称采样率 | ' + pc((m.channels || []).length || null) + ' / ' + pc(m.sfreq) + ' Hz |');
   L.push('| 样本数／采样跨度 | ' + pc(m.samples) + ' / ' + pc(t.span_s) + ' s |');
@@ -2561,6 +2869,33 @@ function hostFocus(sid){
   setTimeout(() => c.classList.remove('htarget'), 2600);
   c.scrollIntoView({behavior:'smooth', block:'center'});
 }
+/* ── 步 2①：主持人条接管 T1／T2／T3 的提示与计时 ──
+   只**读**既有状态机（T1A／T2A／T3A），不另立一套计时器与状态（红线5 不造平行路径）。
+   §十二.5 受试者只显词不显数：这里给人看的只有「做什么动作」与「还剩几秒」，一律不显波形数值。 */
+function guideNow(){
+  if(T1A.on && T1A.seg >= 1 && T1A.seg <= 8) return {
+    item:'t1', name:'T1 睁闭眼 α 阻断', step:'第 ' + T1A.seg + '/8 段',
+    big:(T1A.seg % 2 ? '请睁眼' : '请闭眼'), left:T1A.left, total:60, stop:() => T1A.stop()};
+  if(T2A.on) return {
+    item:'t2', name:'T2 静息噪声底与贴底复查', step:'5 分钟一次成型',
+    big:'请静坐不动', left:T2A.left, total:300, stop:() => T2A.stop()};
+  if(T3A.on && T3A.idx < T3A.ACTIONS.length) return {
+    item:'t3', name:'T3 耐受性（动作伪迹与恢复）', step:'第 ' + (T3A.idx + 1) + '/4 组',
+    big: T3A.phase === 'act' ? ('请做「' + T3A.ACTIONS[T3A.idx][0] + '」') : '放松静息，别动',
+    left:T3A.left, total: T3A.phase === 'act' ? 10 : 30, stop:() => T3A.stop()};
+  return null;
+}
+/* 每秒脉冲刷新：只改文字，不重建主持人条（重建会吃掉按钮焦点与悬停） */
+function hostGuidePulse(){
+  const big = document.getElementById('hgBig');
+  if(!big) return;
+  const gd = guideNow();
+  if(!gd){ renderHostBar(); return; }
+  const left = document.getElementById('hgLeft'), step = document.getElementById('hgStep');
+  big.textContent = gd.big;
+  if(left) left.textContent = gd.left + ' 秒';
+  if(step) step.textContent = gd.name + ' · ' + gd.step;
+}
 function renderHostBar(){
   const el = document.getElementById('hostBar');
   if(!el) return;
@@ -2585,7 +2920,14 @@ function renderHostBar(){
     h('span', {class:'hpips'}, SESS.map(s => h('i', {
       class:'hpip' + (s.id === sid ? ' cur' : (hostNext(s.id).doneN === hostNext(s.id).total ? ' done' : '')),
       title:s.name + '（' + hostNext(s.id).doneN + '/' + hostNext(s.id).total + ' 已收口）'}))));
-  const line = n.next
+  const gd = guideNow();
+  const line = gd
+    ? h('div', {class:'hmsg hguide'},
+        h('b', {class:'hgbig', id:'hgBig'}, gd.big),
+        h('span', {class:'hgleft', id:'hgLeft'}, gd.left + ' 秒'),
+        h('span', {class:'hsub', id:'hgStep'}, gd.name + ' · ' + gd.step),
+        h('span', {class:'hgbar'}, h('i', {style:'width:' + Math.max(0, Math.min(100, Math.round((gd.total - gd.left) / gd.total * 100))) + '%'})))
+    : (n.next
     ? h('div', {class:'hmsg'},
         h('b', null, '🤖 第 ' + (n.doneN + 1) + '/' + n.total + ' 项 · ' + n.next.name),
         h('span', {class:'hsub'}, '人做：' + n.next.minAct
@@ -2593,8 +2935,16 @@ function renderHostBar(){
           + '　｜　' + (n.next.actor === 'machine' ? '机器自跑，不打断' : '机器陪着跑')) )
     : h('div', {class:'hmsg'},
         h('b', null, '🤖 ' + sess.name + ' 各项结论已判'),
-        h('span', {class:'hsub'}, '下一步：到「汇总与总评」收口（' + sess.dur + '）'));
+        h('span', {class:'hsub'}, '下一步：到「汇总与总评」收口（' + sess.dur + '）')));
   const acts = h('div', {class:'hacts'},
+    /* 步 2⑤：三件常在控制——暂停／撤销上一步／为什么（§一 版面；猜错要便宜，Horvitz 第 6/7 条） */
+    h('button', {class:'btn', type:'button', title:'暂停当前自动跑（已完成部分的数据保留）',
+      onclick: () => pauseGuide()}, '⏸ 暂停'),
+    h('button', {class:'btn', type:'button',
+      title: UNDO.stack.length ? ('撤销：' + UNDO.stack[UNDO.stack.length - 1].label) : '撤销机器代写的上一步（人自己填／判的不代撤）',
+      onclick: () => undoLast()}, '⤺ 撤销上一步' + (UNDO.stack.length ? '（' + UNDO.stack.length + '）' : '')),
+    h('button', {class:'btn ghost', type:'button', title:'为什么现在提示这一项',
+      onclick: () => whyNext()}, '❓为什么'),
     n.next ? h('button', {class:'btn pri', type:'button', onclick: () => hostFocus(sid)}, '带我去这一项') : null,
     h('button', {class:'btn ghost', type:'button', title:'展开／收起全部证据抽屉卡',
       onclick: () => {
@@ -2606,7 +2956,10 @@ function renderHostBar(){
         toast(open ? '证据抽屉已全部展开（再点收起）' : '证据抽屉已收起');
       }}, '🗂 证据抽屉'),
     tgBtn);
-  el.appendChild(head); el.appendChild(line); el.appendChild(acts);
+  el.appendChild(head);
+  const pr = renderHgPrompt();          /* 步 2③：human_gate 提示占主持人条一处，不另开弹窗 */
+  if(pr) el.appendChild(pr);
+  el.appendChild(line); el.appendChild(acts);
 }
 function hardRefresh(){ build(); updateCalc(); }
 
@@ -2640,7 +2993,9 @@ updateCalc();
    采样率不再播种 250（那会把 NeuraDock 的标称值冒充成"设备实际值"）：
    由 tick 的 sfreq → 《设备档案》dp_sf → 才轮到 250 兜底，见 SFREQ()。 */
 liveConnect();
+obsInit();     /* 步 2②：独立观察通道与自测层各自一条流、各自解析，互不借用（⑦甲） */
 setInterval(paintLive, 1000);
+setInterval(hgTick, 1000);   /* 步 2③：human_gate 的 ttl 只走这一处心跳 */
 setInterval(() => { if(!LIVE.on) liveConnect(); }, 10000);
 document.getElementById('bSkin').onclick = ()=>{
   S.meta.skin = (S.meta.skin === 'paper') ? 'dash' : 'paper';
@@ -2666,7 +3021,7 @@ window.addEventListener('scroll', ()=>{
 }, {passive:true});
 document.getElementById('bReset').onclick = ()=>{
   if(!confirm('清空全部勾选与记录？此操作不可撤销（建议先「导出」留档）。')) return;
-  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin, sess:0, hostClosed:false, drawerOpen:false}};
+  S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:S.meta.night, fs:S.meta.fs, skin:S.meta.skin, sess:0, hostClosed:false, drawerOpen:false, obsClosed:false, obsOff:false, hgLog:[], rerunLog:[]}};
   save(); hardRefresh(); toast('已清空');
 };
 window.addEventListener('beforeunload', ()=>{ try{ save(); }catch(e){} });
