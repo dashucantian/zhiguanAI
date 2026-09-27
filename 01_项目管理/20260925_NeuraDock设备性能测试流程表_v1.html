@@ -252,6 +252,24 @@ nav:empty{display:none}
 .obs .obSch{flex:none;width:58px;font-size:.9em;color:var(--ink3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .obs .obsbar{flex:none;height:7px;border-radius:3px;background:var(--qing);opacity:.75;min-width:2px}
 .obs .obsnum{flex:none;font-size:.86em;color:var(--ink3);font-variant-numeric:tabular-nums}
+/* 步 3①：T5 机器自跑状态条（observer=none——人不盯表，机器自己记） */
+.t5watch{margin-top:6px;font-size:.8em;color:var(--ink2);background:var(--bg2);
+  border:1px dashed var(--line);border-left:3px solid var(--qing);border-radius:6px;padding:5px 8px}
+/* 步 3②：静默跟随状态行＋打断提示行（只有状态跃迁才出声；可忽略·可关·可改判） */
+.hostbar .silrow{flex:1 1 100%;font-size:.78em;color:var(--ink2);display:flex;gap:9px;
+  align-items:center;flex-wrap:wrap;border-top:1px dashed var(--line);padding-top:5px}
+.hostbar .silrow .silnum{font-variant-numeric:tabular-nums;color:var(--ink3)}
+.hostbar .nudge{flex:1 1 100%;border:1px solid var(--qing);border-left:4px solid var(--qing);
+  background:var(--bg2);border-radius:8px;padding:7px 10px;display:flex;flex-direction:column;gap:4px}
+.hostbar .nudge.bad{border-color:var(--jin);border-left-color:var(--jin)}
+.hostbar .nudgetx{font-size:.98em}
+.hostbar .fp{font-size:.74em;color:var(--ink3);font-variant-numeric:tabular-nums}
+.hostbar .fp .grade{border:1px solid var(--line);border-radius:999px;padding:0 7px;margin-left:4px}
+.hostbar .fp .grade.todo{color:var(--jin);border-color:var(--jin)}
+.hostbar .nudhow{display:flex;gap:6px;flex-wrap:wrap}
+/* 步 3②：三态策略表（§三 角色表的投影，只读派生＋人改判按钮；不含输入位＝不进动作数） */
+.polrow .cur{font-weight:600}
+.polrow .off{opacity:.45}
 @media print{.obs{display:none}}
 .hostbar.closed > *{display:none}
 .hostbar.closed{padding:8px 16px}
@@ -435,7 +453,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.3 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.4 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -667,8 +685,10 @@ const FLOW = {
     {k:'timer',title:'T5 十分钟提醒',mode:'interval',sec:600,live:'t5',
      hint:'点「开始」后每到 10 分钟响一声，提醒你低头填一行。T9（端到端延迟）因场次待裁，本场不执行。'},
     {k:'grid',title:'T5 长时程稳定性',chip:'60–70 分钟',
-     hint:'判据：断包率 <b>&lt;1%</b> 且不集中在开头；每小时塌陷 <b>≤1 分钟</b>；幅值/带宽漂移 <b>≤20%/小时</b>。⚠️ 开机前 2 分钟是重点——09-21 曾出现 205 次断包（疑握手问题），要复现或排除它。',
-     cols:['时间点','累计断包','本段幅值','塌陷段','电池','备注（体位/换线/走动）'],
+     hint:'判据：断包率 <b>&lt;1%</b> 且不集中在开头；每小时塌陷 <b>≤1 分钟</b>；幅值/带宽漂移 <b>≤20%/小时</b>。⚠️ 开机前 2 分钟是重点——09-21 曾出现 205 次断包（疑握手问题），要复现或排除它。<br>'
+       + '<b>谁填（步 3①·人不盯表）</b>：本段幅值／塌陷段／电池三列由机器从实时帧自动代填（幅值以第 0 片为基线，±20% 即上面那条既有判据线；电池取 tick 上报值，设备不给则写「不可得」）；'
+       + '<b>累计断包</b>与<b>备注</b>两列<b>仍归人</b>——面板与事后 qc 都没有分片级断包数据源，机器不硬造（人也可随时改写机器填的值）。',
+     cols:['时间点','累计断包','本段幅值','塌陷段','电池','备注（体位/换线/走动）'], watch:1,
      rows:[
       ['开机 0–2 min ⚠️',{f:'t5c0',in:'num',ph:'',w:'76px'},{f:'t5a0',in:'select',opt:['正常','偏低','偏高']},{f:'t5d0',in:'select',opt:['无','有']},{f:'t5b0',in:'text',ph:'%',w:'70px'},{f:'t5n0',in:'text',ph:'重点段'}],
       ['10 min',{f:'t5c1',in:'num',ph:'',w:'76px'},{f:'t5a1',in:'select',opt:['正常','偏低','偏高']},{f:'t5d1',in:'select',opt:['无','有']},{f:'t5b1',in:'text',ph:'%',w:'70px'},{f:'t5n1',in:'text',ph:'—'}],
@@ -1016,6 +1036,237 @@ function renderHgPrompt(){
   return row;
 }
 
+/* ── 步 3②：三态打断＋静默成功＋误报记账（施工方案 §六 · ⑫甲）──
+   三态：不行动 ↔ 先问 ↔ 直接做。**默认全部"先问"**；仅"判据硬＋代价低＋可回退"三条全真才允许"直接做"，
+     三重门写在 policyMode() 里硬校验——表里填错、或人自己改判，都升不了权（防"自我声明即授权"）。
+   静默成功：只有**状态跃迁**才通知；两个宽限＝① 抖动宽限（连续 arm 次同一新状态才算跃迁）
+     ② 冷却＋场次 2 预算（同键 cool 秒内不重复打断；场次 2 全程 ≤budget 次，§九 结果指标）。
+     回到正常**不叫人**，只写状态行——正本 场次 2 原文："人什么都不做（observer=none），异常时才被叫"。
+   误报记账：每条提示带"历史误报 k/n（x%）"，越线自动从**断言**降为**待核**（降后只记不断，人可改判回来）。
+     依据 Drew 2014（ICU 告警 88.8% 假阳性）／Song & Wolfe 2026（存在误报时预警的好处完全消失）。
+   ⚠ NUD（arm／cool／budget）与 FP_LINE（越线）是**本窗自设的运维参数**：正本只要求"配两个宽限""误报率越线"
+     而未给数，此处补工程空位并登记候法师裁——它们不是判据，不进 §三 判定链，也不改任何既有阈值。 */
+const MODE = {idle:'不行动', ask:'先问', act:'直接做'};
+const NUD = {arm:3, cool:60, budget:3};
+const FP_LINE = {min:3, rate:0.5};
+/* 三态登记表：机器每一条"可能自己动手"的路径都要在此声明三重门；未登记的路径一律按"先问"办 */
+const POLICY = [
+  {key:'t1_read', name:'T1 段 α 读数代填', mode:'act', hard:true, cheap:true, rev:true,
+   note:'判据硬＝T1 卡既有 ≥30%／≥15% 读线（正本原文，未改）；代价低＝写一格；可回退＝⤺ 撤销整帧'},
+  {key:'t2_read', name:'T2 通道噪声底代填', mode:'act', hard:true, cheap:true, rev:true,
+   note:'判据硬＝T2 卡既有"连续贴底"口径；代价低＝写三格；可回退＝⤺ 撤销整帧'},
+  {key:'t3_read', name:'T3 组动作读数代填', mode:'act', hard:true, cheap:true, rev:true,
+   note:'判据硬＝伪迹两分（⑬）既有口径；代价低＝写四格；可回退＝⤺ 撤销整帧'},
+  {key:'t5_read', name:'T5 分片幅值／塌陷／电池代填', mode:'act', hard:true, cheap:true, rev:true,
+   note:'判据硬＝正本 §4.0 既有"漂移≤20%/小时"＋与 T2 同一塌陷口径；代价低＝写三格；可回退＝⤺ 撤销整帧'},
+  {key:'rerun', name:'自动重跑一次（步 2④ 已放行）', mode:'act', hard:true, cheap:true, rev:true,
+   note:'正本 §五.3 授权"阈值内允许自动重跑一次"；粒度取 §三 表 retry 列，同粒度只此一次；'
+        + '重跑后的写仍可 ⤺ 撤销，**唯时间不可回收**——如实记入 rerunLog＋打点，不装作免费'},
+  {key:'rec_fill', name:'记录卡机器代填（派生视图）', mode:'ask', hard:false, cheap:true, rev:true,
+   note:'由人点按钮发起，本就是"先问"；登记为 ask 表意：机器永不自己动记录卡'},
+  {key:'t5_link', name:'T5 断流／无帧提示', mode:'ask', hard:true, cheap:true, rev:false,
+   note:'可回退不成立（惊动人本身撤不回）→ 永不升为"直接做"，只走提示'},
+  {key:'t5_amp', name:'T5 幅值漂移提示', mode:'ask', hard:true, cheap:true, rev:false,
+   note:'同上：机器自己写表可以，惊动人必须由人掌握'},
+  {key:'t5_flat', name:'T5 塌陷段提示', mode:'ask', hard:true, cheap:true, rev:false, note:'同上'}
+];
+const NU = {prompt:null, ask:null};
+const HOLD = {};        /* 三态扣下的代写闭包（不落盘，只存当轮；账目在 S.meta.polHold） */
+let holdSeq = 0;
+function tsNow(){ return new Date().toLocaleString('zh-CN', {hour12:false}); }
+function polOf(key){ return POLICY.filter(p => p.key === key)[0] || null; }
+function tripleOk(p){ return !!(p && p.hard && p.cheap && p.rev); }
+function policyMode(key){
+  const p = polOf(key);
+  if(!p) return 'ask';                                  /* 没登记的，一律先问（默认态） */
+  const want = ((S.meta.pol || {})[key]) || p.mode;
+  if(want === 'act' && !tripleOk(p)) return 'ask';      /* 三重门不过谁都升不了权，含人改判 */
+  return (want === 'idle' || want === 'act') ? want : 'ask';
+}
+function polSet(key, mode){
+  const p = polOf(key);
+  if(!p) return false;
+  if(mode === 'act' && !tripleOk(p)){
+    toast('「直接做」需"判据硬＋代价低＋可回退"三条全真——「' + p.name + '」不过此门，保持「先问」');
+    return false;
+  }
+  S.meta.pol = S.meta.pol || {}; S.meta.pol[key] = mode;
+  saveSoon(); postMarker('打断策略改判：' + p.name + ' → ' + MODE[mode]);
+  toast('策略已改判：' + p.name + ' → ' + MODE[mode] + '（机器后续照此执行，随时可再改回）');
+  paintPolicy(); renderHostBar();
+  return true;
+}
+/* 误报记账：分母＝该键实际打断过人的次数，分子＝人明确标记"这条是误报"的次数（只认人标，机器不自计） */
+function fpOf(key){ S.meta.fp = S.meta.fp || {}; return (S.meta.fp[key] = S.meta.fp[key] || {fires:0, fp:0}); }
+function fpRate(key){ const e = fpOf(key); return e.fires ? e.fp / e.fires : 0; }
+function fpGrade(key){
+  const f = (S.meta.fpForce || {})[key];
+  if(f) return f;
+  const e = fpOf(key);
+  return (e.fires >= FP_LINE.min && fpRate(key) >= FP_LINE.rate) ? '待核' : '断言';
+}
+function markFp(key){
+  const e = fpOf(key);
+  if(!e.fires){ toast('本条还没有打断过人的记录，无从计误报'); return false; }
+  e.fp = Math.min(e.fp + 1, e.fires);
+  S.meta.fpLog = S.meta.fpLog || [];
+  S.meta.fpLog.push({key, at:tsNow(), grade:fpGrade(key)});
+  saveSoon();
+  toast('已记为误报（' + e.fp + '/' + e.fires + '，' + Math.round(fpRate(key)*100) + '%）'
+    + (fpGrade(key) === '待核' ? ' → 越线，本条自动降为「待核」：此后只记录，不再打断' : ''));
+  paintPolicy(); renderHostBar();
+  return true;
+}
+function unFp(key){
+  S.meta.fpForce = S.meta.fpForce || {}; S.meta.fpForce[key] = '断言';
+  S.meta.fpLog = S.meta.fpLog || [];
+  S.meta.fpLog.push({key, at:tsNow(), grade:'断言', by:'人改判'});
+  saveSoon(); toast('人已改判：本条回到「断言」（改判进档案；机器不给自己升权）');
+  paintPolicy(); renderHostBar();
+}
+function nudCur(key){
+  S.meta.nudge = S.meta.nudge || {};
+  return (S.meta.nudge[key] = S.meta.nudge[key] || {state:'', pend:'', seen:0, at:0});
+}
+function nudLog(e){
+  S.meta.nudgeLog = S.meta.nudgeLog || [];
+  if(S.meta.nudgeLog.length < 400) S.meta.nudgeLog.push(e);
+}
+function nudCount(){ return (S.meta.nudgeLog || []).filter(x => x.fire && x.bad && x.sess === 2).length; }
+function nudTodo(){ return (S.meta.nudgeLog || []).filter(x => x.bad && !x.fire && /待核|预算|关闭提示|冷却/.test(x.why || '')).length; }
+/* 人机提示的唯一出口。判定顺序（前一条不过就到此为止，全部留痕）：
+   同态静默 → 抖动宽限 → 回到正常只记 → 已降待核 → 人已关提示 → 同键冷却 → 场次 2 预算 → 才打断 */
+function nudge(key, state, o){
+  o = o || {};
+  const c = nudCur(key), at = tsNow(), sess = S.meta.sess || 0;
+  if(state === c.state){ c.seen = 0; c.pend = ''; return false; }      /* 静默成功：状态没变就不说话 */
+  if(state !== c.pend){ c.pend = state; c.ptext = o.text || ''; c.seen = 1; } else { if(o.text) c.ptext = o.text; c.seen++; }
+  if(c.seen === 1) nudLog({key, state, fire:false, why:'抖动宽限计数中（连续 ' + NUD.arm + ' 次同一新状态才算跃迁）', at, sess});
+  if(c.seen < NUD.arm) return false;                                    /* 宽限一：抖动不打断 */
+  c.state = state; const ptext = c.ptext || ''; c.pend = ''; c.seen = 0;
+  const bad = !!o.bad;
+  if(!bad){ nudLog({key, state, fire:false, why:'回到正常：只写状态行，不打断（静默成功）', at, sess}); paintSilent(); return false; }
+  if(fpGrade(key) === '待核'){ nudLog({key, state, fire:false, why:'本条已降为「待核」→ 只记录不打断', at, sess}); paintSilent(); return false; }
+  if(S.meta.nudgeOff){ nudLog({key, state, bad:true, fire:false, why:'人已关闭提示（⑥ 退出判据·可关）→ 转记录', at, sess}); paintSilent(); return false; }
+  if(Date.now() - c.at < NUD.cool*1000){                                  /* 宽限二：不反复打断 */
+    nudLog({key, state, bad:true, fire:false, why:'同键冷却 ' + NUD.cool + ' s 内不重复打断', at, sess});
+    paintSilent(); return false;
+  }
+  if(sess === 2 && nudCount() >= NUD.budget){
+    nudLog({key, state, bad:true, fire:false, why:'场次 2 打断预算（≤' + NUD.budget + '）已用尽 → 转记录，收口一并给人看', at, sess});
+    paintSilent(); return false;
+  }
+  c.at = Date.now();
+  fpOf(key).fires++;
+  NU.prompt = {key, state, bad:true, text:o.text || ptext || (key + '：' + state), at};
+  nudLog({key, state, bad:true, fire:true, why:'状态跃迁 → 打断人一次', at, sess});
+  saveSoon();
+  if(S.meta.beep !== false) beep(2);
+  paintPolicy(); renderHostBar();
+  return true;
+}
+function nudDismiss(){ NU.prompt = null; renderHostBar(); }
+/* 每秒心跳：断流状态跃迁（帧完全不来时 tick 不再被调用，故必须由常驻心跳来观察） */
+function nudPulse(){
+  paintSilent();                                  /* 状态行每秒自刷新，否则"机器是否在跑"会说谎 */
+  if(!LIVE.on) return;
+  const stale = liveStale();
+  nudge('t5_link', stale ? '无帧' : '有帧',
+    {bad:stale, text:'实时帧停了（>3 s 无帧）——先看右下角观察窗，再决定是否查线／重启采集'});
+}
+/* 机器代写的唯一入口：先查三态。act＝代写（写前压撤销帧）；ask＝不动手、改问人；idle＝连问都不问，只留痕 */
+function autoWrite(key, label, fields, fn){
+  const m = policyMode(key);
+  if(m === 'act'){ undoPush(label, fields); fn(); return true; }
+  const id = 'h' + (++holdSeq);
+  HOLD[id] = {key, label, fields:(fields || []).slice(), fn};
+  S.meta.polHold = S.meta.polHold || [];
+  S.meta.polHold.push({id, key, label, mode:m, at:tsNow()});
+  saveSoon();
+  if(m === 'ask'){ NU.ask = {id, key, label, at:tsNow()}; renderHostBar(); }
+  else nudLog({key, state:'held', fire:false, why:'策略为「不行动」：机器未代写「' + label + '」，只留痕', at:tsNow(), sess:S.meta.sess || 0});
+  return false;
+}
+function holdRec(id){ return (S.meta.polHold || []).filter(e => e.id === id)[0] || null; }
+function nudAskOk(){                                    /* 一次性授权：不改策略，只放行这一次的写 */
+  const a = NU.ask;
+  if(!a){ toast('没有待授权的代写'); return false; }
+  const h = HOLD[a.id], rec = holdRec(a.id);
+  NU.ask = null;
+  if(!h || !rec){ toast('本条代写已过期（DOM 重建后不保留），机器不补写'); renderHostBar(); return false; }
+  rec.done = 'authorized';
+  undoPush(h.label, h.fields); h.fn();
+  recount(); saveSoon();
+  toast('已按人授权代写：' + h.label + '（可 ⤺ 撤销；策略未变，下次仍先问）');
+  paintPolicy(); renderHostBar();
+  return true;
+}
+function nudAskNo(){
+  const a = NU.ask;
+  NU.ask = null;
+  if(a){ const rec = holdRec(a.id); if(rec) rec.done = 'declined'; saveSoon(); }
+  toast('已按人意愿不代写（此决定记入档案；机器不重复问同一条）');
+  paintPolicy(); renderHostBar();
+  return true;
+}
+/* 静默跟随状态行：人只用看一处（打断数／待核记录／最近跃迁） */
+function silText(){
+  const sess = SESS.filter(s => s.id === (S.meta.sess || 0))[0] || SESS[0];
+  const rec = (S.meta.nudgeLog || []).filter(x => x.bad && !x.fire).length;
+  const last = (S.meta.nudgeLog || []).slice(-1)[0];
+  const running = !!(T1A.on || T2A.on || T3A.on || T5A.on);
+  return '🔇 静默跟随（' + sess.name + '）：本场已打断 ' + nudCount() + '/' + NUD.budget
+    + ' 次｜' + (running ? '机器自跑中' : '现无机器在跑') + '，只有状态跃迁才开口（抖动宽限 ' + NUD.arm
+    + ' 次·同键冷却 ' + NUD.cool + ' s）｜按宽限／预算转记录的异常 ' + rec + ' 条'
+    + (last ? '｜最近：' + last.key + ' → ' + last.state + (last.fire ? '（打断了）' : '（未打断）') : '');
+}
+function paintSilent(){
+  document.querySelectorAll('[data-sil]').forEach(el => { el.textContent = silText(); });
+}
+/* 提示行（打断时用；四元组口径与 human_gate 一致：问什么＋只接受什么答案＋多久不回默认＋谁有权答） */
+function renderNudgeRow(){
+  const p = NU.prompt;
+  if(!p) return null;
+  const e = fpOf(p.key);
+  return h('div', {class:'nudge bad'},
+    h('b', {class:'nudgetx'}, '⚠ ' + p.text),
+    h('span', {class:'fp', 'data-fpline':p.key},
+      '历史误报 ' + e.fp + '/' + e.fires + '（' + Math.round(fpRate(p.key)*100) + '%）'
+      + '｜本条评级：' + fpGrade(p.key)
+      + (fpGrade(p.key) === '待核' ? '（越线自动降级：此后只记录，不再打断）' : '')),
+    h('span', {class:'nudhow'},
+      h('button', {class:'btn', type:'button', title:'这条是误报（只有人能标，机器不自计）',
+        onclick: () => markFp(p.key)}, '👎 记为误报'),
+      h('button', {class:'btn ghost', type:'button', title:'改判：把本条拉回「断言」（记入档案）',
+        onclick: () => unFp(p.key)}, '↩ 改回断言'),
+      h('button', {class:'btn ghost', type:'button', title:'知道了（不代答，本条已记账）',
+        onclick: nudDismiss}, '✕ 知道了')));
+}
+/* 先问行：机器本可代写、但按三态改为问人（schema 只有两答；60 秒不答＝不写，超时默认保守） */
+function renderHoldRow(){
+  const a = NU.ask;
+  if(!a) return null;
+  return h('div', {class:'nudge'},
+    h('b', {class:'nudgetx'}, '❓ 三态＝先问：机器本可代写「' + a.label + '」，现按策略停下问您'),
+    h('span', {class:'fp'}, '只接受两个答案：允许这一次／不用｜谁有权答：操作者（人）｜不回默认：不写'),
+    h('span', {class:'nudhow'},
+      h('button', {class:'btn', type:'button', onclick: nudAskOk}, '允许这一次代写'),
+      h('button', {class:'btn ghost', type:'button', onclick: nudAskNo}, '不用（我自己来）')));
+}
+function renderHostSilence(){
+  return h('div', {class:'silrow'},
+    h('span', {class:'silnum', 'data-sil':1}, silText()),
+    h('button', {class:'btn ghost', type:'button',
+      title:S.meta.nudgeOff ? '恢复提示（默认）' : '关闭提示：异常一律转记录，不再打断（⑥ 退出判据·可关）',
+      onclick: () => { S.meta.nudgeOff = !S.meta.nudgeOff; saveSoon();
+        toast(S.meta.nudgeOff ? '提示已关闭：此后只记录，不打断（收口时一并给人看）' : '提示已恢复');
+        renderHostBar(); }}, S.meta.nudgeOff ? '🔕 提示已关（转记录）' : '🔔 提示开着'),
+    h('button', {class:'btn ghost', type:'button', title:'到「角色与观察」看三态策略全表',
+      onclick: () => { const c = document.querySelector('.card[data-g="roletable"]');
+        if(c){ c.scrollIntoView(); c.classList.remove('closed'); }
+        toast('三态策略表在「角色与观察」卡内（本表是 §三 声明表的投影，不是新判据）'); }}, '🛈 三态策略'));
+}
+
 /* ── 步 2④：自动重跑一次＋如实记（施工方案 §五.3 · ④甲）──
    阈值内允许自动重跑**一次**，粒度＝§三 声明表 retry 列（T1 按段／T2 整场／T3 按组）；
    第二次仍不达标即升级 human_gate——**不得静默继续，也不得无限重跑**。
@@ -1334,6 +1585,8 @@ function renderGrid(blk){
     tbody.appendChild(tr);
   });
   const body = [h('div', {class:'tw'}, h('table', null, thead, tbody))];
+  if(blk.watch){ body.push(h('div', {class:'t5watch noprint', 'data-t5watch':'1'}));
+    setTimeout(paintT5Watch, 0); }        /* 步 3①：机器自跑状态就地显示，不弹窗、不打断 */
   if(blk.extra) blk.extra.forEach(([k,v])=> body.push(h('p', {class:'tip'}, h('b', null, k+'：'), v)));
   if(blk.v) body.push(verdictRow(blk));
   return card(blk, body);
@@ -1568,7 +1821,44 @@ function renderRoleTable(blk){
   const n = rows.filter(r => r.actor !== 'human').length;
   body.push(h('p', {class:'tip'}, h('b', null, '本表读数：'),
     '11 项里 ' + n + ' 项人不必动手（actor＝机器或只看结果）；人真正要做的动作见「人的最小动作」列——验收指标就是把它们压到 ≤20 次（⑤甲）。'));
-  return card(blk, body);
+  /* 步 3②：三态策略表——§三 声明表的**投影**（机器能自己动手到哪一步），不是新判据 */
+  body.push(h('p', {class:'tip', style:'margin-top:10px'},
+    h('b', null, '三态打断策略（施工方案 §六 · 步 3②）'),
+    '　默认「先问」；「直接做」须"判据硬＋代价低＋可回退"三条全真，校验写在代码里，改判也升不了权。'));
+  body.push(h('div', {class:'tw'}, h('table', {class:'polrow'},
+    h('thead', null, h('tr', null,
+      ...['机器可自己动手的路径', '现态', '判据硬', '代价低', '可回退', '打断过', '误报', '评级', '人改判'].map(c => h('th', null, c)))),
+    h('tbody', {id:'polBody'}))));
+  const c = card(blk, body);
+  setTimeout(() => paintPolicy(c), 0);
+  return c;
+}
+/* 三态策略表上色（只读派生＋改判按钮；按钮不计入动作数） */
+function paintPolicy(cardEl){
+  const tb = (cardEl && cardEl.querySelector('#polBody')) || document.getElementById('polBody');
+  if(!tb) return;
+  tb.innerHTML = '';
+  POLICY.forEach(p => {
+    const m = policyMode(p.key), e = fpOf(p.key), g = fpGrade(p.key);
+    const btn = mode => h('button', {class:'btn' + (m === mode ? '' : ' ghost'), type:'button',
+      title:(mode === 'act' && !tripleOk(p)) ? '三重门不过，此格不给点（防自我授权）' : '改判为' + MODE[mode],
+      disabled:(mode === 'act' && !tripleOk(p)),
+      onclick: () => polSet(p.key, mode)}, MODE[mode]);
+    tb.appendChild(h('tr', null,
+      h('td', null, p.name),
+      h('td', {class:'cur', 'data-polcur':p.key}, m === 'idle' ? '不行动' : (m === 'ask' ? '先问' : '直接做')),
+      h('td', null, p.hard ? '✔' : '✘'),
+      h('td', null, p.cheap ? '✔' : '✘'),
+      h('td', null, p.rev ? '✔' : '✘'),
+      h('td', {class:'silnum'}, String(e.fires)),
+      h('td', {class:'silnum'}, e.fires ? (e.fp + '/' + e.fires + '（' + Math.round(fpRate(p.key)*100) + '%）') : '—'),
+      h('td', {class:'cur' + (g === '待核' ? ' off' : '')}, g),
+      h('td', {class:'hghow'}, [btn('idle'), btn('ask'), btn('act')])));
+  });
+  const hold = (S.meta.polHold || []).filter(x => !x.done);
+  if(hold.length) tb.appendChild(h('tr', null, h('td', {colspan:9, class:'tip'},
+    '本策略已扣下的机器代写 ' + hold.length + ' 条：' + hold.map(x => x.label + '（' + MODE[x.mode] + '）').join('、')
+    + '　——内容留在档案里可查，机器没有自己补写。')));
 }
 
 function renderHint(blk){
@@ -1993,7 +2283,7 @@ function liveTick(ev){
   /* 采样率以机器为准（2026-09-26）：服务端 tick 带实际 sfreq 则覆盖面板值；
      旧版服务端不带此字段，此时退回《设备档案》dp_sf（见 SFREQ）。 */
   if(d.sfreq && Number(d.sfreq) > 0){ S.meta.sf = Number(d.sfreq); S.meta.sfFromLive = true; }
-  paintLive(); T1A.onTick(d); T2A.onTick(d); T3A.onTick(d);
+  paintLive(); T1A.onTick(d); T2A.onTick(d); T3A.onTick(d); T5A.tick(d);   /* 步 3①：T5 机器自跑见证 */
   /* T4 实时工频预警：约每秒一次，只作预警。
      通道不写死（2026-09-26 系统排查）：工频为共模，任一路皆可 → mainsCh() 取 Oz／任一 O*／首通道。
      此前写死 LIVE.wave['Oz']，Muse 等无枕区设备上这一卡永远不动。 */
@@ -2182,6 +2472,107 @@ function measureAlpha(){
   ALPHA_BASIS = pick.label;
   return vals.reduce((a,b)=>a+b,0)/vals.length;
 }
+/* ── 共用统计：T2 噪声底与 T5 长时程**必须同一处算**，否则两处阈值会分叉 ── */
+function chanStats(a){                       /* 一串样本 → {sd, pk}；样本太短给 null */
+  if(!a || a.length < 64) return null;
+  let m = 0;
+  for(let i=0;i<a.length;i++) m += a[i];
+  m /= a.length;
+  let v = 0, pk = 0;
+  for(let i=0;i<a.length;i++){
+    const x = a[i]-m; v += x*x;
+    const ax = Math.abs(a[i]); if(ax > pk) pk = ax;
+  }
+  return {sd: Math.sqrt(v/a.length), pk: pk};
+}
+function flatFromSeries(arr){                /* 既有贴底判据：连续>1min 窗均值 std<2（窗步 15） */
+  if(!arr || arr.length < 60) return '无';
+  for(let i=0;i+60<=arr.length;i+=15){
+    let z = 0;
+    for(let k=i;k<i+60;k++) z += arr[k].sd;
+    if(z/60 < 2) return '有';
+  }
+  return '无';
+}
+
+/* ── 步 3①：T5 长时程机器自跑（施工方案 §十 步3①·声明表 observer=none）──
+   人不盯表。机器只代填**有真源**的三列：
+     本段幅值＝tick.wave 峰值均值，相对第 0 片基线判 正常／偏低／偏高；±20% 线即正本 §4.0 既有判据「漂移≤20%/小时」，非新设；
+     塌陷段＝复用 T2 同一 flatFromSeries，不另立阈值；
+     电池＝tick.battery，设备不给则如实写「不可得」，绝不猜。
+   「累计断包」列**面板无该口径数据源**（服务端仅事后 qc 给会话级丢包率），故仍归人填——不硬造（红线5／§四ter）。
+   代填走步3②的三态闸（默认"直接做"，人可改判为先问／不行动）；异常提示走静默成功闸（跃迁＋两宽限）。 */
+const T5A = {
+  on:false, marks:[120, 600, 1200, 1800, 2400, 3000, 3600], idx:0, base:null,
+  acc:{}, lastCap:0, silent:0, lastAt:0, worstGap:0, status:'未开始（接入实时流后自动起）',
+  reset(){ T5A.on=false; T5A.idx=0; T5A.base=null; T5A.acc={}; T5A.silent=0; T5A.worstGap=0; T5A.lastAt=0;
+           T5A.status='已重置（接入实时流后自动起）'; paintT5Watch(); },
+  start(){ if(T5A.on) return; T5A.reset(); T5A.on = true; },
+  tick(d){
+    if(!d || d.type !== 'tick') return;
+    if(!T5A.on && LIVE.on) T5A.start();      /* 自动起：人不点（observer=none） */
+    if(!T5A.on) return;
+    const now = Date.now();
+    if(T5A.lastAt){ const g = now - T5A.lastAt;
+      if(g > T5A.worstGap) T5A.worstGap = g;
+      if(g > 5000) T5A.silent += g/1000; }   /* 无帧时长：本窗自己的见证，不冒充断包率 */
+    T5A.lastAt = now;
+    if(now - T5A.lastCap < 1000) return;
+    T5A.lastCap = now;
+    if(liveStale()) return;                  /* 断流的帧不拿来充数 */
+    const w = d.wave || LIVE.wave;
+    if(w) for(const ch in w){
+      const st = chanStats(w[ch]);
+      if(st) (T5A.acc[ch] = T5A.acc[ch] || []).push(st);
+    }
+    const el = Number(d.elapsed || 0);
+    if(el >= T5A.marks[Math.min(T5A.idx, T5A.marks.length - 1)]) T5A.snap(el, d);
+  },
+  snap(elapsed, d){
+    const i = T5A.idx;
+    if(i > 6) return;
+    const chs = Object.keys(T5A.acc);
+    T5A.idx++;
+    if(!chs.length){ T5A.status = '第 ' + i + ' 片：无波形样本，未代填（不猜）'; paintT5Watch(); return; }
+    let amp = 0, n = 0, flat = '无';
+    chs.forEach(c => {
+      const arr = T5A.acc[c];
+      arr.forEach(x => { amp += x.pk; n++; });
+      if(flatFromSeries(arr) === '有') flat = '有';
+    });
+    amp = n ? amp / n : 0;
+    if(i === 0) T5A.base = amp;
+    let lvl;
+    if(i === 0) lvl = '正常';
+    else if(!(T5A.base > 0)) lvl = '不可判定';
+    else lvl = (amp < T5A.base*0.8) ? '偏低' : (amp > T5A.base*1.2 ? '偏高' : '正常');
+    const put = (f, v) => { if(v === null || v === undefined) return; S.fields[f] = String(v); syncField(f); };
+    const bat = (d && d.battery !== null && d.battery !== undefined) ? d.battery : '不可得';
+    /* 步 3②：代写一律走三态闸——只有"直接做"才动手；改判为"先问／不行动"时机器不写，只问人或留痕 */
+    const wrote = autoWrite('t5_read', 'T5 第 ' + i + ' 片机器代填', ['t5a'+i, 't5d'+i, 't5b'+i], () => {
+      put('t5a' + i, lvl); put('t5d' + i, flat); put('t5b' + i, bat);
+    });
+    T5A.acc = {};
+    recount(); saveSoon();
+    /* 步 3②：只有状态跃迁才打断；判据线是正本 §4.0 既有 ±20% 与 T2 同一塌陷口径，本处不新增阈值 */
+    nudge('t5_amp', lvl, {bad: lvl !== '正常',
+      text:'T5 第 ' + i + ' 片幅值判读为「' + lvl + '」（相对第 0 片基线 ±20%，正本 §4.0 既有判据）'});
+    nudge('t5_flat', flat, {bad: flat === '有',
+      text:'T5 第 ' + i + ' 片出现塌陷段（与 T2 同一 flatFromSeries 口径，未另立阈值）'});
+    T5A.status = '第 ' + i + ' 片' + (wrote ? '已代填' : '未代填（三态＝' + MODE[policyMode('t5_read')] + '）')
+      + '：幅值' + lvl + '／塌陷' + flat + '／电池 ' + bat
+      + '／基线 ' + (T5A.base ? T5A.base.toFixed(1) : '—') + ' µV';
+    paintT5Watch();
+  }
+};
+function paintT5Watch(){
+  document.querySelectorAll('[data-t5watch]').forEach(el => {
+    el.textContent = '🤖 机器自跑（人不盯表）：' + T5A.status
+      + '　｜　累计无帧 ' + Math.round(T5A.silent) + ' s　｜　最长帧间隔 ' + Math.round(T5A.worstGap/1000) + ' s'
+      + '　｜　checkpoint ' + T5A.idx + '/7';
+  });
+}
+
 /* ── T1 自动跑：8 段 × 60 秒，自动打点 + 按段读 α + 自动填表 ── */
 const T1A = {
   on:false, seg:0, left:0, timer:null, acc:{}, lastCap:0,
@@ -2238,10 +2629,12 @@ const T1A = {
     if(m == null){
       t1Msg('第 ' + T1A.seg + ' 段没取到波形，未自动填数（该段可手动填）', true);
     } else {
-      undoPush('T1 第 ' + T1A.seg + ' 段自动填 α', ['t1a' + T1A.seg]);
-      S.fields['t1a'+T1A.seg] = m.toFixed(3);
-      syncField('t1a'+T1A.seg);
-      t1Msg('第 ' + T1A.seg + ' 段（' + st + '）α＝' + m.toFixed(3) + '（' + arr.length + ' 个取样）');
+      const sg = T1A.seg;                     /* 快照：三态走"先问"时授权可能晚于段号推进 */
+      const ok = autoWrite('t1_read', 'T1 第 ' + sg + ' 段自动填 α', ['t1a' + sg], () => {
+        S.fields['t1a' + sg] = m.toFixed(3); syncField('t1a' + sg);
+      });
+      t1Msg('第 ' + sg + ' 段（' + st + '）α＝' + m.toFixed(3) + '（' + arr.length + ' 个取样）'
+        + (ok ? '' : '　［三态＝' + MODE[policyMode('t1_read')] + '，机器未写入，见档案留痕］'));
     }
     updateCalc(); recount(); saveSoon();
     T1A.next();
@@ -2289,17 +2682,8 @@ const T2A = {
     const w = LIVE.wave;
     if(!w) return;
     for(const ch in w){
-      const a = w[ch];
-      if(!a || a.length < 64) continue;
-      let m = 0;
-      for(let i=0;i<a.length;i++) m += a[i];
-      m /= a.length;
-      let v = 0, pk = 0;
-      for(let i=0;i<a.length;i++){
-        const x = a[i]-m; v += x*x;
-        const ax = Math.abs(a[i]); if(ax > pk) pk = ax;
-      }
-      (T2A.acc[ch] = T2A.acc[ch] || []).push({sd: Math.sqrt(v/a.length), pk: pk});
+      const st = chanStats(w[ch]);            /* 共用统计：与 T5 同一处算，不分叉 */
+      if(st) (T2A.acc[ch] = T2A.acc[ch] || []).push(st);
     }
   },
   finish(){
@@ -2310,20 +2694,14 @@ const T2A = {
       if(!arr.length) continue;
       const std = arr.reduce((a,b)=>a+b.sd,0)/arr.length;
       const pk = arr.reduce((a,b)=>Math.max(a,b.pk),0);
-      let flat = '无';
-      if(arr.length >= 60){
-        for(let i=0;i+60<=arr.length;i+=15){
-          let s = 0;
-          for(let k=i;k<i+60;k++) s += arr[k].sd;
-          if(s/60 < 2){ flat = '有'; break; }
-        }
-      }
+      const flat = flatFromSeries(arr);        /* 共用判据：与 T5 同一处算，不分叉 */
       const key = ch.toLowerCase();
-      undoPush('T2 通道 ' + ch + ' 噪声底自动填表', ['t2s_'+key, 't2p_'+key, 't2f_'+key]);
-      S.fields['t2s_'+key] = std.toFixed(1); syncField('t2s_'+key);
-      S.fields['t2p_'+key] = pk.toFixed(0);  syncField('t2p_'+key);
-      S.fields['t2f_'+key] = flat;           syncField('t2f_'+key);
-      rows.push([ch, std, pk, flat]);
+      const wrote = autoWrite('t2_read', 'T2 通道 ' + ch + ' 噪声底自动填表', ['t2s_'+key, 't2p_'+key, 't2f_'+key], () => {
+        S.fields['t2s_'+key] = std.toFixed(1); syncField('t2s_'+key);
+        S.fields['t2p_'+key] = pk.toFixed(0);  syncField('t2p_'+key);
+        S.fields['t2f_'+key] = flat;           syncField('t2f_'+key);
+      });
+      rows.push([ch, std, pk, flat, wrote]);
     }
     recount(); saveSoon();
     const box = document.getElementById('t2aTab');
@@ -2334,15 +2712,18 @@ const T2A = {
       } else {
         box.appendChild(h('table', {class:'autotab'},
           h('thead', null, h('tr', null, h('th', null,'通道'), h('th', null,'std（µV）'),
-            h('th', null,'峰值（µV）'), h('th', null,'连续>1min 贴底'))),
+            h('th', null,'峰值（µV）'), h('th', null,'连续>1min 贴底'), h('th', null,'是否已代填（三态）'))),
           h('tbody', null, ...rows.map(r => h('tr', null,
             h('td', null, r[0]),
             h('td', {class:'num'}, r[1].toFixed(1)),
             h('td', {class:'num'}, r[2].toFixed(0)),
-            h('td', {class: r[3] === '有' ? 'flat' : ''}, r[3]))))));
+            h('td', {class: r[3] === '有' ? 'flat' : ''}, r[3]),
+            h('td', {class:'tip'}, r[4] ? '已代填' : '未代填（策略＝' + MODE[policyMode('t2_read')] + '）'))))));
       }
     }
-    t2Msg('✅ 5 分钟完成，已按通道自动填表（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
+    const heldN = rows.filter(r => !r[4]).length;
+    t2Msg('✅ 5 分钟完成，读数已出' + (heldN ? ('；其中 ' + heldN + ' 通道按三态策略**未代填**（见主持人条／档案）')
+                                           : '，已按通道自动填表') + '（面板侧估算：每秒一次 5 秒窗 std 的时间均值）');
     if(rows.some(r => r[3] === '有')){                                        /* 步 2③／④ */
       if(!rerunOnce('t2', 'T2 静息 5 分钟（连续贴底）', () => T2A.start()))
         askHuman('hg_t2_floor');   /* 重跑过一次仍贴底 → 升级到人，不再自己转圈 */ }
@@ -2498,9 +2879,10 @@ const T3A = {
     if(rec == null) rec = 30;
     const k = T3A.idx + 1, name = T3A.ACTIONS[T3A.idx][0];
     const put = (f, v) => { S.fields[f] = String(v); syncField(f); };
-    undoPush('T3 第 ' + k + ' 组动作自动填表', ['t3a'+k, 't3b'+k, 't3c'+k, 't3d'+k]);
-    put('t3a'+k, dur); put('t3b'+k, rec); put('t3c'+k, rec <= 3 ? '是' : '否');
-    put('t3d'+k, '自动（静息末段基线 ' + (base ? base.toFixed(1) : '—') + ' µV）');
+    autoWrite('t3_read', 'T3 第 ' + k + ' 组动作自动填表', ['t3a'+k, 't3b'+k, 't3c'+k, 't3d'+k], () => {
+      put('t3a'+k, dur); put('t3b'+k, rec); put('t3c'+k, rec <= 3 ? '是' : '否');
+      put('t3d'+k, '自动（静息末段基线 ' + (base ? base.toFixed(1) : '—') + ' µV）');
+    });
     T3A.rows.push([name, dur, rec]);
     if(!p.length) T3A.bad = (T3A.bad || 0) + 1;   /* 该组根本没采到数据（与 T1 无波形同类） */
     recount(); saveSoon();
@@ -2622,6 +3004,27 @@ function buildDossier(){
   hg.forEach(e => L.push('| human_gate | ' + e.id + ' | 第 ' + e.kind + ' 类触发 | ' + e.at    + ' | 答：' + e.key + (e.timeout ? '（超时按默认，未获人答）' : '（人答，剩 ' + e.left_s + ' 秒）') + ' |'));
   if(!rr.length && !hg.length) L.push('| — | — | 本轮机器未代做任何动作，也未向人提问 | — | — |');
   L.push('');
+  /* 步 3②：静默跟随的账必须摊开——打断了没有、被宽限挡下多少、哪条已降为「待核」，人一眼可查 */
+  const nl = S.meta.nudgeLog || [], ph = S.meta.polHold || [];
+  L.push('', '## 一之三 静默跟随与打断记账（三态／两宽限／误报）', '');
+  L.push('- 三态策略现值：' + POLICY.map(p => p.name + '＝' + MODE[policyMode(p.key)]).join('；'));
+  L.push('- 场次 2 打断计数：' + nudCount() + '／' + NUD.budget + '（宽限参数为本窗自设运维数：抖动 '
+    + NUD.arm + ' 次·冷却 ' + NUD.cool + ' s·预算 ' + NUD.budget + ' 次；误报越线 '
+    + FP_LINE.min + ' 次且 ' + Math.round(FP_LINE.rate*100) + '%——**非判据，不进判定链**）');
+  L.push('', '| 类别 | 键 | 状态 | 结果 | 时刻 | 说明 |', '|---|---|---|---|---|---|');
+  nl.forEach(e => L.push('| 打断判定 | ' + e.key + ' | ' + e.state + ' | '
+    + (e.fire ? '**打断人一次**' : '未打断') + ' | ' + e.at + ' | ' + e.why + ' |'));
+  ph.forEach(e => L.push('| 三态策略 | ' + e.key + ' | 代写扣下 | ' + MODE[e.mode] + ' | ' + e.at + ' | '
+    + e.label + (e.done === 'authorized' ? '（人已授权，已写入）' : (e.done === 'declined' ? '（人不同意，未写）' : '（未办）')) + ' |'));
+  Object.keys(S.meta.fp || {}).forEach(k => {
+    const e = S.meta.fp[k];
+    if(!e.fires) return;
+    const p = polOf(k);
+    L.push('| 误报记账 | ' + k + ' | — | 打断 ' + e.fires + ' 次 | — | 人标误报 ' + e.fp + ' 次（'
+      + Math.round(fpRate(k)*100) + '%）｜评级：' + fpGrade(k) + (p ? '' : '（该键未登记于三态表，只算提示账）') + ' |');
+  });
+  if(!nl.length && !ph.length) L.push('| — | — | — | 本轮机器未打断人，也未因策略扣下代写 | — | — |');
+  L.push('', '> 静默成功＝状态没变不说话；上表是**被挡下的部分**（同态不记，其余全部留痕），收口时一并给人看。');
   L.push('', '## 二 关键读数（纯读：npz／逐样本时间戳／qc.json）', '', '| 读数 | 值 |', '|---|---|');
   L.push('| 通道数／标称采样率 | ' + pc((m.channels || []).length || null) + ' / ' + pc(m.sfreq) + ' Hz |');
   L.push('| 样本数／采样跨度 | ' + pc(m.samples) + ' / ' + pc(t.span_s) + ' s |');
@@ -2959,7 +3362,11 @@ function renderHostBar(){
   el.appendChild(head);
   const pr = renderHgPrompt();          /* 步 2③：human_gate 提示占主持人条一处，不另开弹窗 */
   if(pr) el.appendChild(pr);
+  /* 步 3②：静默跟随的提示行（只有状态跃迁才出现）＋三态"先问"行，同占主持人条一处，不另开弹窗 */
+  const nr = renderNudgeRow(); if(nr) el.appendChild(nr);
+  const hr = renderHoldRow();  if(hr) el.appendChild(hr);
   el.appendChild(line); el.appendChild(acts);
+  el.appendChild(renderHostSilence());
 }
 function hardRefresh(){ build(); updateCalc(); }
 
@@ -2996,6 +3403,7 @@ liveConnect();
 obsInit();     /* 步 2②：独立观察通道与自测层各自一条流、各自解析，互不借用（⑦甲） */
 setInterval(paintLive, 1000);
 setInterval(hgTick, 1000);   /* 步 2③：human_gate 的 ttl 只走这一处心跳 */
+setInterval(nudPulse, 1000); /* 步 3②：断流跃迁的常驻心跳（帧不来时 tick 不会再被调用，只能靠它观察） */
 setInterval(() => { if(!LIVE.on) liveConnect(); }, 10000);
 document.getElementById('bSkin').onclick = ()=>{
   S.meta.skin = (S.meta.skin === 'paper') ? 'dash' : 'paper';

@@ -17,7 +17,9 @@ const js = src.match(/<script>([\s\S]*?)<\/script>/)[1]
   + '\n;globalThis.__X = {ROLES, SESS, S, FLOW, build, hostNext, sumSuggest, autoFillRecord, derivedRows,'
   + ' renderHostBar, recount, guideNow, hostGuidePulse, T1A, T2A, T3A, LIVE, OBS, obsTick, obsPaint, obsInit,'
   + ' HGATES, HG, askHuman, hgAnswer, hgTick, hgRoles, hgWhen, rerunOnce, rerunUsed, buildDossier,'
-  + ' UNDO, undoLast, pauseGuide};\n';
+  + ' UNDO, undoLast, pauseGuide, T5A, chanStats, flatFromSeries,'
+  + ' POLICY, MODE, NUD, FP_LINE, policyMode, polSet, tripleOk, autoWrite, nudAskOk, nudAskNo,'
+  + ' nudge, NU, nudCount, nudDismiss, nudCur, nudPulse, silText, fpOf, fpGrade, markFp, unFp, buildDossier};\n';
 
 /* ── 最小 DOM 替身 ── */
 let created = 0;
@@ -406,6 +408,166 @@ X.pauseGuide() === false ? ok('【14】没有机器在跑时「暂停」如实�
 X.T2A.on = true; X.T2A.left = 120; X.T2A.timer = null; X.T2A.acc = {};
 X.pauseGuide() === true && X.T2A.on === false
   ? ok('【14】跑动中「暂停」即停本机（已完成部分数据保留）') : fail('暂停未生效');
+
+/* ── 步 3①：T5 机器自跑（observer=none，人不点即填、填而不吵）── */
+const waveOf = (amp, n) => { const a = []; for(let i=0;i<(n||100);i++) a.push(i % 2 ? amp : -amp); return {ChA: a}; };
+/* 注：T5A.tick 内有 1 秒节流（真实帧本就≥1s 一跳）；测试里逐帧同步喂，故每记都清一次 lastCap，
+      否则跨片那一记会被节流挡在 snap 判断之前——这是测试假象，非面板缺陷。 */
+const tick1 = d => { X.T5A.lastCap = 0; X.T5A.tick(d); };
+const pump = (times, elapsed, amp, batt) => {
+  for(let i=0;i<times;i++) tick1({type:'tick', elapsed, connected:true, battery:batt, wave: waveOf(amp)});
+};
+X.LIVE.on = true; X.LIVE.at = Date.now(); X.UNDO.stack.length = 0; X.S.fields = {};
+X.T5A.reset(); X.T5A.on = false; X.HG.pending = null; X.HG.queue.length = 0;
+tick1({type:'tick', elapsed:10, connected:true, battery:99, wave: waveOf(40)});
+X.T5A.on === true ? ok('【15】接入实时流即自动起（人不点开始，observer=none）') : fail('T5A 未自动起');
+pump(61, 100, 40, 88);
+tick1({type:'tick', elapsed:130, connected:true, battery:88, wave: waveOf(40)});
+X.S.fields.t5a0 === '正常' && X.S.fields.t5d0 === '无' && X.S.fields.t5b0 === '88'
+  ? ok('【15】第 0 片代填：幅值基线＝正常、塌陷无、电池 88（取自 tick 真值）')
+  : fail('第 0 片代填不符：' + X.S.fields.t5a0 + '/' + X.S.fields.t5d0 + '/' + X.S.fields.t5b0
+      + '｜诊断 on=' + X.T5A.on + ' idx=' + X.T5A.idx + ' acc=' + JSON.stringify(Object.keys(X.T5A.acc))
+      + '/' + ((X.T5A.acc.ChA || []).length) + ' status=' + X.T5A.status
+      + ' LIVE.on=' + X.LIVE.on + ' 帧龄=' + (Date.now() - X.LIVE.at) + 'ms');
+X.HG.pending === null ? ok('【15】代填过程不打断人（未弹 human_gate）') : fail('自跑却打断了人：' + X.HG.pending);
+X.UNDO.stack.length > 0 ? ok('【15】机器代填照样进了可撤销栈') : fail('T5 代填未留撤销帧');
+pump(61, 200, 10, undefined);
+tick1({type:'tick', elapsed:610, connected:true, wave: waveOf(10)});
+X.S.fields.t5a1 === '偏低'
+  ? ok('【15】第 1 片幅值为基线 25% → 判「偏低」（±20% 线＝正本既有判据）') : fail('偏低未判出：' + X.S.fields.t5a1);
+X.S.fields.t5b1 === '不可得'
+  ? ok('【15】设备不上报电池 → 如实写「不可得」，不拿别处数冒充') : fail('电池缺报时被填了值：' + X.S.fields.t5b1);
+pump(75, 300, 0.5, 80);
+tick1({type:'tick', elapsed:1210, connected:true, battery:80, wave: waveOf(0.5)});
+X.S.fields.t5d2 === '有'
+  ? ok('【15】连续贴底 → 塌陷列记「有」（与 T2 同一 flatFromSeries，未另立阈值）') : fail('塌陷未判出：' + X.S.fields.t5d2);
+const one = X.chanStats([1,2,3]);
+one === null ? ok('【15】样本不足 64 点 → chanStats 拒算（不拿短窗充数）') : fail('短窗被接受了');
+X.T5A.on = false;
+
+/* ── 步 3②：三态打断＋静默成功＋误报记账 ── */
+const clean32 = () => {
+  X.S.meta.nudge = {}; X.S.meta.nudgeLog = []; X.S.meta.fp = {}; X.S.meta.fpForce = {};
+  X.S.meta.pol = {}; X.S.meta.polHold = []; X.S.meta.nudgeOff = false;
+  X.NU.prompt = null; X.NU.ask = null; X.S.meta.sess = 1;
+};
+const btnTxt = () => { const q = []; walk(doc, q);
+  return {nodes: q, btns: q.filter(n => n.tagName === 'BUTTON').map(n => String(n.textContent))}; };
+/* 造一次"确认跃迁"：清掉冷却 → 连续 arm 次同一新状态；返回最后一次 nudge 的返回值 */
+const fireOnce = (key, st) => {
+  const c = X.nudCur(key); c.at = 0; c.pend = ''; c.seen = 0;
+  X.nudge(key, st, {bad:true}); X.nudge(key, st, {bad:true});
+  return X.nudge(key, st, {bad:true});
+};
+clean32();
+X.policyMode('t5_read') === 'act'
+  ? ok('【16】读数代填登记为「直接做」（正本 §六 点名的 T1/T2/T9 读数类，T3/T5 同性质）') : fail('t5_read 现态应为直接做');
+X.policyMode('any_unregistered_path') === 'ask'
+  ? ok('【16】未登记的路径一律落「先问」——默认态写在函数里，不靠自觉') : fail('默认态不是先问');
+X.polSet('t5_link', 'act') === false && X.policyMode('t5_link') === 'ask'
+  ? ok('【16】三重门硬校验：把"断流提示"改判为直接做被拒（可回退不成立，人也不能给机器升权）') : fail('三重门没拦住改判');
+X.polSet('t5_read', 'ask');
+X.policyMode('t5_read') === 'ask' ? ok('【16】人可把"直接做"改判为"先问"（⑥ 退出判据·可改判）') : fail('改判未生效');
+X.S.fields = {}; X.UNDO.stack.length = 0; X.T5A.reset(); X.T5A.on = true; X.LIVE.on = true; X.LIVE.at = Date.now();
+pump(61, 100, 40, 88);
+tick1({type:'tick', elapsed:130, connected:true, battery:88, wave: waveOf(40)});
+!X.S.fields.t5a0 && X.S.meta.polHold.length === 1
+  ? ok('【16】改判生效后机器确实没代写（第 0 片留空，代写被扣下并留痕）')
+  : fail('扣写不符：fields.t5a0=' + X.S.fields.t5a0 + ' hold=' + JSON.stringify(X.S.meta.polHold));
+X.renderHostBar();
+let b16 = btnTxt();
+b16.nodes.filter(n => clsHas(n, 'nudge')).length === 1
+  ? ok('【16】「先问」行渲染在主持人条一处（不另开弹窗）') : fail('先问行数：' + b16.nodes.filter(n => clsHas(n, 'nudge')).length);
+['允许这一次代写', '不用（我自己来）'].every(t => b16.btns.indexOf(t) >= 0)
+  ? ok('【16】先问只接受两个答案（schema 齐；不回默认＝不写）') : fail('先问答案按钮缺：' + b16.btns.join(','));
+X.nudAskOk();
+X.S.fields.t5a0 === '正常' ? ok('【16】人点头才写：授权即代写第 0 片') : fail('授权后未写：' + X.S.fields.t5a0);
+X.policyMode('t5_read') === 'ask' && X.S.meta.polHold[0].done === 'authorized'
+  ? ok('【16】授权是一次性的：策略仍为「先问」，账上标「人已授权」') : fail('一次性授权记账不符');
+X.polSet('t5_read', 'idle');
+X.S.fields = {}; X.S.meta.polHold = []; X.NU.ask = null; X.T5A.reset(); X.T5A.on = true;
+pump(61, 100, 40, 88);
+tick1({type:'tick', elapsed:130, connected:true, battery:88, wave: waveOf(40)});
+X.NU.ask === null && !X.S.fields.t5a0 && X.S.meta.polHold.length === 1
+  ? ok('【16】「不行动」＝连问都不问，只留痕（机器没动，也没吵）') : fail('不行动态不符');
+X.polSet('t5_read', 'act');
+X.policyMode('t5_read') === 'act' ? ok('【16】改判回「直接做」（该条三重门全真，允许）') : fail('改回直接做失败');
+
+clean32();
+X.nudge('p1', 'A', {bad:true}) === false ? ok('【16】宽限一：新状态头一次不算跃迁（抖动不打断）') : fail('抖动没被挡住');
+X.nudge('p1', 'A', {bad:true}) === false;
+X.nudge('p1', 'A', {bad:true}) === true ? ok('【16】连续 ' + X.NUD.arm + ' 次同一新状态才认跃迁 → 打断一次') : fail('跃迁未被触发');
+X.nudge('p1', 'A', {bad:true}) === false
+  ? ok('【16】静默成功：状态没变就一个字都不说（不重复报"还是 A"）') : fail('同态仍在报');
+X.nudge('p1', 'B', {bad:true}); X.nudge('p1', 'B', {bad:true});
+X.nudge('p1', 'B', {bad:true}) === false && /冷却/.test(X.S.meta.nudgeLog.slice(-1)[0].why)
+  ? ok('【16】宽限二：同键 ' + X.NUD.cool + ' s 内不反复打断（被挡下的那条留了痕）') : fail('冷却未生效');
+X.nudge('p2', '异常', {bad:true}); X.nudge('p2', '异常', {bad:true});
+X.nudge('p2', '异常', {bad:true}) === true ? ok('【16】异常跃迁 → 叫人') : fail('异常没叫到人');
+X.nudge('p2', '正常', {bad:false}); X.nudge('p2', '正常', {bad:false});
+X.nudge('p2', '正常', {bad:false}) === false && /回到正常/.test(X.S.meta.nudgeLog.slice(-1)[0].why)
+  ? ok('【16】回到正常不叫人，只写状态行（正本：场次 2 人什么都不做，异常时才被叫）') : fail('恢复态误叫');
+b16 = btnTxt(); X.renderHostBar(); b16 = btnTxt();
+b16.nodes.filter(n => clsHas(n, 'nudge')).length === 1
+  ? ok('【16】打断提示行渲染一处（含四元组式样：说什么＋怎么答＋谁有权）') : fail('提示行数不符');
+const nudRow = b16.nodes.filter(n => clsHas(n, 'fp'))[0];
+nudRow && /历史误报 0\/1/.test(nudRow.textContent)
+  ? ok('【16】每条提示自带"历史误报 k/n"计数（Drew 2014 那笔账就摆在这儿）') : fail('误报计数未显示：' + (nudRow ? nudRow.textContent : '无该行'));
+['👎 记为误报', '✕ 知道了'].every(t => b16.btns.indexOf(t) >= 0)
+  ? ok('【16】提示行有「记为误报」与「知道了」（可忽略·可改判，⑥ 退出判据）') : fail('提示行出口缺件：' + b16.btns.join(','));
+X.nudDismiss(); X.renderHostBar(); b16 = btnTxt();
+b16.nodes.filter(n => clsHas(n, 'nudge')).length === 0 ? ok('【16】「知道了」即收起，不赖在屏上') : fail('提示未收起');
+fireOnce('p3', 'x1'); fireOnce('p3', 'x2'); fireOnce('p3', 'x3');
+X.fpOf('p3').fires === 3 ? ok('【16】同键累计打断 3 次进入误报账本分母') : fail('分母不符：' + X.fpOf('p3').fires);
+X.markFp('p3'); X.markFp('p3');
+X.fpGrade('p3') === '待核' ? ok('【16】误报越线（≥' + X.FP_LINE.min + ' 次且 ≥' + Math.round(X.FP_LINE.rate*100) + '%）→ 自动降为「待核」')
+  : fail('越线未降级：' + X.fpGrade('p3') + ' ' + JSON.stringify(X.fpOf('p3')));
+fireOnce('p3', 'x4') === false && /待核/.test(X.S.meta.nudgeLog.slice(-1)[0].why)
+  ? ok('【16】降为待核后只记录，不再打断人') : fail('待核后仍在叫人');
+X.unFp('p3');
+X.fpGrade('p3') === '断言' ? ok('【16】人可把「待核」改回「断言」（改判进账本，机器不自升权）') : fail('改回断言无效');
+X.S.meta.nudgeOff = true;
+fireOnce('p5', 'a') === false && /关闭提示/.test(X.S.meta.nudgeLog.slice(-1)[0].why)
+  ? ok('【16】「关闭提示」后一律转记录（⑥ 退出判据·可关）') : fail('关闭提示未生效');
+X.S.meta.nudgeOff = false;
+
+clean32(); X.S.meta.sess = 2;
+fireOnce('k1', 'a') && fireOnce('k2', 'a') && fireOnce('k3', 'a');
+X.nudCount() === 3 ? ok('【16】场次 2 打断计数只算真正叫过人的（3/3）') : fail('打断计数不符：' + X.nudCount());
+fireOnce('k4', 'a') === false && /预算/.test(X.S.meta.nudgeLog.slice(-1)[0].why)
+  ? ok('【16】超出场次 2 预算（≤' + X.NUD.budget + '）→ 第 4 条转记录，不再叫人（§九 结果指标由此兜住）') : fail('预算未挡住');
+/已打断 3\/3/.test(X.silText()) ? ok('【16】静默跟随状态行如实报"已打断 3/3"') : fail('状态行文本不符：' + X.silText());
+const dos2 = X.buildDossier();
+/## 一之三 静默跟随与打断记账/.test(dos2) ? ok('【16】档案新增该段（三态现值＋打断判定＋误报记账）') : fail('档案缺该段');
+/非判据，不进判定链/.test(dos2)
+  ? ok('【16】档案明写宽限／越线参数是本窗自设运维数，非判据（不当阈值偷偷进结论链）') : fail('档案未声明参数性质');
+/打断判定/.test(dos2) && /误报记账/.test(dos2) && /场次 2 打断计数：3／3/.test(dos2)
+  ? ok('【16】档案列出被挡下的每一条（同态不记，其余全留）') : fail('档案记账行不全');
+clean32();
+X.T1A.on = false; X.T2A.on = false; X.T3A.on = false; X.T5A.on = false;   /* 前置清场：前面几组把机器留在跑动态 */
+X.nudge('pt', '异常', {bad:true, text:'只在第一记带的文案'});
+X.nudge('pt', '异常', {bad:true});
+X.nudge('pt', '异常', {bad:true});
+X.NU.prompt && /只在第一记带的文案/.test(X.NU.prompt.text)
+  ? ok('【16】跃迁确认那一记即使不带文案，也用宽限期间记下的原文（提示不退化成键名）') : fail('文案未延续：' + JSON.stringify(X.NU.prompt));
+/现无机器在跑/.test(X.silText())
+  ? ok('【16】无机器在跑时状态行如实说「现无机器在跑」（不装作在盯表）') : fail('状态行文案不实：' + X.silText());
+X.T5A.on = true;
+/机器自跑中/.test(X.silText()) ? ok('【16】T5 自跑中状态行改口「机器自跑中」') : fail('自跑态未显示：' + X.silText());
+X.T5A.on = false;
+clean32();
+X.T1A.on = false; X.T2A.on = false; X.T3A.on = false; X.LIVE.on = true; X.LIVE.at = Date.now();
+X.nudPulse(); X.nudPulse(); X.nudPulse();
+(X.S.meta.nudge.t5_link || {}).state === '有帧'
+  ? ok('【16】常驻心跳在观察帧龄（帧不来时靠它，不靠 tick——tick 那时根本不会被调用）')
+  : fail('心跳未记链路态：' + JSON.stringify(X.S.meta.nudge.t5_link));
+X.LIVE.at = Date.now() - 9000;                                  /* 造 9 秒无帧 */
+X.nudPulse(); X.nudPulse();
+X.nudPulse() === undefined && X.NU.prompt && X.NU.prompt.key === 't5_link'
+  ? ok('【16】断流满三记才叫人（抖动宽限同样管链路），文案用心跳里存下的原文')
+  : fail('断流未提示：' + JSON.stringify(X.NU.prompt));
+X.NU.prompt = null; X.LIVE.on = false;
+clean32(); X.polSet('t5_read', 'act'); X.T5A.on = false;
 
 console.log('\n（本次共创建 ' + created + ' 个节点）');
 console.log(bad ? '结论：✗ 逻辑冒烟 ' + bad + ' 处问题' : '结论：✓ 逻辑冒烟全过');

@@ -14,11 +14,17 @@ for (let k = s0; k < js.length; k++) { if (js[k] === '{') d++; else if (js[k] ==
 FLOW = eval('(' + js.slice(s0, end + 1) + ')');
 
 /* 机器能自己填的字段前缀（**逐个对过面板源码的写入语句**，无人点击即自动写入者才计）：
-   T1A（t1a*）／T2A（t2s_/t2p_/t2f_）／T3A（t3a-t3d*）／posthoc 自动读数（ph*／t5dur/eff/loss／t5c*／t6*／t7*／t8*）
+   T1A（t1a*）／T2A（t2s_/t2p_/t2f_）／T3A（t3a-t3d*）／posthoc 自动读数（ph*／t5dur/eff/loss／t6*／t7*／t8*）
    ／派生视图机器代填（r_date 等 7 位，见 REC_MAP）。
    09-27 步 2 收口时补：t3d*（T3A.put('t3d'+k) 自动写基线说明）、t5dur/eff/loss（读会话即自动填）、r_*（代填记录卡）。
-   不补：dp_*（须人点「设备预设」载档）、t1n*（每段人工备注）、t5a/b/n*（T5 分片人工格）、t4r、f_s0*。 */
-const AUTO = [/^t1a\d$/, /^t1t?\d$/, /^t2(s|p|f|q)_/, /^t3(a|b|c|d)\d$/, /^ph/, /^t5c\d$/, /^t5(dur|eff|loss)$/,
+   09-27 步 3① 收口时补：t5a、t5d、t5b 三组（T5A.snap 按 checkpoint 自动写"本段幅值／塌陷段／电池"，人不点即填；
+     电池无上报时写"不可得"，仍属机器代填）。
+   ⚠ 09-27 步 3① **删除** `/^t5c\d$/`：`t5c0…t5c7`（累计断包）在面板里**只有输入格、无任何写入源**
+     （服务端仅事后 qc 给会话级丢包率），此前被误计为机器可自动填 → **基线 129 系低估 8，真值应为 137**。
+     本窗如实修正度量，不沿用更低的数往上报。
+   不补：dp_*（须人点「设备预设」载档）、t1n*（每段人工备注）、t5c*（无源）、t5n*（体位/换线人工备注）、t4r、f_s0*。 */
+const AUTO = [/^t1a\d$/, /^t1t?\d$/, /^t2(s|p|f|q)_/, /^t3(a|b|c|d)\d$/, /^ph/,
+              /^t5(dur|eff|loss)$/, /^t5(a|b|d)\d$/,
               /^r_(date|mode|dur|eff|loss|clean|pol)$/, /^t6/, /^t7/, /^t8/];
 const isAuto = f => AUTO.some(r => r.test(f));
 
