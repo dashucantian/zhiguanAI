@@ -70,7 +70,9 @@ FLOW.secs.forEach(sec => {
     }
     else if (['hint', 'note', 'fold', 'static', 'calc', 'bridge', 't1auto', 't2auto', 't3auto', 't4mains', 'posthoc', 'dossier',
       /* 步 1·只读骨架（2026-09-27 W1 接力窗口）新增两类只读派生积木 */
-      'derived', 'roletable'].indexOf(b.k) < 0) fail(at + ' 未知积木类型 ' + b.k);
+      'derived', 'roletable',
+      /* 步 3④·结论四态（2026-09-28 W1 接力窗口）新增只读派生积木：机判列×人判列分列表，不含输入位 */
+      'states'].indexOf(b.k) < 0) fail(at + ' 未知积木类型 ' + b.k);
   });
 });
 const dup = a => a.filter((x, i) => a.indexOf(x) !== i);

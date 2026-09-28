@@ -270,6 +270,13 @@ nav:empty{display:none}
 /* 步 3②：三态策略表（§三 角色表的投影，只读派生＋人改判按钮；不含输入位＝不进动作数） */
 .polrow .cur{font-weight:600}
 .polrow .off{opacity:.45}
+/* 步 3④：结论四态表（机判列×人判列**分列**；INVALID／AWN 不并入 FAIL） */
+.stattab td.stPASS{color:var(--qing);font-weight:600}
+.stattab td.stFAIL{color:var(--bad);font-weight:600}
+.stattab td.stINVALID,.stattab td.stACCEPTED_WITH_NOTE{color:var(--jin);font-weight:600}
+.stattab td.stQC_ERROR{color:var(--ink3);font-weight:600;text-decoration:underline dotted}
+.stattab tr.conf{background:var(--bg2)}
+.stattab tr.conf td:first-child{border-left:3px solid var(--bad);padding-left:6px}
 @media print{.obs{display:none}}
 .hostbar.closed > *{display:none}
 .hostbar.closed{padding:8px 16px}
@@ -453,7 +460,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.4 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.5 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -784,6 +791,11 @@ const FLOW = {
       ['🟡 有条件可用','T1 合格但 T2 有贴底／T3 恢复慢／T10 不通过','先落"佩戴 SOP＋开机自检"，贴底位置在 SOP 里重点标注；报告写明适用条件；问题清单回传厂商'],
       ['🔴 不可用','T6 无真原始档，或 T1 与 T2 双双不达标且排查后仍不合格','触发 D32 硬条件：不进入后续采购谈判，走换货路径；测试记录即谈判材料']
      ]},
+    {k:'states',title:'结论四态（机判列）× 人判列——两列分列，不得合并',chip:'步 3④ · ⑨④⑩⑬',drawer:1,
+     hint:'机器只对<b>有真源的项</b>说话（qc.json 既有输出逐字转录／T1A·T2A·T3A·T5A 已代填的读数），其余留空写明"机器无该口径判据"，<b>不硬造</b>。'
+       + '人判列（红绿灯）与机判列各存各的：机器不覆盖人判，人改判也不抹掉机器原读法，<b>矛盾只标不并</b>并升级问人。'
+       + '四态语义照正本 §四：<code>PASS</code>／<code>FAIL</code>／<code>INVALID</code>（数据不可用而设备没毛病）／<code>QC_ERROR</code>（脚本自身出错）＋<code>ACCEPTED_WITH_NOTE</code>（可用带保留，保留项必须写明）——'
+       + '<b>INVALID 与 AWN 绝不可合并成"失败"</b>。'},
     {k:'v',id:'sumv',label:'本设备总评'},
     {k:'dossier',title:'验收档案（一页结论＋证据指针＋反馈清单）',chip:'B6 一键出档',
      hint:'先在上面「事后自动读数」卡读入本场会话，再点这里生成：档案含<b>十一项红绿灯</b>、关键读数（含<b>会话跨度缺口</b>与 jitter 达标情况）、<b>证据指针</b>（会话目录＋契约四件＋质检理由）与<b>自动汇总的问题清单</b>（供厂商反馈）。可复制、可下载 Markdown。'}
@@ -847,7 +859,7 @@ const GATES = [
    take:[['s2',5,8]]},
   {id:'g5', name:'G5 验收', acc:'#7C5CBF',
    desc:'值不值、能否长期用：T11 对照、11 项红绿灯、记录卡与总评三档。',
-   take:[['s3',0,1],['sum',0,7]]},
+   take:[['s3',0,1],['sum',0,8]]},
   {id:'ref', name:'速查与处置', acc:'#6B7280',
    desc:'判据速查卡、异常处置 10 条、最小可用子集、待裁清单——工具页，不属任何闸门。',
    take:[['ref',0,4]]}
@@ -965,6 +977,10 @@ const HGATES = [
    ask:'连续两段取不到波形——采集是不是已经断了？（可先看右下角观察窗是否报静默）',
    schema:[{k:'restart', label:'去驾驶舱重启采集'}, {k:'checklink', label:'查线／查设备'},
            {k:'abort', label:'中止本场，保留已采数据'}]},
+  {id:'hg_state_conflict', item:null, kind:2, ttl:120, dflt:'none', whenText:'机判列与人判列矛盾（如 qc 隔离却点「通过」）',
+   ask:'机器读到的结论和您点的不一致——两列不得合并，请挑一条说明怎么落：',
+   schema:[{k:'human_right', label:'以人判为准，机判列标注"未复核"'}, {k:'data_invalid', label:'数据确不可用，本场落 INVALID'},
+           {k:'device_fail', label:'设备确不达标，落 FAIL'}, {k:'recheck', label:'我再看证据，暂不定'}]},
   {id:'hg_consent', item:null, kind:1, ttl:60, dflt:'stop', whenText:'知情同意 cs5 未确认（只有人能答）',
    ask:'知情同意还没确认——这一项只有人能答：本人是否已同意按本流程采集？',
    schema:[{k:'agreed', label:'已同意（去勾「知情同意」）'}, {k:'stop', label:'未同意 → 停止采集'}]}
@@ -980,11 +996,20 @@ function hgWhen(g){
   return g.whenText || (r ? r.gateWhen : '—');
 }
 function hgAsked(id){ return (S.meta.hgLog || []).some(e => e.id === id && !e.timeout); }
+/* 同一**矛盾集合**只问一次；集合变了（又冒出一项新矛盾）才再问——静态三类触发不走这条路，仍按 hgAsked 永久去重 */
+function hgSigOk(id, sig){ return ((S.meta.hgSig || {})[id] || []).indexOf(sig) < 0; }
+function hgSigMark(id, sig){
+  S.meta.hgSig = S.meta.hgSig || {};
+  const a = S.meta.hgSig[id] = S.meta.hgSig[id] || [];
+  if(sig && a.indexOf(sig) < 0) a.push(sig);
+}
 /* 触发入口：一次只问一条（§六 两宽限之"不反复打断"），后来的排队等前一条答完 */
 function askHuman(id, ctx){
   const g = hgOf(id);
   if(!g) return false;
-  if(hgAsked(id) || HG.pending === id || HG.queue.indexOf(id) >= 0) return false;
+  const sig = ctx && ctx.sig;
+  if(sig ? !hgSigOk(id, sig) : hgAsked(id)) return false;
+  if(HG.pending === id || HG.queue.indexOf(id) >= 0) return false;
   if(HG.pending){ HG.queue.push(id); return false; }
   HG.pending = id; HG.dueAt = Date.now() + g.ttl * 1000; HG.ctx = ctx || null;
   renderHostBar();
@@ -995,8 +1020,9 @@ function hgAnswer(id, key, timedOut){
   S.meta.hgLog = S.meta.hgLog || [];
   S.meta.hgLog.push({id, item:g.item || '-', kind:g.kind, key,
                      timeout:!!timedOut, left_s: Math.max(0, Math.round((HG.dueAt - Date.now()) / 1000)),
-                     at: new Date().toLocaleString('zh-CN', {hour12:false})});
-  HG.pending = null; HG.dueAt = 0; HG.openWhy = false;
+                     sig:(HG.ctx && HG.ctx.sig) || '', at: new Date().toLocaleString('zh-CN', {hour12:false})});
+  if(HG.ctx && HG.ctx.sig) hgSigMark(id, HG.ctx.sig);
+  HG.pending = null; HG.dueAt = 0; HG.openWhy = false; HG.ctx = null;
   saveSoon();
   toast(timedOut ? ('提示超时（' + g.ttl + ' 秒无人答）→ 按四元组默认动作执行：' + hgDfltText(g))
                  : ('已记下：' + key));
@@ -1265,6 +1291,185 @@ function renderHostSilence(){
       onclick: () => { const c = document.querySelector('.card[data-g="roletable"]');
         if(c){ c.scrollIntoView(); c.classList.remove('closed'); }
         toast('三态策略表在「角色与观察」卡内（本表是 §三 声明表的投影，不是新判据）'); }}, '🛈 三态策略'));
+}
+
+/* ── 步 3④：结论四态落库（施工方案 §四 · ⑨④⑩⑬）──
+   四态不可合并：PASS 达标｜FAIL 设备不达标｜INVALID 本次数据不可用而**设备没毛病**（人没静住、电极没贴好）｜
+   QC_ERROR 脚本自身出错；外加 ACCEPTED_WITH_NOTE＝数据可用但带保留（**保留项必须写明**）。
+   ⚠ 正本明令：INVALID 与 ACCEPTED_WITH_NOTE **绝不可合并成"失败"**——合并会让重试策略与结论口径双错。
+   机判列只对**有真源的项**说话，其余留空并写明"机器无该口径判据"（红线5／§四ter AI 不自写规则）；
+   人判列（红绿灯 `S.verdicts`）与机判列**分列存放、分列显示、分列入档**，任何一列都不覆盖另一列，矛盾只标不并。
+   qc 侧一律**逐字转录** `qc_pipeline.py` 既有输出（recommend∈{ingest,quarantine}＋reasons），**不重算、不改阈值**。 */
+const STL = {PASS:'PASS｜达标', ACCEPTED_WITH_NOTE:'AWN｜数据可用·带保留',
+             INVALID:'INVALID｜本次数据不可用（设备没毛病）',
+             FAIL:'FAIL｜设备不达标', QC_ERROR:'QC_ERROR｜脚本／管线自身出错'};
+function fvals(pfx){
+  const out = [];
+  Object.keys(S.fields).forEach(k => {
+    if(k.indexOf(pfx) === 0 && String(S.fields[k]).trim()) out.push([k.slice(pfx.length), String(S.fields[k]).trim()]);
+  });
+  return out.sort((a, b) => a[0].localeCompare(b[0]));
+}
+function hgHits(item, key){ return (S.meta.hgLog || []).filter(e => e.item === item && e.key === key).length; }
+function hgInvalidNote(item){
+  const e = (S.meta.hgLog || []).filter(x => x.item === item && x.key === 'invalid').pop();
+  return e ? ('人已在 ' + e.id + ' 应答「该段／该项作废」（' + e.at + '）') : '';
+}
+/* 逐项机判：返回 {st, why, note}；st===null 表示"机器无该口径判据"，绝不硬造 */
+const STROWS = [
+  {id:'qc', name:'质检链（qc.json 既有输出·逐字转录）', get(){
+    const a = PH && PH.audit;
+    if(!a || a.recommend == null) return {st:null, why:'未读入会话或 qc.json 无 recommend——不猜', note:''};
+    const rs = (a.reasons || []);
+    if(a.recommend === 'ingest') return {st:'PASS', why:'qc recommend＝ingest（阈值版本 ' + (a.threshold_version || '—') + '）', note:''};
+    if(rs.some(r => /无法读取 npz|Exception|Traceback/i.test(String(r))))
+      return {st:'QC_ERROR', why:'qc 自报读档失败：' + rs.join('；'), note:''};
+    return {st:'INVALID', why:'qc recommend＝quarantine（本场数据被隔离）——只说明数据不可用，不说明设备不达标，二者不得合并',
+            note:rs.length ? ('reasons：' + rs.join('；')) : 'qc 未给 reasons（须人工补写保留项）'};
+  }},
+  {id:'t1v', name:'T1 α 阻断提升', get(){
+    const s = t1BlockStat();
+    if(s.d == null) return {st:null, why:'八段 α 未采齐或无睁眼均值——机器不判', note:''};
+    if(s.lv === 'pass') return {st:'PASS', why:'α 增幅 ' + s.d.toFixed(1) + '% ≥30%（正本 T1 既有分档）', note:''};
+    if(s.lv === 'cond') return {st:'ACCEPTED_WITH_NOTE', why:'α 增幅 ' + s.d.toFixed(1) + '% 落 15–30% 合格档',
+                                note:'保留项：仅达"合格"未达"优秀"（正本 T1 分档原文）'};
+    return {st:null, why:'α 增幅 ' + s.d.toFixed(1) + '% <15%——分不清是没闭眼（INVALID）还是设备不达标（FAIL），已按 ② 灰区问人，机器不自裁', note:''};
+  }},
+  {id:'t2v', name:'T2 噪声底／贴底', get(){
+    const rows = fvals('t2f_');
+    if(!rows.length) return {st:null, why:'贴底列无值（未跑 T2A 且无人填）——机器不判', note:''};
+    const bad = rows.filter(r => r[1] === '有').map(r => r[0]);
+    if(!bad.length) return {st:'PASS', why:'全部通道贴底列＝无（口径同 flatFromSeries）', note:''};
+    return {st:'ACCEPTED_WITH_NOTE', why:'有通道连续贴底＝数据可用但带保留（正本 §6.3 第二档，**不判 FAIL**）',
+            note:'保留项：贴底通道 ' + bad.join('、')};
+  }},
+  {id:'t3v', name:'T3 伪迹恢复', get(){
+    const rows = fvals('t3c');
+    if(!rows.length) return {st:null, why:'恢复达标列无值——机器不判', note:''};
+    const slow = rows.filter(r => r[1] === '否').map(r => r[0]);
+    if(!slow.length) return {st:'PASS', why:'各组恢复 ≤3 s（正本 T3 既有判读线）', note:''};
+    return {st:'ACCEPTED_WITH_NOTE', why:'部分组恢复慢＝有条件可用（正本 §6.3 第二档）',
+            note:'保留项：恢复超 3 s 的组＝' + slow.join('、')};
+  }},
+  {id:'t5v', name:'T5 长时程（幅值漂移／塌陷）', get(){
+    const amp = fvals('t5a'), flat = fvals('t5d');
+    if(!amp.length) return {st:null, why:'T5 未跑到任何 checkpoint（或实时流未接入）——机器不判', note:''};
+    const drift = amp.filter(r => r[1] === '偏低' || r[1] === '偏高').map(r => r[0] + ' 片' + r[1]);
+    const flats = flat.filter(r => r[1] === '有').map(r => r[0]);
+    const noPkt = (fvals('t5c').length ? '' : '｜累计断包列机器无数据源，本行只覆盖幅值与塌陷两条既有判据');
+    if(drift.length) return {st:'FAIL', why:'幅值漂移超正本 §4.0 的 ≤20%/小时线：' + drift.join('、') + noPkt,
+                             note:'塌陷段 ' + flats.length + ' 处'};
+    if(flats.length > 1) return {st:'FAIL', why:'塌陷处数超 §4.0 的 ≤1 分钟/小时线（' + flats.length + ' 片有塌陷）' + noPkt, note:''};
+    if(flats.length === 1) return {st:'ACCEPTED_WITH_NOTE', why:'塌陷 1 处＝线内但须写明' + noPkt,
+                                   note:'保留项：第 ' + flats[0] + ' 片出现塌陷段'};
+    return {st:'PASS', why:'各片幅值档＝正常、无塌陷（±20% 与 T2 同一塌陷口径）' + noPkt, note:''};
+  }},
+  {id:'t6v', name:'T6 原始档（真原始数据）', get(){
+    const has = PH && PH.npz_meta ? PH.npz_meta.has_pre_filter : (S.fields.t6b ? S.fields.t6b === '有' : null);
+    if(has === null || has === undefined) return {st:null, why:'未读入会话，eeg_pre_filter 是否存在机器不知道——不猜', note:''};
+    if(has) return {st:'PASS', why:'npz 含 eeg_pre_filter 原始档', note:''};
+    return {st:'FAIL', why:'无原始档——触 D32 硬条件（走换货／谈判，属设备缺陷，非本次数据作废）', note:''};
+  }},
+  {id:'t8v', name:'T8 端到端契约四件', get(){
+    const a = PH && PH.audit;
+    if(!a || a.manifest == null) return {st:null, why:'未读入会话或缺契约件清单——机器不判', note:''};
+    const miss = ['manifest', 'events', 'qc', 'report'].filter(k => !a[k]);
+    if(!miss.length) return {st:'PASS', why:'契约四件俱在（manifest／events／qc／report）', note:''};
+    return {st:'QC_ERROR', why:'管线未产出契约件：' + miss.join('、') + '——流程未闭合，不写设备结论', note:''};
+  }},
+  {id:'t4v', name:'T4 工频残余', get(){
+    const v = parseFloat(S.fields['t4r']);
+    if(isNaN(v)) return {st:null, why:'工频比无值（须跑 T4 或人填）——机器不判', note:''};
+    return {st:v <= 0.35 ? 'PASS' : 'ACCEPTED_WITH_NOTE', why:'正本 T4 既有分档：≤0.35 良好；0.35–0.5 可接受；>0.5 查接地',
+            note:v <= 0.35 ? '' : ('保留项：工频比 ' + v + '（0.35–0.5 为可接受档，>0.5 须查接地）')};
+  }},
+  {id:'t7v',  name:'T7 漂移续测', get(){ return {st:null, why:'值已代填（t7a/t7b/t7c），但"是否影响使用"属人判读——机器无该口径判据', note:''}; }},
+  {id:'t9v',  name:'T9 VR 场景', get(){ return {st:null, why:'需外部打点与真跑 VR，面板拿不到；结论默认「待核」属步 4⑤（正本 §十）', note:''}; }},
+  {id:'t10v', name:'T10 长期可用性', get(){ return {st:null, why:'跨场对照，机器不独判', note:''}; }},
+  {id:'t11v', name:'T11 双机对照', get(){ return {st:null, why:'需第二台设备与镜像蒙太奇（口径落文属步 4④），机器不独判', note:''}; }},
+  {id:'sumv', name:'本设备总评', get(){ return {st:null, why:'总评是**人的签字位**（T6 judge＝human_signoff），机器永不代判、永不代签', note:''}; }}
+];
+/* 人已改判的落在另一本账（S.meta.stForce），机判原文仍在——两列各自可追，改判不覆盖依据 */
+function stForce(id){ return (S.meta.stForce || {})[id] || ''; }
+function stOf(r){ return stForce(r.id) || r.st; }
+function setStForce(id, st){
+  const row = STROWS.filter(x => x.id === id)[0];
+  if(!row) return false;
+  S.meta.stForce = S.meta.stForce || {};
+  S.meta.stLog = S.meta.stLog || [];
+  if(st) S.meta.stForce[id] = st; else delete S.meta.stForce[id];
+  S.meta.stLog.push({id, st: st || '撤销改判', at: tsNow(), machine: row.get().st || '—'});
+  saveSoon(); postMarker('结论四态改判：' + row.name + ' → ' + (st || '撤销改判（回机器原值）'));
+  paintStates(); renderHostBar();
+  return true;
+}
+function machineStates(){
+  return STROWS.map(r => {
+    const o = r.get() || {};
+    const inv = hgInvalidNote(r.id.slice(0, 2));
+    const st = inv && o.st !== 'QC_ERROR' ? 'INVALID' : (o.st || null);
+    const why = inv ? (inv + (o.why ? '｜机器原读法：' + o.why : '')) : (o.why || '');
+    const eff = stForce(r.id) || st;                        /* 生效值：人改判优先，机判原文仍另存一列 */
+    return {id:r.id, name:r.name, st, why, note:o.note || '', human:S.verdicts[r.id] || '',
+            eff, forced:stForce(r.id) || '', conflict:stConflict(eff, S.verdicts[r.id])};
+  });
+}
+/* 矛盾判定：只标不并，两列谁都不覆盖谁 */
+function stConflict(st, human){
+  if(!st || !human) return '';
+  if(st === 'PASS' && human === 'fail') return '机判达标·人判不通过';
+  if(st === 'FAIL' && human === 'pass') return '机判不达标·人判通过';
+  if((st === 'INVALID' || st === 'QC_ERROR') && (human === 'pass' || human === 'cond'))
+    return (st === 'INVALID' ? '数据已隔离／作废' : '读数链路报错') + '·人判' + (human === 'pass' ? '通过' : '有条件');
+  return '';
+}
+function paintStates(cardEl){
+  const tb = (cardEl && cardEl.querySelector('#stBody')) || document.getElementById('stBody');
+  if(!tb) return;
+  const rows = machineStates();
+  tb.innerHTML = '';
+  rows.forEach(r => {
+    const btn = st => h('button', {class:'btn' + (stForce(r.id) === st ? '' : ' ghost'), type:'button',
+      title:st ? ('人改判为 ' + (STL[st] || st) + '（机判原文仍保留，不覆盖）') : '撤销改判，回到机器原读法',
+      onclick: () => setStForce(r.id, st)}, st ? st.slice(0, 4) : '撤');
+    const cell = r.st === null
+      ? h('td', {class:'tip'}, '—（不硬判）')
+      : h('td', {class:'cur st' + r.st}, STL[r.st]);
+    tb.appendChild(h('tr', {class:'strow' + (r.conflict ? ' conf' : '')},
+      h('td', null, r.name),
+      cell,
+      h('td', {class:'tip', text:r.why}),
+      h('td', null, r.human ? VLAB[r.human] : '—（未判）'),
+      h('td', {class:r.conflict ? 'flat' : 'tip'}, r.conflict ? ('⚠ ' + r.conflict) : (r.st ? '两列各表' : '—')),
+      h('td', {class:'tip'}, r.note || '—'),
+      h('td', {class:'hghow'}, ['PASS', 'ACCEPTED_WITH_NOTE', 'INVALID', 'FAIL', 'QC_ERROR'].map(btn).concat([btn('')]))));
+  });
+  const conf = rows.filter(r => r.conflict);
+  if(conf.length) askHuman('hg_state_conflict', {sig: conf.map(c => c.id + '→' + c.eff).join('|')});
+  const tip = document.getElementById('stTip');
+  if(tip) tip.textContent = '知情同意：' + (S.checks.cs5 ? '已确认（cs5）'
+      : '「未见确认记录」——本场数据按 INVALID 看待（伦理有效性），与"设备达标与否"是两回事，不得写成 FAIL')
+    + '　｜　人判列已判 ' + rows.filter(r => r.human).length + '/' + rows.length
+    + '　｜　机判列有真源 ' + rows.filter(r => r.st).length + '/' + rows.length
+    + '　｜　矛盾待裁 ' + conf.length + ' 处'
+    + (conf.length ? '（' + conf.map(c => c.name).join('、') + '）' : '');
+}
+function renderStates(blk){
+  const body = [h('div', {class:'tw'}, h('table', {class:'stattab'},
+    h('thead', null, h('tr', null,
+      ...['项', '机判列（四态·有真源才说话）', '依据原文（机器读到的）', '人判列（红绿灯·人点）', '两列关系', '保留项必须写明', '人改判（不覆盖机判）'].map(c => h('th', null, c)))),
+    h('tbody', {id:'stBody'}))),
+    h('p', {class:'tip', id:'stTip'}, '')];
+  body.push(h('div', {class:'note'},
+    h('b', null, '四态不可合并（正本 §四 原文）'),
+    h('div', {html:'<b>PASS</b> 达标｜<b>FAIL</b> 设备不达标｜<b>INVALID</b> 本次数据不可用但<b>设备没毛病</b>（人没静住、电极没贴好）｜'
+      + '<b>QC_ERROR</b> 脚本自身出错；外加 <b>ACCEPTED_WITH_NOTE</b> 数据可用但带保留（结论必须写明保留项）。'
+      + '<b>INVALID 与 ACCEPTED_WITH_NOTE 绝不可合并成"失败"</b>——合并会让重试策略与结论口径双错。'
+      + '本表两列<b>分列存放、分列显示、分列入档</b>，机器不覆盖人判、人判也不抹掉机判原文；矛盾只标不并（依 skip vs xfail 的语义区分）。'
+      + 'qc 侧为逐字转录 <code>qc_pipeline.py</code> 既有输出，未重算、未改阈值（版本 20260920）。'})));
+  const c = card(blk, body);
+  setTimeout(() => paintStates(c), 0);
+  return c;
 }
 
 /* ── 步 2④：自动重跑一次＋如实记（施工方案 §五.3 · ④甲）──
@@ -2028,6 +2233,7 @@ function recount(){
   });
   refreshGates();
   updateMirror();
+  try{ paintStates(); }catch(e){}   /* 步 3④：结论四态表随任何写入刷新（卡片不在当前闸门页时静默跳过） */
   paintKpi(done, total);
   renderHostBar();   /* 主持人条随状态刷新（步 1·只读派生，不写业务字段） */
   paintDerived();
@@ -3025,6 +3231,21 @@ function buildDossier(){
   });
   if(!nl.length && !ph.length) L.push('| — | — | — | 本轮机器未打断人，也未因策略扣下代写 | — | — |');
   L.push('', '> 静默成功＝状态没变不说话；上表是**被挡下的部分**（同态不记，其余全部留痕），收口时一并给人看。');
+  /* 步 3④：结论四态与红绿灯**分列**入档，两列谁都不覆盖谁；矛盾只标不并 */
+  const stRows = machineStates();
+  L.push('', '## 一之四 结论四态（机判列）× 人判列——分列，不得合并', '');
+  L.push('| 项 | 机判（四态） | 依据原文（机器读到的） | 人判（红绿灯） | 两列关系 | 保留项 | 人改判 |',
+    '|---|---|---|---|---|---|---|');
+  stRows.forEach(r => L.push('| ' + r.name + ' | ' + (r.st || '—（机器无该口径判据）') + ' | '
+    + String(r.why).replace(/\*\*/g, '') + ' | ' + (r.human ? VLAB[r.human] : '—（未判）') + ' | '
+    + (r.conflict ? ('⚠ 矛盾：' + r.conflict) : (r.st ? '分列各表' : '—')) + ' | '
+    + (r.note || '—') + ' | ' + (r.forced || '—') + ' |'));
+  L.push('', '> 四态语义（正本 §四 原文）：**PASS** 达标｜**FAIL** 设备不达标｜**INVALID** 本次数据不可用但**设备没毛病**｜'
+    + '**QC_ERROR** 脚本自身出错；外加 **ACCEPTED_WITH_NOTE** 数据可用但带保留（保留项必须写明）。'
+    + '**INVALID 与 ACCEPTED_WITH_NOTE 绝不可合并成"失败"**——合并会让重试策略与结论口径双错。');
+  L.push('> qc 侧为逐字转录 `qc_pipeline.py` 既有输出（recommend／reasons，阈值版本 ' + pc(a.threshold_version)
+    + '），**未重算、未改阈值**；机器无真源的项一律留空并写明"机器无该口径判据"，不硬造。');
+  if(!S.checks.cs5) L.push('> ⚠ 本场**知情同意未见记录**：按正本 §四，本场数据整体应落 **INVALID**（伦理有效性），与"设备达标与否"是两回事，不得写成 FAIL。');
   L.push('', '## 二 关键读数（纯读：npz／逐样本时间戳／qc.json）', '', '| 读数 | 值 |', '|---|---|');
   L.push('| 通道数／标称采样率 | ' + pc((m.channels || []).length || null) + ' / ' + pc(m.sfreq) + ' Hz |');
   L.push('| 样本数／采样跨度 | ' + pc(m.samples) + ' / ' + pc(t.span_s) + ' s |');
@@ -3131,6 +3352,7 @@ function build(){
         case 'mirror':  el = renderMirror(blk); break;
         case 'derived': el = renderDerived(blk); break;
         case 'roletable': el = renderRoleTable(blk); break;
+        case 'states': el = renderStates(blk); break;
         case 'static':  el = renderStatic(blk); break;
         case 'timer':   el = renderTimer(blk); break;
         case 'v':       el = renderV(blk); break;

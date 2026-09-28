@@ -19,7 +19,9 @@ const js = src.match(/<script>([\s\S]*?)<\/script>/)[1]
   + ' HGATES, HG, askHuman, hgAnswer, hgTick, hgRoles, hgWhen, rerunOnce, rerunUsed, buildDossier,'
   + ' UNDO, undoLast, pauseGuide, T5A, chanStats, flatFromSeries,'
   + ' POLICY, MODE, NUD, FP_LINE, policyMode, polSet, tripleOk, autoWrite, nudAskOk, nudAskNo,'
-  + ' nudge, NU, nudCount, nudDismiss, nudCur, nudPulse, silText, fpOf, fpGrade, markFp, unFp, buildDossier};\n';
+  + ' nudge, NU, nudCount, nudDismiss, nudCur, nudPulse, silText, fpOf, fpGrade, markFp, unFp, buildDossier,'
+  + ' STROWS, STL, machineStates, stConflict, stForce, setStForce, paintStates,'
+  + ' get PH(){ return PH; }, set PH(v){ PH = v; }};\n';
 
 /* ── 最小 DOM 替身 ── */
 let created = 0;
@@ -182,7 +184,7 @@ cls('card').length === blocks - plain
   ? ok('【4】卡片 ' + cls('card').length + ' 张＝' + blocks + ' 块 −' + plain + ' 个提示块')
   : fail('卡片数异常：' + cls('card').length + '（应为 ' + (blocks - plain) + '）');
 const drawerCards = cls('drawer');
-drawerCards.length === 5 ? ok('【5】证据抽屉卡 5 张') : fail('证据抽屉卡应 5 张，现 ' + drawerCards.length);
+drawerCards.length === 6 ? ok('【5】证据抽屉卡 6 张（步 3④ 增「结论四态」抽屉一张）') : fail('证据抽屉卡应 6 张，现 ' + drawerCards.length);
 drawerCards.every(n => n.classList.contains('closed'))
   ? ok('【5】证据抽屉默认全部收起（人不必填表）') : fail('有证据抽屉卡未默认收起');
 const btns = all.filter(n => n.tagName === 'BUTTON');
@@ -449,7 +451,8 @@ X.T5A.on = false;
 const clean32 = () => {
   X.S.meta.nudge = {}; X.S.meta.nudgeLog = []; X.S.meta.fp = {}; X.S.meta.fpForce = {};
   X.S.meta.pol = {}; X.S.meta.polHold = []; X.S.meta.nudgeOff = false;
-  X.NU.prompt = null; X.NU.ask = null; X.S.meta.sess = 1;
+  X.S.meta.hgLog = []; X.NU.prompt = null; X.NU.ask = null; X.S.meta.sess = 1;
+  X.HG.pending = null; X.HG.queue.length = 0;
 };
 const btnTxt = () => { const q = []; walk(doc, q);
   return {nodes: q, btns: q.filter(n => n.tagName === 'BUTTON').map(n => String(n.textContent))}; };
@@ -568,6 +571,121 @@ X.nudPulse() === undefined && X.NU.prompt && X.NU.prompt.key === 't5_link'
   : fail('断流未提示：' + JSON.stringify(X.NU.prompt));
 X.NU.prompt = null; X.LIVE.on = false;
 clean32(); X.polSet('t5_read', 'act'); X.T5A.on = false;
+
+/* ── 步 3④：结论四态落库（机判列×人判列分列，不得合并）── */
+clean32();
+X.S.verdicts = {}; X.S.fields = {}; X.S.meta.stForce = {}; X.S.meta.stLog = []; X.S.checks.cs5 = true;
+X.PH = null; X.HG.pending = null; X.HG.queue.length = 0;
+const st = id => X.machineStates().filter(r => r.id === id)[0];
+X.machineStates().length === X.STROWS.length
+  ? ok('【17】四态表行数＝登记表行数（' + X.STROWS.length + ' 行：质检链＋十一项＋总评位）') : fail('行数不符');
+!st('sumv').st ? ok('【17】总评位机器永不代判（§三 judge＝human_signoff）') : fail('机器代判了总评');
+!st('t9v').st && /待核/.test(st('t9v').why)
+  ? ok('【17】机器无真源的项留空并写明理由（不硬造，红线5）') : fail('无源项被硬判了：' + JSON.stringify(st('t9v')));
+/* 质检链：逐字转录 qc 既有输出 */
+X.PH = {audit:{recommend:'ingest', reasons:[], threshold_version:'20260920',
+               manifest:true, events:true, qc:true, report:true}, npz_meta:{has_pre_filter:true}};
+st('qc').st === 'PASS' ? ok('【17】qc recommend＝ingest → 机判 PASS（转录，未重算未改阈值）') : fail('ingest 未转录对：' + st('qc').st);
+X.PH.audit.recommend = 'quarantine'; X.PH.audit.reasons = ['通道质量不合格：AF3'];
+st('qc').st === 'INVALID'
+  ? ok('【17】qc quarantine → INVALID（数据不可用），**没有**被合并成 FAIL（正本 §四 明令）') : fail('隔离被错映射成：' + st('qc').st);
+/不说明设备不达标/.test(st('qc').why) ? ok('【17】依据原文里明写"隔离≠设备不达标"') : fail('依据未写明分界：' + st('qc').why);
+/AF3/.test(st('qc').note) ? ok('【17】reasons 原文进"保留项"列（保留项必须写明）') : fail('reasons 未落到保留项列');
+st('t8v').st === 'PASS' ? ok('【17】契约四件俱在 → T8 PASS') : fail('T8 判错：' + st('t8v').st);
+X.PH.audit.events = false;
+st('t8v').st === 'QC_ERROR' && /events/.test(st('t8v').why)
+  ? ok('【17】缺契约件 → QC_ERROR（流程未闭合，不写设备结论）') : fail('缺件未落 QC_ERROR：' + JSON.stringify(st('t8v')));
+X.PH.npz_meta.has_pre_filter = false;
+st('t6v').st === 'FAIL' ? ok('【17】无原始档 → FAIL（D32 硬条件＝设备缺陷，与"本次作废"分得开）') : fail('T6 判错：' + st('t6v').st);
+X.PH = null;
+/* 各项用机器已代填的读数说话 */
+X.S.fields = {t5a0:'正常', t5a1:'正常', t5d0:'无', t5d1:'无', t2f_af3:'无', t3c1:'是', t1a1:'0.5', t1a2:'0.8'};
+st('t5v').st === 'PASS' ? ok('【17】各片幅值正常、无塌陷 → T5 PASS（±20% 与 T2 同一口径）') : fail('T5 判错：' + JSON.stringify(st('t5v')));
+/累计断包列机器无数据源/.test(st('t5v').why)
+  ? ok('【17】T5 依据里如实交代覆盖面（断包列无源，不冒充全覆盖）') : fail('覆盖面未如实说明：' + st('t5v').why);
+X.S.fields.t5a1 = '偏低';
+st('t5v').st === 'FAIL' ? ok('【17】幅值漂移超 20% 线 → T5 FAIL') : fail('漂移未判 FAIL：' + st('t5v').st);
+X.S.fields.t5a1 = '正常'; X.S.fields.t5d1 = '有';
+st('t5v').st === 'ACCEPTED_WITH_NOTE' && /第 1 片/.test(st('t5v').note)
+  ? ok('【17】塌陷 1 处（线内）→ AWN 并写明保留项，没升级成 FAIL') : fail('塌陷线内应 AWN：' + JSON.stringify(st('t5v')));
+X.S.fields.t5d1 = '无'; X.S.fields.t2f_af3 = '有';
+st('t2v').st === 'ACCEPTED_WITH_NOTE' && /af3/.test(st('t2v').note)
+  ? ok('【17】T2 贴底 → AWN（正本 §6.3 第二档），不判 FAIL、也不叫 INVALID') : fail('T2 判错：' + JSON.stringify(st('t2v')));
+X.S.fields.t2f_af3 = '无'; X.S.fields.t3c1 = '否';
+st('t3v').st === 'ACCEPTED_WITH_NOTE' ? ok('【17】T3 恢复慢 → AWN（§6.3 第二档）') : fail('T3 判错：' + st('t3v').st);
+X.S.fields.t3c1 = '是';
+st('t1v').st === 'PASS' ? ok('【17】α 增幅 60% ≥30% → T1 PASS（正本 T1 既有分档）') : fail('T1 判错：' + JSON.stringify(st('t1v')));
+X.S.fields.t1a2 = '0.60';
+st('t1v').st === 'ACCEPTED_WITH_NOTE' ? ok('【17】α 增幅 20% 落 15–30% 合格档 → AWN 并写明保留项') : fail('T1 合格档应 AWN：' + JSON.stringify(st('t1v')));
+X.S.fields.t1a2 = '0.52';
+st('t1v').st === null && /分不清/.test(st('t1v').why)
+  ? ok('【17】α 增幅 <15% 时机器不自裁 INVALID／FAIL（分不清是没闭眼还是设备问题）——交人') : fail('灰区被机器自裁了：' + JSON.stringify(st('t1v')));
+/* 人已裁的作废：转录进状态轴，同时保留机器原读法 */
+X.S.meta.hgLog = [{id:'hg_t2_floor', item:'t2', kind:3, key:'invalid', at:'2026-09-27 10:30', timeout:false}];
+X.S.fields.t2f_af3 = '有';
+st('t2v').st === 'INVALID' ? ok('【17】人在 human_gate 答"本项作废" → 机判列落 INVALID（不是 FAIL）') : fail('作废未转录：' + st('t2v').st);
+/机器原读法/.test(st('t2v').why) ? ok('【17】转录人裁时把机器原读法并列保留（两列不互相抹掉）') : fail('原读法被抹了：' + st('t2v').why);
+X.S.meta.hgLog = [];
+/* 分列：矛盾只标不并 */
+X.S.fields.t1a2 = '0.8';
+st('t1v').st === 'PASS' && st('t1v').conflict === '' ? ok('【17】人未判时不构成矛盾（不误吵）') : fail('未判却报矛盾');
+X.S.verdicts.t1v = 'fail';
+st('t1v').conflict === '机判达标·人判不通过'
+  ? ok('【17】机判 PASS × 人判 FAIL → 标矛盾（两列都在，谁也没覆盖谁）') : fail('矛盾未标出：' + st('t1v').conflict);
+X.paintStates();
+X.HG.pending === 'hg_state_conflict'
+  ? ok('【17】矛盾自动升级 human_gate（② 类：判据落灰区），四元组齐') : fail('矛盾没升级到人：' + X.HG.pending);
+X.hgAnswer('hg_state_conflict', 'recheck', false);
+X.paintStates();
+(X.HG.pending === null && !X.HG.queue.length)
+  ? ok('【17】同一组矛盾答过就不再追第二遍（不反复打断；答过的是哪组矛盾也进了账）')
+  : fail('同组矛盾被重复问了：' + X.HG.pending);
+X.PH = {audit:{recommend:'quarantine', reasons:[], manifest:true, events:true, qc:true, report:true}, npz_meta:{has_pre_filter:true}};
+X.S.verdicts.t6v = 'pass'; X.PH.npz_meta.has_pre_filter = false;
+X.paintStates();
+X.HG.pending === 'hg_state_conflict'
+  ? ok('【17】矛盾集合变了（新冒出一项 T6）→ 允许再问一次，并把新那项带进签名')
+  : fail('矛盾集合变化未再问：pending=' + X.HG.pending);
+X.hgAnswer('hg_state_conflict', 'device_fail', false);
+X.S.verdicts = {};
+X.PH = {audit:{recommend:'quarantine', reasons:['时长不足'], manifest:true, events:true, qc:true, report:true}, npz_meta:{has_pre_filter:true}};
+X.S.verdicts.t1v = 'pass';
+st('qc').st === 'INVALID' ? ok('【17】隔离状态下机器仍只说数据有效性，不越界判设备') : fail('越界');
+X.S.verdicts.t1v = '';
+/* 人改判四态：不覆盖机判原文，也不串进三档建议 */
+X.S.fields = {t5a0:'正常', t5d0:'无', t2f_af3:'无', t3c1:'是', t1a1:'0.5', t1a2:'0.8'};
+X.PH = {audit:{recommend:'quarantine', reasons:[], threshold_version:'20260920',
+               manifest:true, events:true, qc:true, report:true}, npz_meta:{has_pre_filter:true}};
+const sugBefore = X.sumSuggest().lab;
+X.setStForce('qc', 'ACCEPTED_WITH_NOTE');
+st('qc').st === 'INVALID' && st('qc').forced === 'ACCEPTED_WITH_NOTE'
+  ? ok('【17】人改判只加一列：机判原文（INVALID）仍在，生效值另存（分列不覆盖）')
+  : fail('改判覆盖或丢失：' + JSON.stringify(st('qc')));
+X.sumSuggest().lab === sugBefore
+  ? ok('【17】四态改动不串进三档建议（§6.3 判据链独立，未被动过）') : fail('四态串进了三档建议');
+(X.S.meta.stLog || []).length === 1 && X.S.meta.stLog[0].st === 'ACCEPTED_WITH_NOTE' && X.S.meta.stLog[0].machine === 'INVALID'
+  ? ok('【17】每次改判都进账（项／新值／时刻／**机器原值**一起记，事后能查出是谁把 INVALID 改成 AWN 的）')
+  : fail('改判记账缺机器原值：' + JSON.stringify(X.S.meta.stLog));
+X.setStForce('qc', '');
+!X.stForce('qc') ? ok('【17】改判可撤销，回到机器原读法') : fail('撤销改判无效');
+/* 知情同意：整场有效性，不写成设备 FAIL */
+X.S.checks.cs5 = false;
+X.paintStates();
+const q17 = []; walk(doc, q17);
+const tipEl = q17.filter(n => n.attrs && n.attrs.id === 'stTip')[0];
+tipEl && /按 INVALID 看待（伦理有效性/.test(tipEl.textContent)
+  ? ok('【17】cs5 未勾 → 表尾提示按 INVALID 看待（伦理有效性），明写与设备达标无关') : fail('同意缺失未落状态轴：' + (tipEl ? tipEl.textContent : '无该元素'));
+X.S.checks.cs5 = true;
+/* 表格渲染与档案入档 */
+const stTab = q17.filter(n => clsHas(n, 'stattab')).length;
+stTab === 1 ? ok('【17】四态表在收口页渲染一处（表＋提示＋正本原文注）') : fail('四态表渲染数：' + stTab);
+const dos17 = X.buildDossier();
+/## 一之四 结论四态/.test(dos17) ? ok('【17】档案新增「一之四」段（机判列×人判列入档）') : fail('档案缺该段');
+/绝不可合并成"失败"/.test(dos17) ? ok('【17】档案带上正本那句"绝不可合并成失败"（口径随档走）') : fail('档案未写不可合并');
+/未重算、未改阈值/.test(dos17) && /20260920/.test(dos17)
+  ? ok('【17】档案声明 qc 侧为逐字转录、阈值版本 20260920 未动') : fail('档案未声明转录性质');
+X.S.verdicts.t1v = 'fail'; X.paintStates(); X.HG.pending = null; X.HG.queue.length = 0;
+X.S.verdicts = {}; X.PH = null; X.S.fields = {};
 
 console.log('\n（本次共创建 ' + created + ' 个节点）');
 console.log(bad ? '结论：✗ 逻辑冒烟 ' + bad + ' 处问题' : '结论：✓ 逻辑冒烟全过');
