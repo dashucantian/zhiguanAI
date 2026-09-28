@@ -20,7 +20,7 @@ const js = src.match(/<script>([\s\S]*?)<\/script>/)[1]
   + ' UNDO, undoLast, pauseGuide, T5A, chanStats, flatFromSeries,'
   + ' POLICY, MODE, NUD, FP_LINE, policyMode, polSet, tripleOk, autoWrite, nudAskOk, nudAskNo,'
   + ' nudge, NU, nudCount, nudDismiss, nudCur, nudPulse, silText, fpOf, fpGrade, markFp, unFp, buildDossier,'
-  + ' STROWS, STL, machineStates, stConflict, stForce, setStForce, paintStates,'
+  + ' STROWS, STL, machineStates, stConflict, stForce, setStForce, paintStates, vlabFor, HOLD_DEFAULT,'
   + ' get PH(){ return PH; }, set PH(v){ PH = v; }};\n';
 
 /* ── 最小 DOM 替身 ── */
@@ -36,7 +36,13 @@ function mkNode(tag) {
       toggle(c, on) { if (on === undefined) on = !this._s.has(c); on ? this._s.add(c) : this._s.delete(c); return on; },
       contains(c) { return this._s.has(c); }
     },
-    dataset: {}, innerHTML: '', value: '', checked: false, disabled: false, __text: '',
+    dataset: {}, innerHTML: '', value: '', checked: false, disabled: false, __text: '', __ls: {},
+    addEventListener(t, fn) { (n.__ls[t] = n.__ls[t] || []).push(fn); },
+    removeEventListener(t, fn) { const a = n.__ls[t] || []; const i = a.indexOf(fn); if (i >= 0) a.splice(i, 1); },
+    click() {
+      const ev = { currentTarget: n, target: n, preventDefault() {}, stopPropagation() {} };
+      (n.__ls.click || []).slice().forEach(f => f(ev));
+    },
     appendChild(c) { if (c) { c.__parent = n; n.kids.push(c); if (c.attrs && c.attrs.id) byId[c.attrs.id] = c; } return c; },
     removeChild(c) { const i = n.kids.indexOf(c); if (i >= 0) n.kids.splice(i, 1); return c; },
     replaceChildren(...cs) { n.kids.length = 0; cs.forEach(c => n.appendChild(c)); },
@@ -47,7 +53,7 @@ function mkNode(tag) {
     querySelector(sel) { return findAll(n, sel)[0] || null; },
     querySelectorAll(sel) { return findAll(n, sel); },
     closest(sel) { let p = n; while (p) { if (matches(p, sel)) return p; p = p.__parent || null; } return null; },
-    addEventListener() {}, removeEventListener() {}, scrollIntoView() {}, focus() {}, blur() {}, select() {}, click() {}
+    scrollIntoView() {}, focus() {}, blur() {}, select() {}
   };
   Object.defineProperty(n, 'className', {
     get() { return [...n.classList._s].join(' '); },
@@ -89,6 +95,12 @@ function matches(node, sel) {
   return node.tagName === sel.toUpperCase();
 }
 function walk(node, out) { if (!isNode(node)) return; (node.children || []).forEach(c => { out.push(c); walk(c, out); }); }
+/* 真发事件：替身以前是空函数，按钮与委托监听的接线从未被测过（只测了直接调函数）——现在按真实路径打 */
+function fireOn(node, type, target) {
+  const ev = { target: target || node, currentTarget: node, preventDefault() {}, stopPropagation() {} };
+  ((node.__ls && node.__ls[type]) || []).slice().forEach(f => f(ev));
+  return ev;
+}
 function findAll(root, sel) {
   const all = []; walk(root, all);
   return all.filter(n => String(sel).split(',').map(s => s.trim()).filter(Boolean)
@@ -686,6 +698,40 @@ const dos17 = X.buildDossier();
   ? ok('【17】档案声明 qc 侧为逐字转录、阈值版本 20260920 未动') : fail('档案未声明转录性质');
 X.S.verdicts.t1v = 'fail'; X.paintStates(); X.HG.pending = null; X.HG.queue.length = 0;
 X.S.verdicts = {}; X.PH = null; X.S.fields = {};
+
+/* ── 步 4⑤：T9 结论默认「待核」（⑩，机器不默认放行）── */
+X.S.verdicts = {}; X.S.meta.holdLog = []; X.PH = null; X.S.fields = {};
+X.vlabFor('t9v') === '⏳ 待核（默认，⑩）'
+  ? ok('【18】T9 未判时显示「待核」而不是空杠——机器不给 VR 场景默认放行') : fail('T9 默认词不符：' + X.vlabFor('t9v'));
+X.vlabFor('t1v') === '—' ? ok('【18】其它项口径未动（未判仍是「—」，不跟着改判据）') : fail('误改了其它项的显示');
+X.S.verdicts.t9v = 'pass';
+X.vlabFor('t9v') === '🟢 通过' ? ok('【18】人显式改判后以人为准（默认词只兜空白，不压人判）') : fail('人判被默认词压住了');
+X.S.verdicts = {};
+X.recount();
+const q18 = []; walk(doc, q18);
+q18.filter(n => clsHas(n, 'chip') && /待核/.test(n.textContent)).length >= 1
+  ? ok('【18】T9 卡内常驻「待核」标记（只读，不占人的动作）') : fail('待核标记未渲染');
+const mir = q18.filter(n => n.attrs && n.attrs['data-mir'] === 't9v')[0];
+mir && /待核/.test(mir.textContent)
+  ? ok('【18】汇总镜像 11 项里 T9 也显「待核」（不显空——收口那一页看得见）') : fail('镜像位未显待核：' + (mir ? mir.textContent : '无镜像元素'));
+const t9btn = q18.filter(n => n.attrs && n.attrs['data-vid'] === 't9v' && n.attrs['data-v'] === 'pass')[0];
+t9btn.click();
+(X.S.meta.holdLog || []).length === 1 && X.S.meta.holdLog[0].id === 't9v' && /显式改判/.test(X.S.meta.holdLog[0].note)
+  ? ok('【18】人点"通过"这一步被记下来（谁把待核落成通过，事后可追）') : fail('显式改判未留痕：' + JSON.stringify(X.S.meta.holdLog));
+const t1btn = q18.filter(n => n.attrs && n.attrs['data-vid'] === 't1v' && n.attrs['data-v'] === 'pass')[0];
+t1btn.click();
+X.S.meta.holdLog.length === 1 ? ok('【18】非默认项的正常判定不被多记一笔（账本不灌水）') : fail('账本灌水：' + X.S.meta.holdLog.length);
+const inp18 = q18.filter(n => n.attrs && n.attrs['data-f'] === 't1a1')[0];
+if(inp18){ inp18.value = '0.42'; fireOn(byId['main'], 'input', inp18); }
+inp18 && X.S.fields.t1a1 === '0.42'
+  ? ok('【18】委托监听这条接线**第一次被真测到**（input 冒泡进 S.fields；从前替身 addEventListener 是空函数，这条路一直没验过）')
+  : fail('委托监听未生效：' + (inp18 ? '值＝' + X.S.fields.t1a1 : '未找到输入位'));
+const dos18 = X.buildDossier();
+/默认待核被显式改判/.test(dos18) ? ok('【18】档案「一之二」列出这条改判（含时刻与新值）') : fail('档案未列改判行');
+X.S.verdicts = {}; X.S.meta.holdLog = []; X.recount();
+/⏳ 待核（默认，⑩）/.test(X.buildDossier())
+  ? ok('【18】档案在 T9 位也写「待核」，不写成"未填"或空——下游读到的是弃权一等值') : fail('档案未显待核');
+X.S.verdicts = {}; X.recount();
 
 console.log('\n（本次共创建 ' + created + ' 个节点）');
 console.log(bad ? '结论：✗ 逻辑冒烟 ' + bad + ' 处问题' : '结论：✓ 逻辑冒烟全过');

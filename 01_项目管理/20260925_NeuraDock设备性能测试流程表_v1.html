@@ -460,7 +460,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.5 · 双皮肤（仪表盘／宣纸）· 2026-09-27</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.6 · 双皮肤（仪表盘／宣纸）· 2026-09-28</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -1384,7 +1384,7 @@ const STROWS = [
             note:v <= 0.35 ? '' : ('保留项：工频比 ' + v + '（0.35–0.5 为可接受档，>0.5 须查接地）')};
   }},
   {id:'t7v',  name:'T7 漂移续测', get(){ return {st:null, why:'值已代填（t7a/t7b/t7c），但"是否影响使用"属人判读——机器无该口径判据', note:''}; }},
-  {id:'t9v',  name:'T9 VR 场景', get(){ return {st:null, why:'需外部打点与真跑 VR，面板拿不到；结论默认「待核」属步 4⑤（正本 §十）', note:''}; }},
+  {id:'t9v',  name:'T9 VR 场景', get(){ return {st:null, why:'面板拿不到 VR 声音指令之外的外部打点，机器不判；结论位**默认「待核」**（步 4⑤·⑩），人显式改判才落词并留痕', note:''}; }},
   {id:'t10v', name:'T10 长期可用性', get(){ return {st:null, why:'跨场对照，机器不独判', note:''}; }},
   {id:'t11v', name:'T11 双机对照', get(){ return {st:null, why:'需第二台设备与镜像蒙太奇（口径落文属步 4④），机器不独判', note:''}; }},
   {id:'sumv', name:'本设备总评', get(){ return {st:null, why:'总评是**人的签字位**（T6 judge＝human_signoff），机器永不代判、永不代签', note:''}; }}
@@ -1439,7 +1439,7 @@ function paintStates(cardEl){
       h('td', null, r.name),
       cell,
       h('td', {class:'tip', text:r.why}),
-      h('td', null, r.human ? VLAB[r.human] : '—（未判）'),
+      h('td', null, vlabFor(r.id, '—（未判）')),
       h('td', {class:r.conflict ? 'flat' : 'tip'}, r.conflict ? ('⚠ ' + r.conflict) : (r.st ? '两列各表' : '—')),
       h('td', {class:'tip'}, r.note || '—'),
       h('td', {class:'hghow'}, ['PASS', 'ACCEPTED_WITH_NOTE', 'INVALID', 'FAIL', 'QC_ERROR'].map(btn).concat([btn('')]))));
@@ -1532,6 +1532,14 @@ function whyNext(){
 
 
 const VLAB = {pass:'🟢 通过',cond:'🟡 有条件',fail:'🔴 不通过',na:'⚪ 不可判定','':'—'};
+/* 步 4⑤（⑩）：某些项的结论**默认不落"通过"**——T9（VR 场景）面板无打点数据源，
+   空白处一律显示「待核」而不是「—」，机器不默认放行；人显式改判才落词，并记一笔（判定权仍在人）。 */
+const HOLD_DEFAULT = {t9v:'⏳ 待核（默认，⑩）'};
+function vlabFor(vid, empty){
+  const v = S.verdicts[vid];
+  if(v) return VLAB[v];
+  return HOLD_DEFAULT[vid] || (empty === undefined ? '—' : empty);
+}
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
@@ -1640,11 +1648,17 @@ function card(blk, body, extraChip){
 function verdictRow(blk){
   const v = blk.v, row = h('div', {class:'vrow', 'data-vrow':v},
     h('span', {class:'vl'}, (blk.vlabel || '结论') + '：'));
+  /* 步 4⑤（⑩）：默认不落"通过"的项，未判时先摆一个「待核」标记（只读，不占动作） */
+  if(HOLD_DEFAULT[v]) row.appendChild(h('span', {class:'chip'}, HOLD_DEFAULT[v]));
   [['pass','🟢 通过'],['cond','🟡 有条件'],['fail','🔴 不通过'],['na','⚪ 不可判定']].forEach(([val,lab])=>{
     row.appendChild(h('button', {
       class:'vb', type:'button', 'data-v':val, 'data-vid':v,
       'aria-pressed': String(S.verdicts[v] === val), onclick:()=>{
         S.verdicts[v] = (S.verdicts[v] === val) ? '' : val;
+        if(HOLD_DEFAULT[v] && S.verdicts[v]){
+          S.meta.holdLog = S.meta.holdLog || [];
+          S.meta.holdLog.push({id:v, to:S.verdicts[v], at:tsNow(), note:'默认「待核」项由人显式改判'});
+        }
         paintVerdicts(v); saveSoon(); recount(); updateMirror(); paintDerived();
       }
     }, lab));
@@ -1885,9 +1899,9 @@ function renderMirror(blk){
 }
 function updateMirror(){
   document.querySelectorAll('[data-mir]').forEach(b=>{
-    const v = S.verdicts[b.getAttribute('data-mir')] || '';
+    const vid = b.getAttribute('data-mir'), v = S.verdicts[vid] || '';
     b.className = 'badge ' + VCLS[v];
-    b.textContent = VLAB[v];
+    b.textContent = vlabFor(vid, '—');      /* 步 4⑤：T9 空白处显示「待核」，机器不默认放行 */
   });
 }
 function renderStatic(blk){
@@ -2291,17 +2305,17 @@ function toMarkdown(){
         blk.rows.forEach(r=>{
           L.push('| ' + r.map(c=> (typeof c === 'object' && c && c.f) ? (S.fields[c.f] || '') : strip(String(c))).join(' | ') + ' |');
         });
-        if(blk.v) L.push('', '结论：**' + (VLAB[S.verdicts[blk.v]] || '—') + '**');
+        if(blk.v) L.push('', '结论：**' + vlabFor(blk.v) + '**');
         L.push('');
       }else if(blk.k === 'fields'){
         L.push('### ' + blk.title);
         blk.items.forEach(([f,label])=> L.push('- ' + label + '：' + (S.fields[f] || '')));
         L.push('');
       }else if(blk.k === 'v'){
-        L.push('### ' + blk.label + '：**' + (VLAB[S.verdicts[blk.id]] || '—') + '**', '');
+        L.push('### ' + blk.label + '：**' + vlabFor(blk.id) + '**', '');
       }else if(blk.k === 'mirror'){
         L.push('### ' + blk.title);
-        blk.items.forEach(([vid,name])=> L.push('- ' + name + '：' + (VLAB[S.verdicts[vid]] || '—')));
+        blk.items.forEach(([vid,name])=> L.push('- ' + name + '：' + vlabFor(vid)));
         L.push('');
       }
     });
@@ -3199,16 +3213,17 @@ function buildDossier(){
   L.push('- 知情同意：' + (S.checks['cs5'] ? '已确认（cs5）' : '**未见确认记录——不得据此下结论**'));
   L.push('', '## 一 十一项红绿灯（面板判定，人审为准）', '', '| 项 | 结论 |', '|---|---|');
   GATES.forEach(g => gateBlocks(g).forEach(b => {
-    if(b.k === 'grid' && b.v) L.push('| ' + b.title + ' | ' + (VLAB[S.verdicts[b.v]] || '—') + ' |');
-    else if(b.k === 'v') L.push('| ' + b.label + ' | ' + (VLAB[S.verdicts[b.id]] || '—') + ' |');
+    if(b.k === 'grid' && b.v) L.push('| ' + b.title + ' | ' + vlabFor(b.v) + ' |');
+    else if(b.k === 'v') L.push('| ' + b.label + ' | ' + vlabFor(b.id) + ' |');
   }));
   /* 步 2④：机器自己做过的动作必须摆在档案里（自动重跑＋人的应答），人不必翻界面就能审 */
-  const rr = S.meta.rerunLog || [], hg = S.meta.hgLog || [];
+  const rr = S.meta.rerunLog || [], hg = S.meta.hgLog || [], hd = S.meta.holdLog || [];
   L.push('', '## 一之二 机器代做的动作（自动重跑／向人提问与应答）', '');
   L.push('| 类别 | 粒度标识 | 内容 | 时刻 | 备注 |', '|---|---|---|---|---|');
   rr.forEach(e => L.push('| 自动重跑 1 次 | ' + e.key + ' | ' + e.label + ' | ' + e.at + ' | 已同步打点进会话事件流 |'));
   hg.forEach(e => L.push('| human_gate | ' + e.id + ' | 第 ' + e.kind + ' 类触发 | ' + e.at    + ' | 答：' + e.key + (e.timeout ? '（超时按默认，未获人答）' : '（人答，剩 ' + e.left_s + ' 秒）') + ' |'));
-  if(!rr.length && !hg.length) L.push('| — | — | 本轮机器未代做任何动作，也未向人提问 | — | — |');
+  hd.forEach(e => L.push('| 默认待核被显式改判 | ' + e.id + ' | ⑩ 默认不落"通过" | ' + e.at + ' | 人改为：' + (VLAB[e.to] || e.to) + '（' + e.note + '） |'));
+  if(!rr.length && !hg.length && !hd.length) L.push('| — | — | 本轮机器未代做任何动作，也未向人提问 | — | — |');
   L.push('');
   /* 步 3②：静默跟随的账必须摊开——打断了没有、被宽限挡下多少、哪条已降为「待核」，人一眼可查 */
   const nl = S.meta.nudgeLog || [], ph = S.meta.polHold || [];
@@ -3237,7 +3252,7 @@ function buildDossier(){
   L.push('| 项 | 机判（四态） | 依据原文（机器读到的） | 人判（红绿灯） | 两列关系 | 保留项 | 人改判 |',
     '|---|---|---|---|---|---|---|');
   stRows.forEach(r => L.push('| ' + r.name + ' | ' + (r.st || '—（机器无该口径判据）') + ' | '
-    + String(r.why).replace(/\*\*/g, '') + ' | ' + (r.human ? VLAB[r.human] : '—（未判）') + ' | '
+    + String(r.why).replace(/\*\*/g, '') + ' | ' + vlabFor(r.id, '—（未判）') + ' | '
     + (r.conflict ? ('⚠ 矛盾：' + r.conflict) : (r.st ? '分列各表' : '—')) + ' | '
     + (r.note || '—') + ' | ' + (r.forced || '—') + ' |'));
   L.push('', '> 四态语义（正本 §四 原文）：**PASS** 达标｜**FAIL** 设备不达标｜**INVALID** 本次数据不可用但**设备没毛病**｜'
