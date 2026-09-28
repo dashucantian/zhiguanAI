@@ -93,6 +93,14 @@ th{font-weight:600;color:var(--ink2);font-size:.88em;background:var(--bg2);white
 tr:last-child td{border-bottom:0}
 td.num{font-variant-numeric:tabular-nums}
 .tw{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
+/* 法师 2026-09-28 令 #5 ＋ 09-29 令：自动在上、人工在下。人工采集栏整组收在自动卡下面，
+   默认收起、点开才看；结论判定行不提进折叠（⑥甲「可改判」始终在明面）。 */
+.mfold{display:none}
+body.showmanual .mfold{display:block}
+.mgrp{margin:0 0 14px}
+.mgrp > .mgbody{display:none}
+.mgrp.open > .mgbody{display:block}
+.mgbtn{font-size:.88em;opacity:.9}
 input[type=text],input[type=number],select{font-family:inherit;font-size:.95em;color:var(--ink);background:var(--bg);
   border:1px solid var(--line);border-radius:10px;padding:6px 9px;min-height:38px;width:100%;transition:border-color .12s}
 input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 18%,transparent)}
@@ -307,6 +315,9 @@ nav:empty{display:none}
   .side{display:none}
   .gate{display:block!important}
   .ctgl{display:none}
+  /* 打印＝出证据：人工采集栏平时收起，落纸时必须全出（与 .fold .fb 同一条理） */
+  .mfold{display:block!important}
+  .mgrp > .mgbody{display:block!important}
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -460,7 +471,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
 <header>
   <div class="hwrap">
     <div class="htop">
-      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.6 · 双皮肤（仪表盘／宣纸）· 2026-09-28</small></div>
+      <div class="htitle">NeuraDock 设备性能测试<small>执行面板 v1.8 · 双皮肤（仪表盘／宣纸）· 2026-09-29</small></div>
       <div class="hmeta">
         <span class="pcount">完成度 <b id="pct">0%</b> · <span id="pnum">0 / 0 项</span></span>
         <span class="leds" id="leds"></span>
@@ -473,6 +484,7 @@ html.dash header.scrolled .hmeta{opacity:.75}
       <button class="tbtn" id="bSkin" title="切换皮肤：仪表盘／宣纸">📊 皮肤</button>
       <button class="tbtn" id="bNight" title="夜间模式（宣纸皮肤用；仪表盘恒为暗色数据屏）">🌙 夜间</button>
       <button class="tbtn" id="bFs" title="字号：点一下换一档（15／17／19／22）">A</button>
+      <button class="tbtn" id="bManual" title="人工数据表默认收起；点开才能看到并修改各表（结论判定行不受影响）">📋 人工数据</button>
       <button class="tbtn" id="bOut" title="导出记录">导出</button>
       <button class="tbtn" id="bPrint" title="打印／存 PDF">打印</button>
       <button class="tbtn" id="bReset" title="清空所有勾选与记录">清空</button>
@@ -605,10 +617,7 @@ const FLOW = {
       ['S0-4','★ 可安全暂停','—','未产生有效数据，随时可停','']
      ],v:'s0v',vlabel:'S0 结论'},
 
-    {k:'timer',title:'T1 分段计时器',mode:'count',sec:60,times:8,live:'t1',
-     hint:'8 段 × 1 分钟。点「开始」后每段结束会响一声并自动进入下一段——听到响声就点一下实践驾驶舱上对应的 👁 睁眼 / 🌙 闭眼 按钮（打 marker）。'},
-
-    {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,drawer:1,
+    {k:'grid',title:'T1 睁闭眼 α 阻断试验',chip:'16 分钟',gold:1,drawer:1,grp:'t1auto',
      hint: () => '填每段的 α 相对功率（8–12Hz 占比，实践驾驶舱频段条上读）。主看 ' + mainAlphaText() + '；其余通道作辅助参考，不单独判。',
      cols:['段','状态','打点时刻','α 相对功率','备注（眨眼/困倦/体位）'],
      rows:[
@@ -621,12 +630,12 @@ const FLOW = {
       ['7','睁眼','__:__',{f:'t1a7',in:'num',ph:'',w:'92px'},{f:'t1n7',in:'text',ph:'—'}],
       ['8','闭眼','__:__',{f:'t1a8',in:'num',ph:'',w:'92px'},{f:'t1n8',in:'text',ph:'—'}]
      ],v:'t1v',vlabel:'T1 结论'},
-    {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
     {k:'t1auto',title:'T1 自动跑（机器计时·自动打点·按段读 α）',chip:'推荐用这个',
      hint: () => '点「自动跑 8 段」后：机器每 60 秒自动打一次 marker 并读取该段 α 相对功率（主看 ' + mainAlphaText() + '，用实时波形自算），你只负责按提示睁眼/闭眼。'},
+    {k:'calc',id:'t1',title:'自动计算：α 阻断提升幅度'},
     {k:'hint',tone:'',t:'判读',d:'闭眼比睁眼 α 提升 <b>≥30% 优秀</b>／<b>≥15% 合格</b>／<b>&lt;15% 可疑</b>。可疑时先排查电极接触、是否真闭眼放松、环境噪声，<b>排查后仍低再下结论</b>。<br><b>口径（09-25 法师裁定·E1 验证）</b>：此处的"提升"是<b>相对 α 比值</b>（8–12 Hz ÷ 0.5–45 Hz）的相对提升，<b>不等于 α 功率的提升</b>——两者呈亚线性（E1 实测：α 功率 +32% 时报 +28~32%，+69% 时报 +55~61%）。面板实时读数为<b>当场判断</b>用；权威值仍为保存后质检对全量 npz 的计算。'},
 
-    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',drawer:1,
+    {k:'grid',title:'T2 静息噪声底与贴底复查',chip:'5 分钟',dyn:'ch',drawer:1,grp:'t2auto',
      hint: () => '静坐不动 5 分钟（不看手机、不说话）。<b>行按本设备实际通道自动生成</b>（来自实时通道名或《设备档案》）；重点盯<b>后部／枕区通道</b>（NeuraDock 前科：CP5／CP6／O2；Muse 无枕区则以 TP9／TP10 替代并标注）。判据：安静时 std 应在 <b>3–30 µV</b>；任一通道 <b>std &lt; 2 µV 且连续 &gt;1 分钟 ＝ 贴底/疑似接触失效</b>。'
        + (deviceChannels().length ? '' : '<br><b>⚠ 尚未识别设备</b>：下表暂列的是 <b>NeuraDock 预设 7 通道</b>（兜底行）——若本场测的是别的设备，请先填《设备档案》或先开始采集，行会按实际通道自动重建；<b>别按预设行照填他设备的值</b>。'),
      cols:['通道','std（µV）','峰值（µV）','连续 &gt;1min 贴底','质检通道态'],
@@ -647,8 +656,8 @@ const FLOW = {
       ['单通道塌、其余通道正常','指向该电极的个体问题。→ 记下位置与当日头型，纳入"佩戴 SOP"改进清单。']
     ]},
 
-    {k:'grid',title:'T3 耐受性试验',chip:'8 分钟',drawer:1,
-     hint:'依次做：咀嚼×10 → 眨眼×20 → 头部转动×10 → 深呼吸×10，<b>每个动作后静置 30 秒</b>。判据：伪迹后恢复 <b>≤3 s 为佳</b>。回答的是"关系禅修里的微动作会不会把整段数据打脏"。',
+    {k:'grid',title:'T3 耐受性试验',chip:'8 分钟',drawer:1,grp:'t3auto',
+     hint:'依次做：咀嚼×10 → 眨眼×20 → 头部转动×10 → 深呼吸×10（每次约 15 秒，共 150 秒），<b>每个动作后静置 30 秒</b>。判据：伪迹后恢复 <b>≤3 s 为佳</b>。回答的是"关系禅修里的微动作会不会把整段数据打脏"。',
      cols:['动作','伪迹持续（s）','恢复基线（s）','是否 ≤3s','备注'],
      rows:[
       ['咀嚼 ×10',{f:'t3a1',in:'num',ph:'',w:'80px'},{f:'t3b1',in:'num',ph:'',w:'80px'},{f:'t3c1',in:'select',opt:['是','否']},{f:'t3d1',in:'text',ph:'—'}],
@@ -657,9 +666,9 @@ const FLOW = {
       ['深呼吸 ×10',{f:'t3a4',in:'num',ph:'',w:'80px'},{f:'t3b4',in:'num',ph:'',w:'80px'},{f:'t3c4',in:'select',opt:['是','否']},{f:'t3d4',in:'text',ph:'—'}]
      ],v:'t3v',vlabel:'T3 结论'},
     {k:'t3auto',title:'T3 自动跑（页面提示＋自动计时＋自动测恢复）',chip:'推荐用这个',
-     hint:'点「自动跑四组」后：页面逐组大字提示（咀嚼 10 次 → 眨眼 20 次 → 头部转动 10 次 → 深呼吸 10 次），每组「动作窗口 10 秒＋静息恢复 30 秒」自动计时；机器按实时波形测伪迹持续时长与恢复用时，结束自动填上表四行。你只需按提示做动作。'},
+     hint:'点「自动跑四组」后：页面逐组大字提示（咀嚼 10 次 → 眨眼 20 次 → 头部转动 10 次 → 深呼吸 10 次），动作窗口按动作给（咀嚼／眨眼／转头各 10 秒，深呼吸每次约 15 秒、10 次共 150 秒），每组后静息恢复 30 秒自动计时；每组开始响两声、动作做完响一声；机器按实时波形测伪迹持续时长与恢复用时，结束自动填上表四行。你只需按提示做动作。'},
 
-    {k:'grid',title:'T4 工频噪声',chip:'5 分钟',drawer:1,hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
+    {k:'grid',title:'T4 工频噪声',chip:'5 分钟',drawer:1,grp:'t4mains',hint:'正常居家／禅堂环境静坐 5 分钟，看 45–55 Hz 频段功率占比。09-21 实测 0.28（良好）；>0.5 查接地与佩戴。',
      cols:['指标','实测','判据'],
      rows:[['工频残余比',{f:'t4r',in:'num',ph:'如 0.28',w:'110px'},'≤0.35 良好；0.35–0.5 可接受；>0.5 需排查']],
      v:'t4v',vlabel:'T4 结论',extra:[['排查顺序','换隔离数据线（有线设备）／排除蓝牙适配器占用（蓝牙设备） → 换插座回路／拔掉附近充电器 → 检查参考电极接触 → 电极重新压实']]},
@@ -689,9 +698,7 @@ const FLOW = {
 
   /* ══ 场② ══ */
   { id:'s2', name:'场② 长时程与链路', desc:'60–70 分钟 · 可与一次真实晚课同场，不额外占时间。每 10 分钟低头填一行就行。', acc:'#4A7C59', blocks:[
-    {k:'timer',title:'T5 十分钟提醒',mode:'interval',sec:600,live:'t5',
-     hint:'点「开始」后每到 10 分钟响一声，提醒你低头填一行。T9（端到端延迟）因场次待裁，本场不执行。'},
-    {k:'grid',title:'T5 长时程稳定性',chip:'60–70 分钟',
+    {k:'grid',title:'T5 长时程稳定性',chip:'60–70 分钟',grp:'posthoc',
      hint:'判据：断包率 <b>&lt;1%</b> 且不集中在开头；每小时塌陷 <b>≤1 分钟</b>；幅值/带宽漂移 <b>≤20%/小时</b>。⚠️ 开机前 2 分钟是重点——09-21 曾出现 205 次断包（疑握手问题），要复现或排除它。<br>'
        + '<b>谁填（步 3①·人不盯表）</b>：本段幅值／塌陷段／电池三列由机器从实时帧自动代填（幅值以第 0 片为基线，±20% 即上面那条既有判据线；电池取 tick 上报值，设备不给则写「不可得」）；'
        + '<b>累计断包</b>与<b>备注</b>两列<b>仍归人</b>——面板与事后 qc 都没有分片级断包数据源，机器不硬造（人也可随时改写机器填的值）。',
@@ -707,7 +714,7 @@ const FLOW = {
       ['结束总计',{f:'t5c7',in:'num',ph:'总断包',w:'86px'},{f:'t5dur',in:'text',ph:'总时长 min',w:'96px'},{f:'t5loss',in:'text',ph:'丢包 %',w:'80px'},{f:'t5eff',in:'text',ph:'有效 Hz',w:'86px'},{f:'t5n7',in:'text',ph:'—'}]
      ],v:'t5v',vlabel:'T5 结论'},
 
-    {k:'grid',title:'T7 时钟与对齐',chip:'并入 T5 一起算',
+    {k:'grid',title:'T7 时钟与对齐',chip:'并入 T5 一起算',grp:'posthoc',
      cols:['核查点','期望','记录'],
      rows:[
       ['累计漂移','&lt;1 s / 小时',{f:'t7a',in:'text',ph:'s/h'}],
@@ -715,7 +722,7 @@ const FLOW = {
       ['采样间隔连续性','无跳变空洞',{f:'t7c',in:'select',opt:['无空洞','有空洞']}]
      ],v:'t7v',vlabel:'T7 结论'},
 
-    {k:'grid',title:'T8 采集→入库→质检 端到端',chip:'五环节留证',
+    {k:'grid',title:'T8 采集→入库→质检 端到端',chip:'五环节留证',grp:'posthoc',
      hint:'每个环节都要留下可查证据。这一项同时是 09-21 三个 P0（未入库／QC 矛盾／无事件锚）的回归测试。',
      cols:['环节','操作','期望证据','记录'],
      rows:[
@@ -731,7 +738,7 @@ const FLOW = {
       '  --participant P001 --type test --operator tiand --note "<本场说明，例：设备性能测试 场② T5/T8>"'
     ],note:'<code>--type test</code> 按字典默认落隔离区；本场数据是否入工厂，按当场裁定执行（裁定结果填进汇总页）。'},
 
-    {k:'grid',title:'T10 VR 同场共存',chip:'10 分钟',
+    {k:'grid',title:'T10 VR 同场共存',chip:'10 分钟',run:'t10',
      hint:'Pico 连着 WiFi、<b>设备戴好采集中的状态</b>下跑一场完整 VR 场景（mandala 任一变体），对比断包率。判据：有 VR 的断包率不高于无 VR。',
      cols:['条件','断包率','备注'],
      rows:[
@@ -741,7 +748,7 @@ const FLOW = {
 
     {k:'note',tone:'good',t:'T9 端到端延迟：**场②尾段 15 分钟**（法师 09-25 裁定甲）',
      d:'T9 不再"待裁留位"——**插在场②尾段 15 分钟**，在**闭环会话**里用 HUD 打点法执行（屏幕闪烁／蜂鸣与 EEG 事件流同时打点）。判据：电极→HUD 数值更新 <b>P95 ≤500 ms</b>（因果滤波本身 ~150–250 ms 是已知项）。'},
-    {k:'grid',title:'T9 端到端延迟（场②尾段 15 分钟）',chip:'场②尾段',
+    {k:'grid',title:'T9 端到端延迟（场②尾段 15 分钟）',chip:'场②尾段',run:'t9',
      hint:'裁定为甲或乙之后，在闭环会话里用 HUD 打点法测。未裁前这一项留空即可——留空不影响其他项，也不算"没做"。',
      cols:['项目','操作','期望','记录'],
      rows:[['电极→HUD 数值更新延迟','屏幕闪烁／蜂鸣与 EEG 事件流同时打点（或双机位拍摄）','P95 ≤500 ms',{f:'t9a',in:'text',ph:'__ ms（测 __ 次）',w:'150px'}],
@@ -752,7 +759,7 @@ const FLOW = {
 
   /* ══ 场③ ══ */
   { id:'s3', name:'场③ 双设备对照', desc:'30 分钟 · 建议与场①同日。用数据说话，不预设 NeuraDock 占优。', acc:'#3F6B8A', blocks:[
-    {k:'grid',title:'T11 Muse vs NeuraDock 同协议对比',chip:'30 分钟',
+    {k:'grid',title:'T11 Muse vs NeuraDock 同协议对比',chip:'30 分钟',run:'t11',
      hint:'同一天、同一协议（T1 睁闭眼 ×2 遍），两设备同时佩戴同时采（电极位置不冲突）。用同一算法、同一时间窗。',
      cols:['项目','NeuraDock（O1/Oz/O2）','Muse（AF7/TP9 就近替代）','备注'],
      rows:[
@@ -847,16 +854,16 @@ const GATES = [
    take:[['pre',0,8],['s1',1,2]]},
   {id:'g1', name:'G1 身份', acc:'#4C9AFF',
    desc:'接的是谁、给的是不是原始档：连接握手 ＋ 通道数与顺序 ＋ 原始流全量核验（T6）。',
-   take:[['s1',0,1],['s1',2,3],['s1',15,16]]},
+   take:[['s1',0,1],['s1',2,3],['s1',14,15]]},
   {id:'g2', name:'G2 质量', acc:'#B4463C',
    desc:'这台设备今天能不能用：T1 睁闭眼 α 阻断、T2 噪声底与贴底、T3 耐受性、T4 工频。',
-   take:[['s1',3,15],['s1',16,17]]},
+   take:[['s1',3,14],['s1',15,16]]},
   {id:'g3', name:'G3 稳定', acc:'#4A7C59',
    desc:'能不能撑一场真实共修：T5 长时程、T7 时钟对齐、T8 采集→入库→质检端到端。',
-   take:[['s2',0,5],['s2',8,9]]},
+   take:[['s2',0,4],['s2',7,8]]},
   {id:'g4', name:'G4 协同', acc:'#B07C2A',
    desc:'与 VR／闭环／现场共存：T10 同场共存、T9 端到端延迟（场次待裁，留位不执行）。',
-   take:[['s2',5,8]]},
+   take:[['s2',4,7]]},
   {id:'g5', name:'G5 验收', acc:'#7C5CBF',
    desc:'值不值、能否长期用：T11 对照、11 项红绿灯、记录卡与总评三档。',
    take:[['s3',0,1],['sum',0,8]]},
@@ -1543,8 +1550,8 @@ function vlabFor(vid, empty){
 const VCLS = {pass:'pass',cond:'cond',fail:'fail',na:'na','':'none'};
 
 /* ── 状态 ───────────────────────────────────────────────────────── */
-let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash', sess:0, hostClosed:false, drawerOpen:false, obsClosed:false, obsOff:false, hgLog:[], rerunLog:[]}};
-const LIVE = {t1:null, t5:null,
+let S = {v:1, checks:{}, fields:{}, verdicts:{}, meta:{night:false, fs:17, skin:'dash', sess:0, showManual:false, hostClosed:false, drawerOpen:false, obsClosed:false, obsOff:false, hgLog:[], rerunLog:[]}};
+const LIVE = {
   /* ── 实时数据桥字段（2026-09-25 与计时条合并为同一对象）── */
   on:false, es:null, st:null, tick:null, wave:null, at:0, markers:0, why:''};
 let saveTimer = null;
@@ -1595,8 +1602,9 @@ function toast(msg, ms){
   t.textContent = msg; t.classList.add('on');
   clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('on'), ms || 2400);
 }
-function beep(times){
+function beep(times, force){
   try{
+    if(!force && S.meta.beep === false) return;   /* 🔔 提示音总开关在此一处生效 */
     const AC = window.AudioContext || window.webkitAudioContext;
     if(!AC) return;
     beep.ctx = beep.ctx || new AC();
@@ -1614,6 +1622,10 @@ function beep(times){
   }catch(e){}
 }
 
+/* 法师 2026-09-28 实测令：需人分段配合的地方一律「开始两声＝该动手了／结束一声＝这段完了」 */
+function cueStart(){ beep(2); }
+function cueEnd(){ beep(1); }
+
 /* ── 渲染：积木 ─────────────────────────────────────────────────── */
 function card(blk, body, extraChip){
   const head = [h('h3', null, blk.title)];
@@ -1627,8 +1639,9 @@ function card(blk, body, extraChip){
     }}, '−'));
   const c = h('div', {class:'card'});
   /* ①甲 证据抽屉：标了 drawer 的卡＝机器代填／事后查阅的证据位，默认收起（人不必填表）；
-     收起只是视觉收拢，控件仍在 DOM 里，完成度与闸门统计口径不变。 */
-  if(blk.drawer && !S.meta.drawerOpen){
+     收起只是视觉收拢，控件仍在 DOM 里，完成度与闸门统计口径不变。
+     已经整组挂进〈人工采集栏〉的件不再二次折叠——否则点开组还是张空卡，等于点了没开（09-29 实跑抓到）。 */
+  if(blk.drawer && !blk.grp && !S.meta.drawerOpen){
     c.classList.add('drawer', 'closed');
     head[head.length - 1].textContent = '＋';
   } else if(blk.drawer) c.classList.add('drawer');
@@ -1645,8 +1658,8 @@ function card(blk, body, extraChip){
   c.appendChild(cb);
   return c;
 }
-function verdictRow(blk){
-  const v = blk.v, row = h('div', {class:'vrow', 'data-vrow':v},
+function verdictRow(blk, lift){
+  const v = blk.v, row = h('div', {class:'vrow', 'data-vrow': lift ? null : v},
     h('span', {class:'vl'}, (blk.vlabel || '结论') + '：'));
   /* 步 4⑤（⑩）：默认不落"通过"的项，未判时先摆一个「待核」标记（只读，不占动作） */
   if(HOLD_DEFAULT[v]) row.appendChild(h('span', {class:'chip'}, HOLD_DEFAULT[v]));
@@ -1790,6 +1803,51 @@ function t2DynRows(cols){
       {f:'t2q_'+k, in:'select', opt:['ok','warn','bad','unknown']}];
   });
 }
+/* 人工数据表开关（法师 09-28 令 #5）：一处翻转、全页同步；控件始终在 DOM 里，
+   完成度／闸门口径／机器代填写入都不受视觉收拢影响。 */
+function manualLabel(){ return S.meta.showManual ? '▾ 收起人工采集栏' : '▸ 人工采集栏（本项数据表）'; }
+function toggleManual(){
+  S.meta.showManual = !S.meta.showManual;
+  paintManual(); saveSoon();
+}
+function paintManual(){
+  document.body.classList.toggle('showmanual', !!S.meta.showManual);
+  document.querySelectorAll('.mftgl').forEach(b => { b.textContent = manualLabel(); });
+  document.querySelectorAll('.mgrp').forEach(g => {
+    g.classList.toggle('open', !!S.meta.showManual);
+    const b = g.querySelector('.mgbtn');
+    if(b) b.textContent = mgLabel(Number(g.getAttribute('data-n') || 0), !!S.meta.showManual);
+  });
+  const bm = document.getElementById('bManual');
+  if(bm) bm.textContent = S.meta.showManual ? '📋 人工采集栏：已展开' : '📋 人工采集栏：收起';
+}
+function manualFold(tw){
+  const box = h('div', {class:'mfold'}, tw);
+  return h('div', null,
+    h('button', {class:'btn ghost noprint mftgl', type:'button', onclick:toggleManual}, manualLabel()), box);
+}
+/* 一组的〈人工采集栏〉：收进本项自动卡下面，默认收起；结论判定行另提到明面（⑥甲） */
+function mgLabel(n, open){
+  return open ? '▾ 收起人工采集栏' : '▸ 人工采集栏（' + n + ' 张表）';
+}
+function manualGroup(headEl, items){
+  const body = h('div', {class:'mgbody'}, ...items.map(p => p.el));
+  const grp = h('div', {class:'mgrp noprint' + (S.meta.showManual ? ' open' : ''), 'data-n':items.length},
+    h('button', {class:'btn ghost mgbtn noprint', type:'button',
+      onclick: e => {
+        const g = e.currentTarget.closest('.mgrp');
+        const on = g.classList.toggle('open');
+        e.currentTarget.textContent = mgLabel(items.length, on);
+      }}, mgLabel(items.length, !!S.meta.showManual)), body);
+  const cb = headEl.querySelector('.cbody');
+  if(cb){
+    /* 判定行提到明面（⑥甲 可改判不藏）；机器自跑的状态条也提上来，人不点开也看得见进度 */
+    items.map(p => p.blk).filter(b => b.v).forEach(b => cb.appendChild(verdictRow(b, true)));
+    if(items.some(p => p.blk.watch)){ const w = h('div', {class:'t5watch noprint', 'data-t5watch':'1'});
+      cb.insertBefore(w, cb.firstChild); setTimeout(paintT5Watch, 0); }
+  }
+  return grp;
+}
 function renderGrid(blk){
   const thead = h('thead', null, h('tr', null, ...blk.cols.map((c,i)=> h('th', {html:c}))));
   const tbody = h('tbody');
@@ -1803,7 +1861,10 @@ function renderGrid(blk){
     });
     tbody.appendChild(tr);
   });
-  const body = [h('div', {class:'tw'}, h('table', null, thead, tbody))];
+  const tw = h('div', {class:'tw'}, h('table', null, thead, tbody));
+  /* 自带操作条的项（T9/T10/T11）：表就收在本卡里；其余人工表整组收进自动卡下的〈人工采集栏〉 */
+  const body = [blk.run ? manualFold(tw) : tw];
+  if(blk.run) body.unshift(runBar(blk));
   if(blk.watch){ body.push(h('div', {class:'t5watch noprint', 'data-t5watch':'1'}));
     setTimeout(paintT5Watch, 0); }        /* 步 3①：机器自跑状态就地显示，不弹窗、不打断 */
   if(blk.extra) blk.extra.forEach(([k,v])=> body.push(h('p', {class:'tip'}, h('b', null, k+'：'), v)));
@@ -1881,7 +1942,7 @@ function renderFields(blk){
       h('td', {style:'width:34%;color:var(--ink2);font-size:.9em'}, label),
       h('td', null, mkInput({f:f, in:'text', ph:ph || ''})));
   }))));
-  body.push(tw);
+  body.push(tw);   /* 记录卡／设备档案都是人必用的，不收（要收的只有各 T 项的数据表，走 grp 组） */
   return card(blk, body);
 }
 function renderMirror(blk){
@@ -2089,51 +2150,8 @@ function renderV(blk){
   return card({title:blk.label, chip:'一页结论', hint:blk.hint}, [verdictRow({v:blk.id, vlabel:blk.label})]);
 }
 
-/* ── 计时器 ─────────────────────────────────────────────────────── */
-const TIMERS = [];   /* 活着的计时器；重建界面时统一清掉，防止"幽灵响铃" */
-function renderTimer(blk){
-  const ring = h('div', {class:'ring', style:'--p:0'}, h('b', null, fmt(blk.mode === 'count' ? blk.sec : 0)));
-  const info = h('div', {class:'tinfo'},
-    h('div', {class:'big'}, blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒'),
-    h('div', {class:'sm'}, blk.mode === 'count' ? '每段 60 秒，响声即打点' : '每 10 分钟响一声，提醒填一行'));
-  const st = {run:false, left: blk.mode === 'count' ? blk.sec : blk.sec, seg:1, id:null};
-  if(blk.live) LIVE[blk.live] = {run:false, left:st.left, seg:1, total:blk.times || 1};
-  const bStart = h('button', {class:'btn pri', type:'button'}, '开始');
-  const bReset = h('button', {class:'btn ghost', type:'button'}, '重置');
-  const tick = ()=>{
-    st.left -= 0.25;
-    if(st.left <= 0){
-      beep(2); ring.classList.add('flash'); setTimeout(()=>ring.classList.remove('flash'), 1800);
-      if(blk.mode === 'count'){
-        st.seg = st.seg % blk.times + 1;
-        info.firstChild.textContent = '第 ' + st.seg + ' / ' + blk.times + ' 段';
-        toast('第 ' + st.seg + ' 段开始 — 去实践驾驶舱点一下' + (st.seg % 2 ? ' 👁 睁眼' : ' 🌙 闭眼'));
-      }else{
-        toast('10 分钟到 — 低头填一行');
-      }
-      st.left = blk.sec;
-    }
-    ring.firstChild.textContent = fmt(Math.ceil(st.left));
-    ring.style.setProperty('--p', String(100 * (1 - st.left / blk.sec)));
-    if(blk.live && LIVE[blk.live]){ LIVE[blk.live].left = st.left; LIVE[blk.live].seg = st.seg; paintLive(); }
-  };
-  bStart.onclick = ()=>{
-    st.run = !st.run;
-    if(st.run){ st.id = setInterval(tick, 250); TIMERS.push(st.id); bStart.textContent = '暂停'; bStart.classList.remove('pri'); }
-    else{ clearInterval(st.id); bStart.textContent = '继续'; bStart.classList.add('pri'); }
-    if(blk.live && LIVE[blk.live]){ LIVE[blk.live].run = st.run; paintLive(); }
-  };
-  bReset.onclick = ()=>{ clearInterval(st.id); st.run = false; st.left = blk.sec; st.seg = 1;
-    ring.style.setProperty('--p','0'); ring.firstChild.textContent = fmt(blk.sec);
-    info.firstChild.textContent = blk.mode === 'count' ? ('第 1 / ' + blk.times + ' 段') : '距下次提醒';
-    bStart.textContent = '开始'; bStart.classList.add('pri');
-    if(blk.live) LIVE[blk.live] = {run:false, left:blk.sec, seg:1, total:blk.times || 1};
-    paintLive(); };
-  const tm = h('div', {class:'tm noprint'}, ring, info, h('div', {class:'tbtns'}, bStart, bReset));
-  const c = card({title:blk.title, chip:'计时', hint:blk.hint}, [tm]);
-  return c;
-}
 function fmt(s){ s = Math.max(0, Math.round(s)); return String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0'); }
+function fmtzh(s){ s = Math.max(0, Math.round(s)); const m = Math.floor(s/60), r = s % 60; return m ? (m + ' 分 ' + r + ' 秒') : (r + ' 秒'); }   /* 全中文读法：法师 09-28 令「零概念」 */
 
 /* ── T1 计算 ────────────────────────────────────────────────────── */
 /* α 阻断增幅与判级：**唯一一处算**（updateCalc 显示与 human_gate 触发共用，防两处线值分叉）。
@@ -2608,8 +2626,6 @@ function paintLive(){
   const e1 = document.getElementById('kpiLive');
   if(e1){
     const parts = [];
-    if(LIVE.t1 && LIVE.t1.run) parts.push('T1 第 ' + LIVE.t1.seg + '/' + LIVE.t1.total + ' 段 ' + fmt(LIVE.t1.left));
-    if(LIVE.t5 && LIVE.t5.run) parts.push('T5 距提醒 ' + fmt(LIVE.t5.left));
     e1.innerHTML = '';
     e1.appendChild(h('b', null, '⏱ '));
     e1.appendChild(document.createTextNode(parts.length ? parts.join('　｜　') : '未计时'));
@@ -2809,7 +2825,7 @@ const T1A = {
     const st = (T1A.seg % 2) ? '睁眼' : '闭眼';
     T1A.acc[T1A.seg] = []; T1A.left = 60;
     postMarker(st);                         /* 机器自动打点，人不用管 */
-    beep(2);                                /* 打点提示音：听到响就切换状态 */
+    cueStart();                             /* 段首两声：听到响就切换睁眼／闭眼 */
     t1SetBtn(true);
     t1Msg('第 ' + T1A.seg + '/8 段：' + st + '（已自动打点＋响铃，保持 60 秒）');
     clearInterval(T1A.timer);
@@ -2861,6 +2877,7 @@ const T1A = {
   },
   finish(){
     T1A.on = false; t1SetBtn(false);
+    cueEnd();                               /* 法师 09-28 令：整场跑完响一声 */
     t1Msg('✅ 8 段跑完：表已自动填好、幅度已算好——请核对后点 T1 结论');
     updateCalc();
     if(t1BlockStat().lv === 'fail') askHuman('hg_t1_gray');   /* 步 2③：② 类触发（判据落灰区，与卡片同一处判读线） */
@@ -2884,6 +2901,7 @@ const T2A = {
     if(!LIVE.on){ t2Msg('未接入实时数据：请先在驾驶舱开始采集', true); return; }
     syncDeviceRows();
     T2A.on = true; T2A.acc = {}; T2A.left = 300; T2A.lastCap = 0;
+    cueStart();                               /* 法师 09-28 令：开始两声 */
     t2Msg('开始 5 分钟静息采集：坐好、别说话、别动');
     clearInterval(T2A.timer);
     T2A.timer = setInterval(() => {
@@ -2908,6 +2926,7 @@ const T2A = {
   },
   finish(){
     T2A.on = false; clearInterval(T2A.timer);
+    cueEnd();                                 /* 法师 09-28 令：结束一声 */
     const rows = [];
     for(const ch in T2A.acc){
       const arr = T2A.acc[ch];
@@ -2996,7 +3015,7 @@ function renderT1Auto(blk){
       h('button', {class:'btn pri', type:'button', id:'t1aGo', onclick:()=>T1A.start()}, '▶ 自动跑 8 段'),
       h('button', {class:'btn ghost', type:'button', id:'t1aStop', disabled:'disabled', onclick:()=>T1A.stop()}, '停止'),
       h('button', {class:'btn ghost', type:'button', onclick:()=>{ S.meta.beep = !(S.meta.beep !== false); saveSoon(); applyBeepLabel(); toast('提示音：' + ((S.meta.beep !== false) ? '开' : '关')); }}, '🔔 提示音开关'),
-      h('button', {class:'btn ghost', type:'button', onclick:()=>{ beep(2); toast('试听：应听到两声短响（若无声音，检查系统音量/浏览器是否静音）'); }}, '试听')))];
+      h('button', {class:'btn ghost', type:'button', onclick:()=>{ beep(2, true); toast('试听：应听到两声短响（若无声音，检查系统音量/浏览器是否静音）'); }}, '试听')))];
   return card(blk, body);
 }
 function renderT2Auto(blk){
@@ -3047,7 +3066,7 @@ function renderT4Mains(blk){
 /* ── T3 自动跑：四组动作，页面提示＋自动计时＋自动测恢复（法师 09-25 裁定甲）── */
 const T3A = {
   on:false, idx:0, phase:'', left:0, timer:null, lastCap:0, ptp:[], rows:[],
-  ACTIONS:[['咀嚼 ×10','咀嚼'],['眨眼 ×20','眨眼'],['头部转动 ×10','转头'],['深呼吸 ×10','深呼吸']],
+  ACTIONS:[['咀嚼 ×10','咀嚼',10],['眨眼 ×20','眨眼',10],['头部转动 ×10','转头',10],['深呼吸 ×10（每次约 15 秒）','深呼吸',150]],   /* 第三元＝动作窗秒数；深呼吸按每次约 15 秒 ×10＝150 秒（法师 09-28 令） */
   start(){
     if(T3A.on) return;
     if(!LIVE.on){ t3Msg('未接入实时数据：请先在驾驶舱开始采集', true); return; }
@@ -3056,13 +3075,14 @@ const T3A = {
   stop(){ T3A.on = false; clearInterval(T3A.timer); t3Msg('已停止（已完成组的数据保留）'); },
   next(){
     if(T3A.idx >= T3A.ACTIONS.length){ T3A.finish(); return; }
-    T3A.phase = 'act'; T3A.left = 10; T3A.ptp = []; T3A.lastCap = 0;
-    t3Msg('第 ' + (T3A.idx+1) + '/4 组：请做「' + T3A.ACTIONS[T3A.idx][0] + '」');
+    T3A.phase = 'act'; T3A.left = T3A.ACTIONS[T3A.idx][2]; T3A.ptp = []; T3A.lastCap = 0;
+    cueStart();                               /* 法师 09-28 令：每组动作开始两声 */
+    t3Msg('第 ' + (T3A.idx+1) + '/4 组：请做「' + T3A.ACTIONS[T3A.idx][0] + '」（窗口 ' + fmtzh(T3A.ACTIONS[T3A.idx][2]) + '）');
     clearInterval(T3A.timer);
     T3A.timer = setInterval(()=>{
       T3A.left--;
       if(T3A.left <= 0){
-        if(T3A.phase === 'act'){ T3A.phase = 'rest'; T3A.left = 30; t3Msg('好——静息 30 秒（正在测恢复时间）'); }
+        if(T3A.phase === 'act'){ T3A.phase = 'rest'; T3A.left = 30; cueEnd(); t3Msg('好——静息 30 秒（正在测恢复时间）'); }
         else T3A.closeAction();
       } else t3Msg(null);
     }, 1000);
@@ -3111,17 +3131,18 @@ const T3A = {
   },
   finish(){
     T3A.on = false;
+    cueEnd();                                 /* 法师 09-28 令：四组全完一声 */
     t3Msg('✅ 四组跑完：表已自动填好（伪迹持续／恢复用时／是否 ≤3s）——请核对后点 T3 结论');
     updateCalc();
     if(T3A.bad) askHuman('hg_t3_art');   /* 步 2③：有组没测到数据 → 问人，不代填 */
   }
 };
 function t3Msg(t, bad){
-  setPt(t || (T3A.on ? ('现在：' + (T3A.phase === 'act' ? ('做「' + T3A.ACTIONS[T3A.idx][0] + '」') : '静息恢复') + ' · 还剩 ' + T3A.left + ' 秒') : null));
+  setPt(t || (T3A.on ? ('现在：' + (T3A.phase === 'act' ? ('做「' + T3A.ACTIONS[T3A.idx][0] + '」') : '静息恢复') + ' · 还剩 ' + fmtzh(T3A.left)) : null));
   const a = document.getElementById('t3aMsg');
   if(!a) return;
   if(t){ a.textContent = t; a.style.color = bad ? 'var(--bad)' : ''; }
-  else a.textContent = (T3A.phase === 'act' ? '动作中：还剩 ' + T3A.left + ' 秒' : '静息恢复：还剩 ' + T3A.left + ' 秒');
+  else a.textContent = (T3A.phase === 'act' ? '动作中：还剩 ' + fmtzh(T3A.left) : '静息恢复：还剩 ' + fmtzh(T3A.left));
 }
 function renderT3Auto(blk){
   return card(blk, [h('div', {class:'tm'},
@@ -3140,37 +3161,88 @@ function phMsg(t, bad){
   m.textContent = t || '';
   m.style.color = bad ? 'var(--bad)' : '';
 }
+let phLoaded = false;   /* 一进本页就自动列一次会话，人不必去找「列会话」按钮 */
+/* 法师 2026-09-28 实测：下拉恒空。真因＝面板只认服务端从不返回的 sessions/items 两个键；
+   实际 /api/session/list 返回 {archived:[…], staged:[…]}（console_server.py:2142），
+   archived＝已入库/隔离区的正式会话，staged＝驾驶舱本机暂存尚未入库的录制。两类都要能选。 */
+const PHST = {finished:'已完成', quarantined:'隔离区', ingested:'已入库', pending:'待入库', archived:'已归档'};
+const PHTYPE = {baseline:'基线', test:'测试', training:'训练', monitor:'监测'};
+function phLabelArchived(s){
+  const mins = /^\d+$/.test(String(s.duration || '')) ? ('｜' + Math.round(Number(s.duration) / 60) + ' 分钟') : '';
+  return '已归档｜' + (s.date || '日期未记') + '｜' + (s.participant || '受试者未记')
+    + '｜' + (PHTYPE[s.type] || s.type || '类型未记') + mins
+    + '｜' + (PHST[s.status] || s.status || '状态未记') + '｜' + String(s.session_id || '');
+}
+function phLabelStaged(s){
+  const sid = String(s.session_id || '');
+  const t = /^local_(\d{4})(\d{2})(\d{2})[T_]?(\d{2})(\d{2})/.exec(sid);
+  return '本机暂存｜' + (t ? (t[1] + '-' + t[2] + '-' + t[3] + ' ' + t[4] + ':' + t[5]) : '时间未记')
+    + '｜' + (sid.indexOf('.partial') >= 0 ? '中断保留（未入库）' : '未入库')
+    + '｜档案 ' + (s.manifest ? '有' : '无') + '·事件 ' + (s.events ? '有' : '无') + '｜' + sid;
+}
+let PHLIST = null;   /* 会话清单只取一次，各处下拉共用（T5/T7/T8 读数、T10 对比、T11 对照） */
+async function phFetch(force){
+  if(PHLIST && !force) return PHLIST;
+  const j = await (await fetch('/api/session/list', {cache:'no-store'})).json();
+  PHLIST = {arch:(Array.isArray(j) ? j : ((j && (j.archived || j.sessions || j.items)) || [])),
+            stag:(Array.isArray(j) ? [] : ((j && j.staged) || []))};
+  return PHLIST;
+}
+function phFillSel(sel){
+  const arch = PHLIST.arch, stag = PHLIST.stag;
+  sel.innerHTML = '';
+  sel.appendChild(h('option', {value:''}, '（选一个会话）'));
+  const g1 = h('optgroup', {label:'本机暂存（最近 ' + Math.min(40, stag.length) + ' 个，新在前）'});
+  stag.slice(-40).reverse().forEach(s => g1.appendChild(h('option', {value:String(s.session_id || s.sid || '')}, phLabelStaged(s))));
+  if(stag.length) sel.appendChild(g1);
+  const g2 = h('optgroup', {label:'已归档／隔离区（最近 ' + Math.min(40, arch.length) + ' 个，新在前）'});
+  arch.slice(-40).reverse().forEach(s => {
+    const sid = String(s.session_id || s.sid || s.id || s);
+    g2.appendChild(h('option', {value:sid}, typeof s === 'object' ? phLabelArchived(s) : ('已归档｜' + sid)));
+  });
+  if(arch.length) sel.appendChild(g2);
+  if(!arch.length && !stag.length) sel.appendChild(h('option', {value:''}, '（暂无会话）'));
+  return {arch:arch, stag:stag};
+}
+function phPicker(id){
+  const sel = h('select', {id, style:'min-width:300px'}, h('option', {value:''}, '（会话清单加载中…）'));
+  phFetch().then(() => phFillSel(sel)).catch(e => {
+    sel.innerHTML = ''; sel.appendChild(h('option', {value:''}, '（清单加载失败：' + e.message + '）'));
+  });
+  return sel;
+}
+async function phPost(sid){
+  return await (await fetch('/api/session/' + encodeURIComponent(sid) + '/posthoc', {cache:'no-store'})).json();
+}
+function phLoss(j){   /* 断包率口径全页一处：先「会话跨度」口径，取不到才退回样本计数口径 */
+  const a = (j && j.audit) || {};
+  return a.span_loss_rate != null ? a.span_loss_rate : (a.packet_loss_rate != null ? a.packet_loss_rate : null);
+}
 async function phList(){
   const sel = document.getElementById('phSid');
   if(!sel) return;
   phMsg('加载会话清单…');
   try{
-    const j = await (await fetch('/api/session/list', {cache:'no-store'})).json();
-    const arr = Array.isArray(j) ? j : (j.sessions || j.items || []);
-    sel.innerHTML = '';
-    if(!arr.length){ sel.appendChild(h('option', {value:''}, '（暂无归档会话）')); phMsg('暂无归档会话'); return; }
-    arr.slice(-40).reverse().forEach(s => {
-      const sid = (typeof s === 'string') ? s : (s.sid || s.session_id || s.id || '');
-      const tag = (typeof s === 'object' && s && s.quarantined) ? '（隔离区）' : '';
-      if(sid) sel.appendChild(h('option', {value:String(sid)}, String(sid) + tag));
-    });
-    phMsg('共 ' + arr.length + ' 个会话（显示最近 ' + Math.min(40, arr.length) + ' 个）');
+    await phFetch(true);
+    const r = phFillSel(sel);
+    if(!r.arch.length && !r.stag.length){ phMsg('暂无会话：本机暂存与已归档都是空的', true); return; }
+    phLoaded = true;
+    phMsg('共 ' + (r.arch.length + r.stag.length) + ' 个会话：本机暂存 ' + r.stag.length + ' 个／已归档 ' + r.arch.length
+      + ' 个（各列出最近 40 个，新在前）——选中即自动读入');
   }catch(e){ phMsg('列会话失败：' + e.message, true); }
 }
 async function phRead(){
   const sel = document.getElementById('phSid');
   const sid = sel && sel.value;
-  if(!sid){ phMsg('请先点「列会话」并选中一个会话', true); return; }
+  if(!sid){ phMsg('请先在左边下拉里选一个会话（没有就点「重新列会话」）', true); return; }
   phMsg('读取 ' + sid + ' …');
   try{
-    const j = await (await fetch('/api/session/' + encodeURIComponent(sid) + '/posthoc',
-      {cache:'no-store'})).json();
+    const j = await phPost(sid);
     PH = j;   /* 缓存给验收档案用 */
     const m = j.npz_meta || {}, tm = j.timing || {}, a = j.audit || {};
     const put = (f, v) => { if(v === null || v === undefined || v === '') return; S.fields[f] = String(v); syncField(f); };
     if(m.duration_s != null) put('t5dur', (Math.round(m.duration_s / 6) / 10));
-    if(a.span_loss_rate != null) put('t5loss', (a.span_loss_rate * 100).toFixed(1));
-    else if(a.packet_loss_rate != null) put('t5loss', (a.packet_loss_rate * 100).toFixed(1));
+    const L = phLoss(j); if(L != null) put('t5loss', (L * 100).toFixed(1));
     if(a.effective_hz != null) put('t5eff', a.effective_hz);
     if(tm.drift_s != null && tm.span_s) put('t7a', (tm.drift_s / (tm.span_s / 3600)).toFixed(2));
     if(tm.jitter_within_2ms_pct != null) put('t7b', tm.jitter_within_2ms_pct);
@@ -3190,12 +3262,112 @@ async function phRead(){
   }catch(e){ phMsg('读取失败：' + e.message, true); }
 }
 function renderPosthoc(blk){
-  const sel = h('select', {id:'phSid', style:'min-width:280px'},
-    h('option', {value:''}, '（点「列会话」加载）'));
+  const sel = h('select', {id:'phSid', style:'min-width:360px', onchange:() => { if(sel.value) phRead(); }},
+    h('option', {value:''}, phLoaded ? '（点「重新列会话」）' : '（正在自动加载会话清单…）'));
+  if(!phLoaded) setTimeout(phList, 60);
   return card(blk, [h('div', {class:'autob'}, sel,
-    h('button', {class:'btn', type:'button', onclick:phList}, '列会话'),
+    h('button', {class:'btn ghost', type:'button', onclick:phList}, '重新列会话'),
     h('button', {class:'btn pri', type:'button', onclick:phRead}, '读入并填表')),
-    h('div', {class:'autoout', id:'phMsg'}, '')]);
+    h('div', {class:'autoout', id:'phMsg'}, '选一个会话即自动读入（本机暂存＝驾驶舱刚录的，已归档＝入过库的正式会话）。')]);
+}
+
+/* ── T9／T10／T11 现场操作条（法师 2026-09-28 实测令 #7：要一眼看清从哪开始、到哪结束、数据从哪调）
+   开始＝响两声＋往会话事件流打一个「开始」点；结束＝响一声＋打「结束」点。
+   取数一律走 /api/session/{sid}/posthoc 的既有读数；面板取不到的就明说取不到，绝不硬造（红线5）。
+   写入沿用「事后自动读数」的既有先例：人是发起方（他自己点的按钮），所以直接填，不经三态闸。 ── */
+function runBar(blk){
+  const out = h('div', {class:'autoout'});
+  const rows = [];
+  const btn = (cls, label, fn) => h('button', {class:'btn ' + cls, type:'button', onclick:fn}, label);
+  if(blk.run === 't9'){
+    let n = 0;
+    rows.push(h('div', {class:'autob'},
+      btn('pri', '▶ 开始 T9（打点＋响两声）', () => { cueStart(); postMarker('T9 段开始');
+        out.textContent = '已打点「T9 段开始」。现在盯屏幕：每闪一次按一次中间那个键，做 20 次以上。'; }),
+      btn('', '● 刚刚闪了，记一次', () => { n++; postMarker('T9 打点第 ' + n + ' 次');
+        out.textContent = '第 ' + n + ' 次已写进会话事件流（这一刻以您看到闪烁为准，早了晚了都照原样记着）。'; }),
+      btn('ghost', '■ 结束 T9（打点＋响一声）', () => { cueEnd(); postMarker('T9 段结束');
+        out.textContent = '本段共记 ' + n + ' 次。'
+          + '「电极→HUD 数值更新」的毫秒数要拿这些打点与闭环会话日志对账才出得来，面板自己算不了——不硬造。'
+          + 'T9 结论默认「待核」，对完账再由您点。'; })));
+    out.textContent = '怎么玩：① 点「▶ 开始 T9」；② 屏幕每闪一下按一次「● 记一次」（20 次以上）；③ 点「■ 结束 T9」。'
+      + '开始响两声、结束响一声，这两个时刻都往会话里打了点，事后对得上账。';
+  } else if(blk.run === 't10'){
+    const sa = phPicker('t10Sa'), sb = phPicker('t10Sb');
+    rows.push(h('div', {class:'autob'},
+      btn('pri', '▶ 戴上 VR 开始（10 分钟）', () => { cueStart(); postMarker('T10 有VR段开始');
+        out.textContent = '已打点＋响两声——现在进 VR 场景，坐好跑满 10 分钟，期间不用管本页。'; }),
+      btn('ghost', '■ 出 VR，结束', () => { cueEnd(); postMarker('T10 有VR段结束');
+        out.textContent = '已打点＋响一声——回本页在下面选两个会话，点「取断包率并填表」。'; })));
+    rows.push(h('div', {class:'autob'}, h('span', {class:'hint', style:'margin:0'}, '不戴 VR 的一段：'), sa,
+      h('span', {class:'hint', style:'margin:0'}, '戴 VR 的一段：'), sb,
+      btn('pri', '取断包率并填表', () => t10Read(sa, sb, out))));
+    out.textContent = '怎么玩：① 照常跑场②的 T5，那一段就是「不戴 VR」的对照；② 点「▶ 戴上 VR 开始」跑 10 分钟，到点按「■ 出 VR，结束」；'
+      + '③ 在下面「不戴 VR」选 T5 那段会话、「戴 VR」选刚跑的这段，点「取断包率并填表」——两个数和差值机器自己取、自己填。';
+  } else {
+    const sa = phPicker('t11Sa'), sb = phPicker('t11Sb');
+    rows.push(h('div', {class:'autob'},
+      btn('pri', '▶ 两台同时开采', () => { cueStart(); postMarker('T11 双机同采开始');
+        out.textContent = '已打点＋响两声——两台同时戴上、同时开采，跑同一套 T1 睁闭眼 ×2 遍。'; }),
+      btn('ghost', '■ 两台同时结束', () => { cueEnd(); postMarker('T11 双机同采结束');
+        out.textContent = '已打点＋响一声——两台各自保存后，在下面各选一个会话点「取通道数·时长」。'; })));
+    rows.push(h('div', {class:'autob'}, h('span', {class:'hint', style:'margin:0'}, '表左列那台的会话：'), sa,
+      h('span', {class:'hint', style:'margin:0'}, '表右列那台的会话：'), sb,
+      btn('pri', '取通道数·时长·采样率', () => t11Read(sa, sb, out))));
+    out.textContent = '怎么玩：① 两台同时戴好，点「▶ 两台同时开采」；② 按同一套流程做 T1 睁闭眼 ×2 遍；③ 点「■ 两台同时结束」，两台各自保存；'
+      + '④ 在上面各选一台的会话，点「取通道数·时长·采样率」。'
+      + 'α 提升幅度与「质检 ok 的通道数」这里取不到（只有通道总数），要您照各自 qc 报告填——机器不猜。';
+  }
+  return h('div', null, ...rows, out);
+}
+async function t10Read(sa, sb, out){
+  const a = sa.value, b = sb.value;
+  if(!a || !b){ out.textContent = '两个会话都要选上（一个不戴 VR、一个戴 VR），只选一个不行。'; return; }
+  if(a === b){ out.textContent = '两个框选的是同一个会话——请一个选不戴 VR 的那段、一个选戴 VR 的那段。'; return; }
+  out.textContent = '取数中…';
+  try{
+    const la = phLoss(await phPost(a)), lb = phLoss(await phPost(b));
+    if(la == null || lb == null){
+      out.textContent = '有一段取不到断包率：' + (la == null ? a : b) + ' 还没跑过质检（没有 qc.json）。'
+        + '请先在实践驾驶舱对它做一次入库／质检，或照报告手填——机器不猜。';
+      return;
+    }
+    const put = (f, v) => { S.fields[f] = String(v); syncField(f); };
+    put('t10a', (la * 100).toFixed(2) + '%'); put('t10b', (lb * 100).toFixed(2) + '%');
+    put('t10n1', '会话 ' + a); put('t10n2', '会话 ' + b);
+    recount(); saveSoon();
+    const d = (lb - la) * 100;
+    showManualIfHidden();
+    out.textContent = '不戴 VR＝' + (la * 100).toFixed(2) + '%，戴 VR＝' + (lb * 100).toFixed(2) + '%（口径＝会话跨度，与 T5 同一处）→ '
+      + (d > 0.005 ? ('戴 VR 高 ' + d.toFixed(2) + ' 个百分点') : (d < -0.005 ? ('戴 VR 低 ' + (-d).toFixed(2) + ' 个百分点') : '两者持平'))
+      + '。正本判据＝戴 VR 的断包率不高于不戴 VR；两格已填好，达不达标由您点 T10 结论（机器不代判结论）。';
+  }catch(e){ out.textContent = '取数失败：' + e.message; }
+}
+async function t11Read(sa, sb, out){
+  const a = sa.value, b = sb.value;
+  if(!a || !b){ out.textContent = '两台设备的会话都要选上。'; return; }
+  if(a === b){ out.textContent = '两个框是同一个会话——这里要的是两台设备各一段。'; return; }
+  out.textContent = '取数中…';
+  try{
+    const one = j => { const m = (j && j.npz_meta) || {};
+      return {ch:(m.channels || []).length, hz:m.sfreq, sec:m.duration_s != null ? Math.round(m.duration_s) : null, mk:m.markers_n}; };
+    const A = one(await phPost(a)), B = one(await phPost(b));
+    const put = (f, v) => { S.fields[f] = String(v); syncField(f); };
+    const num = x => (x == null ? '未记' : x);
+    put('t11c', A.ch + ' ch（通道总数）'); put('t11d', B.ch + ' ch（通道总数）');
+    put('t11n2', '左列会话 ' + a + '：' + A.ch + ' ch @' + num(A.hz) + ' Hz／' + num(A.sec) + ' 秒　｜　'
+      + '右列会话 ' + b + '：' + B.ch + ' ch @' + num(B.hz) + ' Hz／' + num(B.sec) + ' 秒　※这是通道总数，'
+      + '「质检 ok」的通道数面板取不到，请照各自 qc 报告核。');
+    put('t11n1', '两台时长：左列 ' + num(A.sec) + ' 秒／右列 ' + num(B.sec) + ' 秒；打点 ' + num(A.mk) + ' 与 ' + num(B.mk)
+      + ' 次。α 提升幅度请用同一时间窗算（本页只连着实时流那一台，拿不到另一台的波形）。');
+    recount(); saveSoon();
+    showManualIfHidden();
+    out.textContent = '两行的备注与通道总数已填好（见上表）。'
+      + '还差您填的：α 阻断提升幅度（两台的百分比）与佩戴体感——这两个面板没有来源，不猜。';
+  }catch(e){ out.textContent = '取数失败：' + e.message; }
+}
+function showManualIfHidden(){
+  if(!S.meta.showManual) toggleManual();   /* 机器刚填的数据在收起的表里——自动展开一次，让人当场看见 */
 }
 
 /* ── B6 验收档案（法师 2026-09-26 令；原料全部来自既有读数，不新增指标）── */
@@ -3322,7 +3494,6 @@ function applyTheme(){
   if(tg) tg.textContent = S.meta.kpiOpen ? '⌃ 收起' : '⌄ 仪表';
 }
 function build(){
-  TIMERS.forEach(id => clearInterval(id)); TIMERS.length = 0;
   const main = document.getElementById('main');
   main.innerHTML = '';
   const nav = document.getElementById('nav');
@@ -3342,6 +3513,7 @@ function build(){
     h('button', {class:'btn ghost', type:'button', onclick:()=>setPt(null, true)}, '清空')));
   main.appendChild(h('div', {class:'app'}, side, pane));
   applyBeepLabel();
+  paintManual();   /* 人工版面默认收起（法师 09-28 令 #5）：每次建树后把开关状态刷到位 */
   const cur = S.meta.gate || GATES[0].id;
   GATES.forEach(g=>{
     const act = (g.id === cur);
@@ -3355,6 +3527,9 @@ function build(){
           onclick: () => nextGate(g.id)}, '本阶段完成 → 下一阶段')),
       h('p', {class:'sdesc'}, g.desc),
       h('div', {class:'gsum', id:'gl-' + g.id}));
+    /* 法师 09-29 令：自动在上、人工在下。标了 grp 的人工件不再各摆一张卡，
+       统一收进本项「自动跑」卡下面的〈人工采集栏〉组里——默认收起，点开才看。 */
+    const pend = [];
     gateBlocks(g).forEach(blk=>{
       let el;
       switch(blk.k){
@@ -3369,7 +3544,6 @@ function build(){
         case 'roletable': el = renderRoleTable(blk); break;
         case 'states': el = renderStates(blk); break;
         case 'static':  el = renderStatic(blk); break;
-        case 'timer':   el = renderTimer(blk); break;
         case 'v':       el = renderV(blk); break;
         case 'bridge':  el = renderBridge(blk); break;
         case 't1auto':  el = renderT1Auto(blk); break;
@@ -3382,8 +3556,17 @@ function build(){
         case 'hint':    el = renderHint(blk); break;
         default:        el = null;
       }
-      if(el) wrap.appendChild(el);
+      if(!el) return;
+      if(blk.grp){ pend.push({head:blk.grp, blk:blk, el:el}); return; }
+      wrap.appendChild(el);
+      const mine = pend.filter(p => p.head === blk.k);
+      if(mine.length){
+        wrap.appendChild(manualGroup(el, mine));
+        mine.forEach(p => pend.splice(pend.indexOf(p), 1));
+      }
     });
+    /* 兜底：组头没出现在本闸门时，把这些件照常摊开——宁可露着，不能把人的表弄丢 */
+    pend.forEach(p => wrap.appendChild(p.el));
     pane.appendChild(wrap);
   });
   /* 输入事件委托在启动时挂一次（attachDelegates），不随重建重复挂 */
@@ -3648,6 +3831,7 @@ document.getElementById('bSkin').onclick = ()=>{
   toast(S.meta.skin === 'paper' ? '宣纸皮肤：柔和纸质，适合打印与长读' : '仪表盘皮肤：数据屏视觉，一眼看全局');
 };
 document.getElementById('bNight').onclick = ()=>{ S.meta.night = !S.meta.night; applyTheme(); saveSoon(); };
+document.getElementById('bManual').onclick = toggleManual;
 document.getElementById('bFs').onclick = ()=>{
   const steps = [15, 17, 19, 22];
   const i = steps.indexOf(S.meta.fs || 17);

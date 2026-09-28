@@ -21,6 +21,9 @@ const js = src.match(/<script>([\s\S]*?)<\/script>/)[1]
   + ' POLICY, MODE, NUD, FP_LINE, policyMode, polSet, tripleOk, autoWrite, nudAskOk, nudAskNo,'
   + ' nudge, NU, nudCount, nudDismiss, nudCur, nudPulse, silText, fpOf, fpGrade, markFp, unFp, buildDossier,'
   + ' STROWS, STL, machineStates, stConflict, stForce, setStForce, paintStates, vlabFor, HOLD_DEFAULT,'
+  + ' cueStart, cueEnd, fmtzh, manualLabel, paintManual, toggleManual, phLabelStaged, phLabelArchived,'
+  + ' phFillSel, phLoss, runBar, t10Read, t11Read,'
+  + ' get PHLIST(){ return PHLIST; }, set PHLIST(v){ PHLIST = v; },'
   + ' get PH(){ return PH; }, set PH(v){ PH = v; }};\n';
 
 /* ── 最小 DOM 替身 ── */
@@ -197,8 +200,11 @@ cls('card').length === blocks - plain
   : fail('卡片数异常：' + cls('card').length + '（应为 ' + (blocks - plain) + '）');
 const drawerCards = cls('drawer');
 drawerCards.length === 6 ? ok('【5】证据抽屉卡 6 张（步 3④ 增「结论四态」抽屉一张）') : fail('证据抽屉卡应 6 张，现 ' + drawerCards.length);
-drawerCards.every(n => n.classList.contains('closed'))
-  ? ok('【5】证据抽屉默认全部收起（人不必填表）') : fail('有证据抽屉卡未默认收起');
+const inMgrp = n => { for(let p = n.__parent; p; p = p.__parent) if (p.classList && p.classList.contains('mgrp')) return p; return null; };
+drawerCards.filter(n => !inMgrp(n)).every(n => n.classList.contains('closed'))
+  && drawerCards.filter(n => inMgrp(n)).every(n => !inMgrp(n).classList.contains('open'))
+  ? ok('【5】证据位默认仍全收起：没入组的走抽屉，入了〈人工采集栏〉的随整组收起（不再双重折叠——点了才看得见表）')
+  : fail('有证据位默认是露出的');
 const btns = all.filter(n => n.tagName === 'BUTTON');
 btns.some(b => b.textContent === '带我去这一项') ? ok('【5】主持人条唯一动作按钮在位') : fail('主持人条缺「带我去这一项」');
 btns.some(b => b.textContent === '⌄ 主持') ? ok('【5】主持人条可整条收起（⑥ 退出判据）') : fail('主持人条缺收起按钮');
@@ -732,6 +738,110 @@ X.S.verdicts = {}; X.S.meta.holdLog = []; X.recount();
 /⏳ 待核（默认，⑩）/.test(X.buildDossier())
   ? ok('【18】档案在 T9 位也写「待核」，不写成"未填"或空——下游读到的是弃权一等值') : fail('档案未显待核');
 X.S.verdicts = {}; X.recount();
+
+/* ── 【19】法师 2026-09-28 实测 7 条：提示音布线／T3 窗长／读数下拉／人工版面收起／T9–T11 入口 ── */
+X.recount();
+const q19 = []; walk(doc, q19);
+const ancHas = (n, c) => { for(let p = n.__parent; p; p = p.__parent) if (p.classList && p.classList.contains(c)) return true; return false; };
+const byCls = c => q19.filter(n => clsHas(n, c));
+
+const t3w = X.T3A.ACTIONS.map(a => a[2]);
+t3w.join(',') === '10,10,10,150'
+  ? ok('【19】T3 动作窗按动作给（咀嚼 10／眨眼 10／转头 10／深呼吸 15 秒×10＝150 秒），不再清一色 10 秒')
+  : fail('T3 窗长不符：' + t3w.join(','));
+/每次约 15 秒/.test(X.T3A.ACTIONS[3][0])
+  ? ok('【19】深呼吸那组连动作名都写着「每次约 15 秒」——大字提示读得出来，不用人猜节拍') : fail('动作名未带节拍说明');
+const blks19 = X.FLOW.secs.reduce((a, s) => a.concat(s.blocks), []);
+const t3auto = blks19.filter(b => b.k === 't3auto')[0], t3grid = blks19.filter(b => b.k === 'grid' && /T3 耐受性/.test(b.title || ''))[0];
+t3auto && /150 秒/.test(t3auto.hint) && /开始响两声/.test(t3auto.hint)
+  ? ok('【19】T3 自动跑的说明与代码同步（150 秒窗＋响了就切换），人不必翻代码') : fail('T3 自动跑说明未同步');
+/150 秒/.test(t3grid.hint) ? ok('【19】手填表那张卡的说明也写了 150 秒（两处口径不打架）') : fail('手填表说明未同步');
+X.fmtzh(150) === '2 分 30 秒' && X.fmtzh(30) === '30 秒'
+  ? ok('【19】秒数用中文读法（2 分 30 秒／30 秒），不甩 02:30 让人心算') : fail('中文秒数不符：' + X.fmtzh(150));
+
+X.phLoss({audit:{span_loss_rate:0.39, packet_loss_rate:0.01}}) === 0.39
+  ? ok('【19】断包率口径全页一处：先「会话跨度」，与 T5 同一处，不分叉') : fail('跨度口径未优先');
+X.phLoss({audit:{packet_loss_rate:0.01}}) === 0.01 ? ok('【19】跨度口径取不到才退回样本计数口径') : fail('退路口径不符');
+X.phLoss({audit:{qc:true}}) === null
+  ? ok('【19】两个口径都没有（还没跑质检）→ 交 null，由调用方明说取不到，绝不拿 0 充数') : fail('无数据未如实交 null');
+X.PHLIST = {arch:[{session_id:'ZEN-20260925-P001-S16', participant:'P001', date:'2026-09-25', type:'test', duration:'1222', status:'quarantined'}],
+            stag:[{session_id:'local_20260928_174054', npz:'a.npz', manifest:true, events:false},
+                  {session_id:'local_20260927_074329.partial', npz:'b.npz', manifest:false, events:false}]};
+/已归档｜2026-09-25｜P001｜测试｜20 分钟｜隔离区｜ZEN-20260925-P001-S16/.test(X.phLabelArchived(X.PHLIST.arch[0]))
+  ? ok('【19】归档项写成人话（日期／受试者／类型／时长／状态），不必先认 ZEN 编号') : fail('归档标签不符：' + X.phLabelArchived(X.PHLIST.arch[0]));
+/本机暂存｜2026-09-28 17:40｜未入库｜档案 有·事件 无/.test(X.phLabelStaged(X.PHLIST.stag[0]))
+  ? ok('【19】暂存项分得清未入库，并带档案／事件齐否') : fail('暂存标签不符：' + X.phLabelStaged(X.PHLIST.stag[0]));
+/中断保留/.test(X.phLabelStaged(X.PHLIST.stag[1])) ? ok('【19】.partial 录制标成「中断保留」，不冒充正常会话') : fail('中断件未标注');
+const sel19 = byId['phSid'];
+X.phFillSel(sel19);
+const og19 = sel19.kids.filter(n => n.tagName === 'OPTGROUP');
+og19.length === 2 && /本机暂存/.test(og19[0].attrs.label) && /已归档/.test(og19[1].attrs.label)
+  ? ok('【19】下拉认得服务端真实返回的 {archived, staged}（从前只认 sessions/items，所以永远空）') : fail('分组不符：' + og19.length);
+X.PHLIST = {arch:[], stag:[]};
+/暂无会话/.test(X.phFillSel(sel19) && sel19.kids.map(n => String(n.textContent)).join(''))
+  ? ok('【19】一个会话都没有时不崩，明写「暂无会话」') : fail('空清单处理不符');
+
+const mf19 = byCls('mfold'), mt19 = byCls('mftgl'), mg19 = byCls('mgrp');
+mg19.length === 5 && mf19.length === 3 && mt19.length === 3
+  ? ok('【19】版面重排到位：5 组〈人工采集栏〉挂在各自的"自动跑"卡下（T1／T2／T3／T4／事后读数），'
+      + 'T9–T11 自带操作条的 3 张表留在本卡内折叠——不再两种版面混着摆')
+  : fail('分组不符：mgrp=' + mg19.length + ' mfold=' + mf19.length + '/' + mt19.length);
+mg19.every(g => !clsHas(g, 'open'))
+  ? ok('【19】人工组默认整组收起——一屏看下去只剩"自动跑"这一条主线') : fail('有人工组默认是开着的');
+(function(){ const bad = [];
+  mg19.forEach(g => { const box = (g.kids || []).filter(k => clsHas(k, 'mgbody'))[0];
+    if(!box) return bad.push('无 mgbody');
+    box.kids.forEach(c => { if(clsHas(c, 'card') && clsHas(c, 'closed')) bad.push((c.querySelector('h3')||{}).textContent); });
+  });
+  bad.length ? fail('组里的卡还带抽屉收起（点开组仍是空卡＝双重折叠）：' + bad.join('、'))
+    : ok('【19】组内的卡不再二次折叠（09-29 真浏览器实跑抓到的"点了没开"，从此有断言兜住）');
+})();
+byCls('manhide').length === 0 && !X.FLOW.secs.some(s => s.blocks.some(b => b.k === 'timer'))
+  ? ok('【19】两张旧手填计时器是**删掉**不是藏起来（FLOW 里已无 timer 件，renderTimer／TIMERS／LIVE.t1·t5 死代码一并清了）')
+  : fail('旧手填计时器未删净');
+function vidsIn(n){ const a = []; walk(n, a); const b = a.filter(x => x.attrs && x.attrs['data-vid']); return b.length ? b[0].attrs['data-vid'] : null; }
+const vw19 = byCls('vrow');
+const lifted = vw19.filter(n => !(n.attrs && n.attrs['data-vrow']));
+const liftV = lifted.map(vidsIn).filter(Boolean).sort().join(',');
+liftV === 't1v,t2v,t3v,t4v,t5v,t7v,t8v'
+  ? ok('【19】7 项被收进人工组的，结论判定行都提到了自动卡上（t1v…t8v 一个不漏）——⑥甲 可改判不藏在按钮后面')
+  : fail('提到明面的判定行集合不符：' + liftV);
+vw19.filter(n => ancHas(n, 'mfold')).length === 0
+  ? ok('【19】提上来的判定行没有一个又落回折叠里（提了等于没提就不算数）') : fail('判定行仍被折叠盖住');
+const dv19 = q19.filter(n => n.attrs && n.attrs['data-vrow']);
+dv19.length === 13
+  ? ok('【19】完成度分母未被抬高：带 data-vrow 的"真格子"仍 13 个，提上来的副本不重复计数')
+  : fail('data-vrow 计数：' + dv19.length);
+X.S.meta.showManual = false; X.paintManual();
+const gb19 = mg19[0].querySelector('.mgbtn');
+gb19.click();
+clsHas(mg19[0], 'open') && !clsHas(mg19[1], 'open')
+  ? ok('【19】点开一组只展开这一组（就地看这一项的数），不牵连别处') : fail('单组开合不独立');
+gb19.click();
+!clsHas(mg19[0], 'open') ? ok('【19】再看一眼就收回，版面立刻回到"只有自动跑"的干净态') : fail('单组收不回');
+X.toggleManual();
+mg19.every(g => clsHas(g, 'open')) && mt19.every(b => /收起/.test(String(b.textContent)))
+  ? ok('【19】页首「📋 人工采集栏」一键全展开，按钮字样跟着状态走（不让人找第二遍）') : fail('一键全展开不符');
+X.toggleManual();
+mg19.every(g => !clsHas(g, 'open')) && X.S.meta.showManual === false
+  ? ok('【19】再点一键收回默认态（下次进来还是干净的）') : fail('一键收回失败');
+const bt19 = q19.filter(n => n.tagName === 'BUTTON').map(n => String(n.textContent));
+const need19 = ['▶ 开始 T9（打点＋响两声）','● 刚刚闪了，记一次','■ 结束 T9（打点＋响一声）',
+  '▶ 戴上 VR 开始（10 分钟）','■ 出 VR，结束','取断包率并填表','▶ 两台同时开采','■ 两台同时结束','取通道数·时长·采样率'];
+need19.every(t => bt19.indexOf(t) >= 0)
+  ? ok('【19】T9／T10／T11 九个动作都在场——从哪开始、到哪结束、数据怎么调，各有一个按得下去的键')
+  : fail('缺动作：' + need19.filter(t => bt19.indexOf(t) < 0).join('、'));
+['t10Sa','t10Sb','t11Sa','t11Sb'].every(id => byId[id])
+  ? ok('【19】四项对比各有会话选择框（两个一组：不戴VR／戴VR，左列／右列）') : fail('选择框缺失');
+const o19 = {textContent:''};
+X.t10Read({value:''}, {value:''}, o19);
+/都要选上/.test(o19.textContent) ? ok('【19】没选会话就点取数：说清缺什么，不空转不报错') : fail('早退提示不符：' + o19.textContent);
+X.t10Read({value:'ZEN-A'}, {value:'ZEN-A'}, o19);
+/同一个会话/.test(o19.textContent) ? ok('【19】两个框选了同一个会话 → 拦住并说人话') : fail('同会话未拦：' + o19.textContent);
+const o19b = {textContent:''};
+X.t11Read({value:''}, {value:'local-B'}, o19b);
+/两台设备的会话都要选上/.test(o19b.textContent) ? ok('【19】T11 同样先补齐两台会话才动手') : fail('T11 早退不符：' + o19b.textContent);
+X.PHLIST = null; X.S.meta.showManual = false; X.recount();
 
 console.log('\n（本次共创建 ' + created + ' 个节点）');
 console.log(bad ? '结论：✗ 逻辑冒烟 ' + bad + ' 处问题' : '结论：✓ 逻辑冒烟全过');
