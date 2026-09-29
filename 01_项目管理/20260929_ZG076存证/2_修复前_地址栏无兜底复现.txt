@@ -1,0 +1,36 @@
+ZG-076 ②「地址解析无兜底」修复前复现存证
+==============================================
+窗口：W1（AI-008·Qoder，Session `W1-QODER-20260924-B`）
+时间：2026-09-29 09:07（Asia/Shanghai）
+环境：隔离实例 `console_server.py --port 8779 --https-port 8789`（不占法师在用的 8777）
+操作：数据源=NeuraDock（TCP 数据服务），地址栏粘整条 `http://127.0.0.1:63170/api/v1`（法师所述误操作），点「▶ 开始采集」
+
+── 1. 端点层：非法地址被当合法接受 ──
+$ curl -X POST http://127.0.0.1:8779/api/monitor/start \
+    -d '{"simulate":false,"adapter":"neuradock","serial_port":"http://127.0.0.1:63170/api/v1",...}'
+← 200 {"ok":true,"mode":"NeuraDock TCP"}          # 无任何校验、无 400、无中文报错
+
+── 2. 采集线程内崩溃（调度单所指位置确认）──
+Traceback (most recent call last):
+  File "D:\Project\zhiguanAI\console_server.py", line 716, in _worker
+    port=int(nd_port or 9600))
+         ^^^^^^^^^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: '//127.0.0.1:63170/api/v1'
+# 按第一个冒号切分：host="http"、"端口"="//127.0.0.1:63170/api/v1" → int() 抛
+
+── 3. 1.5 秒后会话状态自行回落，但界面毫不知情 ──
+$ curl http://127.0.0.1:8779/api/monitor/status
+{"status":"idle","running":false,"started_at":"2026-09-29 09:07:30",
+ "mode":"NeuraDock TCP（http://127.0.0.1:63170/api/v1）","saved":null}
+# 非法串还被原样写进了 mode 展示位（存档口径亦失真）
+
+── 4. 法师视角（浏览器逐时刻取样，与调度单所述一致）──
+0s   ：[msg 空]（点下按钮瞬间）           status=服务就绪   开始钮 disabled=true
+0.6s ：[msg ok] 正在连接数据源…           status=服务就绪   开始钮 disabled=true
+2s   ：[msg ok] 正在连接数据源…           status=服务就绪   开始钮 disabled=true
+5s   ：[msg ok] 正在连接数据源…           status=服务就绪   开始钮 disabled=false
+→ 结论：①报错文案根本没出现（线程内 error 事件前端收不到）；
+  ②滞留文案还是 **绿色 ok 态**，视觉上像"正常进行中"；③状态栏已显示"服务就绪"，
+  与文案互相矛盾，用户无从判断失败；④无任何一处说明期望格式。
+→ 与调度单 §二-② 判定吻合：此为"界面永久滞留"的**第二成因**（POST 成功即写"正在连接"，
+  后端崩溃无人告知），区别于 console.html 1066 行注释所记的断流/饥饿成因。

@@ -1,0 +1,120 @@
+ZG-076 补修存证 ④ · SSE 实时推送接入与五态实测
+窗口：W1-QODER-20260924-B（AI-008·Qoder）
+时区时间：2026-09-30 00:39–00:58 (Asia/Shanghai)
+触发：法师问「平台给的两个地址（即时 JSON /api/v1/metrics、实时推送 SSE /api/v1/stream）
+      哪一个能作实时推送接入驾驶舱？已接没接？没接就现在接，然后测试能不能用。」
+
+────────────────────────────────────────
+〇、直接回答
+────────────────────────────────────────
+- 即时 JSON `/api/v1/metrics`：**09-29 已接**（ZG-076①，后端代理 + 前端 1 秒轮询）。
+- 实时推送 SSE `/api/v1/stream`：**此前未接，本轮接入并实测通过**。
+- 能作"实时推送"的只有 SSE 那条；但**浏览器不能直连它**——实测响应头只有
+  Server／Date／Content-Type／Cache-Control／X-Content-Type-Options，
+  **没有 Access-Control-Allow-Origin**，驾驶舱(8777)与平台(50061)不同源必被 CORS 挡。
+  ⇒ 唯一可行形态：我方后端订阅推送、前端仍读我方本地端点（前端渲染零分家）。
+
+────────────────────────────────────────
+一、SSE 实况（00:39 直连实测）
+────────────────────────────────────────
+GET http://127.0.0.1:50061/api/v1/stream → 200
+  Content-Type: text/event-stream; charset=utf-8｜Server: BaseHTTP/0.6 Python/3.12.0
+  帧格式：`event: metrics` + `data: {…}`，空行分帧
+  节奏：**1.01 秒一帧**（与对方 step_sec:1 一致），1168 字节/帧
+  内容：与 /api/v1/metrics **完全同构**（含 source/quality/metrics/message）
+  失源时也照推：session_state:"error"、四项 blocked、message 带故障原话
+  ⇒ 结论：SSE 可完全替代轮询；因结构同构，前端渲染函数一行不改即可复用。
+
+────────────────────────────────────────
+二、实现落点（不新增第三方依赖，只用标准库）
+────────────────────────────────────────
+后端 console_server.py：
+  · 新增 `import http.client`（流式逐行读，urllib 不便）
+  · ND_STREAM_PATH／ND_SSE_FRESH_SEC=3.0／ND_SSE_READ_TIMEOUT=10.0／
+    ND_SSE_IDLE_STOP_SEC=45.0／ND_SSE_BACKOFF_MAX=5.0
+  · `_nd_sse_worker`：长连接读帧 → 解析 event/data → 写全局最新帧；
+    **断线自恢复**：异常后 1→2→4→5 秒退避重连；10 秒读不到即判链路死；
+    **45 秒无人取数自动退订**（不长期占对方资源）；被切址即静默退场
+  · `_nd_sse_ensure`：懒启动／换址切换（同址线程活着就复用，不重连）
+  · `_nd_sse_publish`／`_nd_sse_owner`：**双重归属校验**——迟到帧一律丢弃、
+    非在册线程不许写全局状态（否则旧线程退场会把新线程的 live 覆盖成 stopped）
+  · `GET /api/ndmetrics`：优先取 ≤3 秒的新鲜推送帧（`via:"sse"`），
+    否则**自动回落**单次 GET（`via:"poll"`）；响应新增 `via` 与 `sse`
+    {state,target,frames,age_sec,err,reconnects} 状态块
+  · `POST /api/ndmetrics/stop`：前端关栏／离开页面即退订
+前端 console.html：
+  · meta 行显示取数通道：「推送SSE·第N帧·龄X.Xs」／「轮询JSON（推送断线，已回落）」
+    ／「（推送连接中，已回落）」／「（推送被其他页面占用，已回落）」／「（推送刚断·重连中）」
+    —— **换路必须看得见，不许悄悄回落**
+  · 关栏与 pagehide 调 stop 端点
+
+────────────────────────────────────────
+三、五道闸实测（原始输出留痕）
+────────────────────────────────────────
+① 真平台推送（127.0.0.1:50061，后端 6 连打，1 秒间隔）
+   1) 18ms via=sse path=/api/v1/stream state=live frames=23 age=0.68 reconn=0
+   2)  2ms via=sse … frames=24 age=0.67   3) 20ms frames=25 age=0.68
+   4)  2ms frames=26 age=0.68             5) 2ms frames=27 age=0.67
+   6) 13ms frames=28 age=0.67
+   浏览器 DOM 实读 meta：
+   「对方 v3.2.0 · 会话 10 · error · 源 direct_bluetooth/error · 推送SSE·第70帧·龄0.1s
+     · 质量 等待数据 · 可用 0 路」
+   ⇒ 通过：帧号每秒 +1、帧龄 0.1–0.8 秒，真推送而非轮询。
+
+② 推送口不可用（桩 59999 只提供 /metrics，/stream 回 404）
+   1) 53ms via=poll state=connecting frames=0
+   2) 26ms via=poll state=error frames=0 reconn=2 err=OSError: 对方推送口返回 HTTP 404
+   3) 27ms via=poll state=error frames=0 reconn=2（同上）
+   浏览器 meta：「…⚠仿真 · 轮询JSON（推送断线，已回落） · 质量 高 · 可用 7 路」
+   ⇒ 通过：推送不可用即回落单次拉取，数据不断、原因写在界面上。
+
+③ 中途断线自恢复（桩② 59997：每次连接只推 3 帧后**直接掐断**）
+   后端 18 连打（1 秒间隔）关键行：
+    2) via=sse state=live  frames=1  age=0.99 | SSE-PATH conn#18 frame1
+    4) via=sse state=live  frames=3  age=1.00 | SSE-PATH conn#18 frame3
+    5) via=sse state=error frames=3  age=2.00 reconn=1 err=OSError: 对方关闭了推送连接
+    6) via=sse state=live  frames=4  age=0.98 | SSE-PATH conn#19 frame1
+    9) state=error reconn=2 → 10) live frames=7 conn#20
+   13) state=error reconn=3 → 14) live frames=10 conn#21
+   17) state=error reconn=4 → 18) live frames=13 conn#22
+   浏览器 DOM 实读到的 meta 变化序列（700ms 采样，去重）：
+     「轮询JSON（推送连接中，已回落）」→「推送SSE·第2帧·龄0.8s」
+     →「推送SSE·第3帧·龄1.8s（推送刚断·重连中）」→「推送SSE·第5帧·龄0.8s」…
+   ⇒ 通过：连接被掐 4 次全部自动重连（conn#18→#22），帧号连续累加不重置，
+     断口瞬间仍供最后一帧并**如实标龄 2.0 秒**（≤3 秒新鲜窗内），超窗即回落轮询。
+
+④ 目标口全死（127.0.0.1:59998，无监听）
+   1) 2066ms HTTP 502 → {"detail":"连不上指标 API（127.0.0.1:59998）：
+      [WinError 10061] 由于目标计算机积极拒绝，无法连接。请检查
+      ①NeuraDock 开发者指标平台已打开；②填的是平台当次随机端口"}
+   ⇒ 通过：中文可操作报错，界面不停在"正在连接"（ZG-076② 通道复用）。
+
+⑤ 两个页面抢同一订阅槽（A 打 50061、B 打 59997，各 0.4 秒节奏，6 秒）
+   A_50061 -> via=poll state=connecting  owner=127.0.0.1:50061
+   B_59997 -> via=poll state=elsewhere   owner=127.0.0.1:50061
+              err=推送订阅已被其他页面切到别的地址（本页回落单次拉取）
+   ⇒ 通过：**非持有方不会把别人的推送状态当自己的报**，双方都回落轮询、数据不串。
+   已知限制（如实记）：订阅槽是全局单槽。多页填**同一地址**不冲突（复用同一订阅）；
+   填**不同地址**会互相切换，最终双方都走轮询——数据仍正确，只是都不是推送。
+   一人一面板的正常使用不会遇到。
+
+补充：浏览器 console 全程**零条消息**（无 JS 报错）。
+局限：本次仍**未能出截图**（内置浏览器 viewport 0x0／hidden，take_screenshot 不可用），
+      故一律以 DOM 文本实读＋后端原始输出取证。法师在自己浏览器打开
+      http://127.0.0.1:8777/ 把旁证源填当次平台端口即可复看（现平台端口 50061）。
+
+────────────────────────────────────────
+四、边界未被削弱（复核）
+────────────────────────────────────────
+· 推送帧只进显示层：不写 npz、不进事件流、不参与 qc_pipeline、不改阈值、不画曲线。
+· 会话存档戳 `_nd_side_stamp` 仍只记 addr／path／app_version／api_version／session_id／
+  session_state／raw_eeg_exposed／首拉成败——**不记对方指标数值**（P1 契约 P7）。
+· 对方 blocked／awaiting_source／null 一律照实转显，不补值不插值。
+· 桩件 `_analysis_tmp/nd_sim_stub.py`、`_analysis_tmp/nd_sse_drop_stub.py` 为临时验证件，
+  验完即杀（端口 59999／59997 已无监听），不入库、不进任何存档。
+
+────────────────────────────────────────
+五、提交状态
+────────────────────────────────────────
+本轮 console_server.py／console.html 改动**未提交**，与 ZG-076 主体（①②③）
+及 00:26 的仿真源自曝补修**同批候法师金口放行**。

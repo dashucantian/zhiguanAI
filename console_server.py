@@ -37,6 +37,9 @@ import asyncio
 import argparse
 import threading
 import subprocess
+import urllib.request
+import urllib.error
+import http.client          # ZG-076①补：订阅对方 SSE 长连接需逐行读，urllib 不便流式
 from datetime import datetime
 
 # 控制台编码兜底（2026-09-17 AI-005）
@@ -709,11 +712,20 @@ class MonitorSession:
                         self.app, address=address, serial_port=port)
                 elif adapter == "neuradock":
                     from neuradock_receiver import TcpReceiver
-                    host, _, nd_port = (serial_port or
-                                        "127.0.0.1:9600").partition(":")
-                    self.receiver = TcpReceiver(
-                        self.app, host=host or "127.0.0.1",
-                        port=int(nd_port or 9600))
+                    # ZG-076②：地址解析统一走 _parse_hostport（旧代码按第一个冒号
+                    # 切分后直接 int()，粘整条 URL 即在采集线程内抛 ValueError，
+                    # 线程静默死亡、界面永久"正在连接数据源…"）。端点层已先行挡下，
+                    # 此处是纵深防御：万一绕端点直调 MONITOR.start 也如实报错收尾。
+                    try:
+                        nd_host, nd_port = _parse_hostport(serial_port,
+                                                           default="127.0.0.1:9600")
+                    except ValueError as e:
+                        self._emit({"type": "error", "text": str(e)})
+                        self._emit({"type": "end", "ok": False, "error": str(e)})
+                        self.status = "idle"
+                        return
+                    self.receiver = TcpReceiver(self.app, host=nd_host,
+                                                port=nd_port)
                 else:
                     from ble_receiver import BleDirectReceiver
                     self.receiver = BleDirectReceiver(self.app, address=address)
@@ -1300,6 +1312,7 @@ class MonitorStartPayload(BaseModel):
     contact_quality: Optional[str] = None
     intent: Optional[str] = None      # 场景意图（坐禅/行禅/日常/实验，2026-09-24 裁定2）
     note: Optional[str] = None
+    nd_side: Optional[str] = None     # ZG-076①：旁证源「IP:端口」（只读，不参与质检）
 
 
 def _resolve_replay_path(name: str) -> str:
@@ -1316,6 +1329,284 @@ def _resolve_replay_path(name: str) -> str:
         raise HTTPException(status_code=404,
                             detail=f"回放文件不存在: {os.path.basename(name)}")
     return real
+
+
+# ── NeuraDock 开发者指标平台 HTTP API · 旁证源（ZG-076，2026-09-29）──────────
+# 三句边界（法师派单 ZG-076 §二-③，写死在此，勿靠记忆）：
+#  1. 该源只输出**对方算好的分数与质量，不含原始脑电**（返回值自带
+#     `raw_eeg_exposed: false`）⇒ **不参与 qc_pipeline.py 任何判定、不替代
+#     原始流入库、不进 Zen-EEG 数据工厂**。本模块全程只读 GET，不写 npz、
+#     不写会话事件流、不改任何我方阈值。
+#  2. 其指标公式与权重对方**未完整公开**（体验类指标 `formula_version`/
+#     `baseline_z` 实测为 null）⇒ 我方仅作**并排旁证与差异观察**，
+#     **不采信为真值、不据此改我方阈值**。
+#  3. 该 API 随对方桌面程序生命周期浮动、**端口每次重启随机**（09-29 实测先后
+#     见 55005／52413／63170）⇒ 会话存档必须**同时记下当次端口与 app_version**
+#     （落 `session_info["nd_side"]`，随 extra_meta 进 npz meta），否则事后无法复现。
+# 依赖：只用标准库 urllib，不新增第三方运行时依赖。
+ND_METRICS_PATH = "/api/v1/metrics"   # 基路径不可直接用（实测 GET /api/v1 → 404）；
+                                      # 用户只填 IP:端口，拼路径由我方负责。
+ND_FETCH_TIMEOUT = 3.0                # 对方 window_sec 4／step_sec 1 → 1 秒轮询够用
+
+
+def _parse_hostport(text, default=None):
+    """把用户填的连接串解析为 (host, port)；格式非法即抛 ValueError（中文可读）。
+
+    只接受 `IP:端口`／`主机名:端口`，**明确拒绝整条网页地址**。这正是
+    ZG-076② 的故障成因：旧代码按第一个冒号切分后直接 int()，粘进
+    `http://127.0.0.1:63170/api/v1` 时"端口"变成 `//127.0.0.1:63170/api/v1`，
+    在采集线程内抛 ValueError → 线程静默死亡 → 界面永久停在"正在连接数据源…"。
+    """
+    s = (text or "").strip()
+    if not s:
+        if default is None:
+            raise ValueError("地址不能为空；期望格式 IP:端口（例：127.0.0.1:9600）")
+        s = str(default).strip()
+    if "://" in s.lower() or "/" in s or "@" in s:
+        raise ValueError(f"「{s}」不是合法地址：请勿粘贴整条网页地址（不要带 "
+                         f"http:// 与路径），只填 IP:端口，例：127.0.0.1:9600")
+    host, sep, port = s.rpartition(":")
+    if not sep or not host.strip():
+        raise ValueError(f"「{s}」缺少端口号；期望格式 IP:端口，例：127.0.0.1:9600")
+    try:
+        p = int(port)
+    except ValueError:
+        raise ValueError(f"「{port}」不是合法端口号（须为 1–65535 的数字）"
+                         f"；期望格式 IP:端口") from None
+    if not 1 <= p <= 65535:
+        raise ValueError(f"端口 {p} 超出范围（须为 1–65535）")
+    return host.strip(), p
+
+
+def _normalize_nd_target(text):
+    """旁证源栏专用：允许直接把平台页面上显示的整条地址粘进来，剥掉
+    `http(s)://` 与尾随路径/斜杠，只留 `IP:端口`（ZG-076 ①：拼路径由程序负责）。
+
+    剥完仍不合法就交给 _parse_hostport 报中文错——**不静默猜端口**。
+    """
+    s = (text or "").strip()
+    low = s.lower()
+    if low.startswith("http://"):
+        s = s[7:]
+    elif low.startswith("https://"):
+        s = s[8:]
+    s = s.split("/", 1)[0]          # 去掉路径（含 /api/v1/…）
+    return s.strip().rstrip(":")
+
+
+def nd_metrics_fetch(target):
+    """只读拉取一次指标 API。成功返回 (dict, None)，失败返回 (None, 中文错误)。
+
+    不抛异常（除地址非法由调用方转 400）：旁证源断开不得影响主采集链路。
+    """
+    host, port = _parse_hostport(target)
+    url = f"http://{host}:{port}{ND_METRICS_PATH}"
+    try:
+        with urllib.request.urlopen(url, timeout=ND_FETCH_TIMEOUT) as r:
+            body = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return None, (f"指标 API（{host}:{port}）返回 HTTP {e.code}："
+                      f"请确认端口是平台界面当次显示的随机端口（每次重启都会变，不能收藏）")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        reason = str(getattr(e, "reason", e)).rstrip("。.")
+        return None, (f"连不上指标 API（{host}:{port}）：{reason}。请检查 "
+                      f"①NeuraDock 开发者指标平台已打开；②填的是平台当次随机端口")
+    try:
+        return json.loads(body), None
+    except json.JSONDecodeError:
+        return None, (f"指标 API（{host}:{port}）返回内容不是 JSON："
+                      f"该端口可能不是指标平台端口")
+
+
+# ── ZG-076①补：SSE 实时推送订阅（对方 /api/v1/stream）──────────────────────
+# 2026-09-30 00:39 实测：`GET /api/v1/stream` → 200，Content-Type: text/event-stream，
+# 每 1.01 秒推一帧 `event: metrics`，data 与 `/api/v1/metrics` **完全同构**
+# （1168 字节/帧，error 态也照推）；响应头**没有 Access-Control-Allow-Origin**
+# ⇒ 浏览器跨端口直连必被 CORS 挡下，故只能我方后端订阅、前端仍读本地端点
+# （前端渲染代码零改动即可复用）。
+# 纪律照旧：只读、不入库、不参与质检、不补值；对方 error／blocked 语义原样转显。
+ND_STREAM_PATH = "/api/v1/stream"
+ND_SSE_FRESH_SEC = 3.0        # 缓存帧超此龄 ⇒ 推送链已断，本次回落轮询（不拿旧帧冒充实时）
+ND_SSE_READ_TIMEOUT = 10.0    # 对方 1 秒一帧；10 秒读不到即判链路死，退避重连
+ND_SSE_IDLE_STOP_SEC = 45.0   # 无人取数即自动退订，不长期占对方资源
+ND_SSE_BACKOFF_MAX = 5.0
+
+_ND_SSE_LOCK = threading.Lock()
+_ND_SSE = {"target": None, "thread": None, "stop": None, "state": "idle",
+           "err": None, "event": None, "frames": 0, "frame": None,
+           "frame_from": None, "frame_at": 0.0, "last_used": 0.0, "reconnects": 0}
+
+
+def _nd_sse_snapshot():
+    with _ND_SSE_LOCK:
+        s = dict(_ND_SSE)
+    s.pop("thread", None)
+    s.pop("stop", None)
+    s.pop("frame", None)
+    s["age_sec"] = (round(time.time() - s["frame_at"], 2)
+                    if s.get("frame_at") else None)
+    return s
+
+
+def _nd_sse_publish(origin, event, raw):
+    """收下一帧。origin＝本线程订阅的地址；换址后收到的**迟到帧一律丢弃**，
+    不计数、不覆盖新址状态（否则界面上的帧数/状态会张冠李戴）。"""
+    try:
+        d = json.loads(raw)
+    except json.JSONDecodeError:
+        with _ND_SSE_LOCK:
+            if _ND_SSE["target"] == origin:
+                _ND_SSE["err"] = f"推送帧不是 JSON（event={event or '-'}）"
+        return
+    with _ND_SSE_LOCK:
+        if _ND_SSE["target"] != origin:
+            return
+        _ND_SSE["frame"] = d
+        _ND_SSE["frame_from"] = origin
+        _ND_SSE["frame_at"] = time.time()
+        _ND_SSE["event"] = event or "metrics"
+        _ND_SSE["err"] = None
+        _ND_SSE["state"] = "live"
+        _ND_SSE["frames"] += 1
+
+
+def _nd_sse_owner(origin):
+    """本线程是否仍是该地址的在册订阅者——只有在册者才许写全局状态，
+    否则被换掉的旧线程退场时会把新线程的 live/connecting 覆盖成 stopped。"""
+    with _ND_SSE_LOCK:
+        return (_ND_SSE["target"] == origin
+                and _ND_SSE["thread"] is threading.current_thread())
+
+
+def _nd_sse_worker(host, port, stop_evt):
+    origin = f"{host}:{port}"
+    backoff = 1.0
+    while not stop_evt.is_set():
+        conn = None
+        try:
+            with _ND_SSE_LOCK:
+                if _ND_SSE["target"] != origin:
+                    return                      # 已被切址或已退订，本线程直接退场
+                _ND_SSE["state"] = "connecting"
+                _ND_SSE["err"] = None
+            conn = http.client.HTTPConnection(host, port, timeout=ND_SSE_READ_TIMEOUT)
+            conn.request("GET", ND_STREAM_PATH,
+                         headers={"Accept": "text/event-stream"})
+            resp = conn.getresponse()
+            if resp.status != 200:
+                raise OSError(f"对方推送口返回 HTTP {resp.status}")
+            ctype = resp.getheader("Content-Type") or ""
+            if "text/event-stream" not in ctype:
+                raise OSError(f"对方推送口 Content-Type 不是 event-stream（{ctype}）")
+            with _ND_SSE_LOCK:
+                _ND_SSE["state"] = "live"
+                _ND_SSE["err"] = None
+            backoff = 1.0
+            event, data_lines = None, []
+            while not stop_evt.is_set():
+                with _ND_SSE_LOCK:
+                    switched = _ND_SSE["target"] != origin
+                    idle = time.time() - (_ND_SSE["last_used"] or time.time())
+                if switched:
+                    return
+                if idle > ND_SSE_IDLE_STOP_SEC:
+                    with _ND_SSE_LOCK:
+                        if (_ND_SSE["target"] == origin
+                                and _ND_SSE["thread"] is threading.current_thread()):
+                            _ND_SSE["state"] = "idle"
+                            _ND_SSE["err"] = (f"超过 {int(ND_SSE_IDLE_STOP_SEC)} 秒"
+                                              f"无人取数，已自动退订（再次取数会自动重连）")
+                    return
+                line = resp.readline()
+                if not line:
+                    raise OSError("对方关闭了推送连接")
+                text = line.decode("utf-8", "replace").rstrip("\r\n")
+                if not text:                        # 空行＝一帧结束
+                    if data_lines:
+                        _nd_sse_publish(origin, event, "\n".join(data_lines))
+                    event, data_lines = None, []
+                elif text.startswith(":"):
+                    continue                        # SSE 注释／心跳行
+                elif text.startswith("event:"):
+                    event = text[6:].strip()
+                elif text.startswith("data:"):
+                    data_lines.append(text[5:].lstrip())
+        except Exception as e:
+            if stop_evt.is_set() or not _nd_sse_owner(origin):
+                break           # 已被换址／退订：不写全局状态，免得覆盖新线程的 live
+            with _ND_SSE_LOCK:
+                _ND_SSE["state"] = "error"
+                _ND_SSE["err"] = f"{type(e).__name__}: {e}"
+                _ND_SSE["reconnects"] += 1
+            stop_evt.wait(backoff)                  # 断线自恢复：1→2→4→5 秒退避重连
+            backoff = min(backoff * 2, ND_SSE_BACKOFF_MAX)
+        finally:
+            if conn is not None:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+    if _nd_sse_owner(origin):
+        with _ND_SSE_LOCK:
+            _ND_SSE["state"] = "stopped"
+
+
+def _nd_sse_ensure(target):
+    """懒启动／切换订阅：同址且线程活着就复用；换址或线程已死则重起。"""
+    with _ND_SSE_LOCK:
+        _ND_SSE["last_used"] = time.time()
+        th = _ND_SSE["thread"]
+        if _ND_SSE["target"] == target and th is not None and th.is_alive():
+            return
+        old_stop, old_th = _ND_SSE["stop"], th
+        _ND_SSE.update(target=target, thread=None, stop=None, frame=None,
+                       frame_from=None, frame_at=0.0, frames=0, err=None,
+                       state="connecting", reconnects=0)
+    if old_stop is not None:
+        old_stop.set()
+        if old_th is not None:
+            old_th.join(timeout=2.0)
+    host, port = _parse_hostport(target)
+    stop_evt = threading.Event()
+    th = threading.Thread(target=_nd_sse_worker, args=(host, port, stop_evt),
+                          name=f"nd-sse-{port}", daemon=True)
+    with _ND_SSE_LOCK:
+        _ND_SSE["stop"] = stop_evt
+        _ND_SSE["thread"] = th
+    th.start()
+
+
+def _nd_sse_stop(reason="用户关闭旁证源"):
+    with _ND_SSE_LOCK:
+        stop_evt, th = _ND_SSE["stop"], _ND_SSE["thread"]
+        _ND_SSE.update(target=None, thread=None, stop=None, frame=None,
+                       frame_from=None, frame_at=0.0, state="stopped", err=reason)
+    if stop_evt is not None:
+        stop_evt.set()
+        if th is not None:
+            th.join(timeout=2.0)
+
+
+def _nd_side_stamp(addr):
+    """会话启动时取一次指标 API，产出**只含追溯类字段**的存档戳（ZG-076 ③-3）。
+
+    只记"哪个地址、哪个版本的对方程序、当时能不能连"，**不记对方指标数值**——
+    数值属分析结果，按 P1 契约 P7「Session 最小主义」不进清单，且本源不参与质检。
+    """
+    host, port = _parse_hostport(addr)
+    stamp = {"addr": f"{host}:{port}", "path": ND_METRICS_PATH,
+             "stamped_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    data, err = nd_metrics_fetch(addr)
+    if data:
+        stamp.update({"app_version": data.get("app_version"),
+                      "api_version": data.get("api_version"),
+                      "session_id": data.get("session_id"),
+                      "session_state": data.get("session_state"),
+                      "raw_eeg_exposed": data.get("raw_eeg_exposed"),
+                      "first_fetch": "ok"})
+    else:
+        stamp.update({"first_fetch": "failed", "first_error": err})
+    return stamp
 
 
 def _self_report_summary(sr):
@@ -1375,6 +1666,16 @@ def monitor_start(payload: MonitorStartPayload):
     replay_path = None
     if payload.replay_npz:
         replay_path = _resolve_replay_path(payload.replay_npz)
+    # ZG-076②：地址格式在**端点层**同步校验（旧行为：非法串被接受、ok:true 返回，
+    # 崩溃发生在采集线程内 → 前端只看到永久"正在连接数据源…"，无任何报错）。
+    # 校验通过后回填规范化串，使 mode 展示位与存档口径都不被原始误粘贴污染。
+    serial_port = payload.serial_port
+    if (payload.adapter or "bleak") == "neuradock":
+        try:
+            h, p = _parse_hostport(serial_port, default="127.0.0.1:9600")
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"数据服务地址有误：{e}")
+        serial_port = f"{h}:{p}"
     # 数据诚实（2026-09-24 裁定6）：未选即 null，不写成空串冒充"登记过但为空"；
     # 唯一例外 participant/session_type（入库必需要素，前端本就必填）。
     session_info = {"participant": payload.participant or "",
@@ -1389,11 +1690,28 @@ def monitor_start(payload: MonitorStartPayload):
         session_info["note"] = ((str(session_info["note"]) + " | ")
                                 if session_info["note"] else "") \
             + "B3离线回放，禁止入库"
+    # ZG-076①：旁证源地址（可选）。同样先校验；允许粘贴整条平台 URL（①栏规定
+    # "须剥 http:// 与尾斜杠"），由 _normalize_nd_target 剥净后再解析。
+    nd_side = None
+    if payload.nd_side:
+        try:
+            _h, _p = _parse_hostport(_normalize_nd_target(payload.nd_side))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"旁证源地址有误：{e}")
+        nd_side = f"{_h}:{_p}"
     MONITOR.start(simulate=payload.simulate, address=payload.address,
                   session_info=session_info,
                   adapter=payload.adapter or "bleak",
-                  serial_port=payload.serial_port,
+                  serial_port=serial_port,
                   replay_npz=replay_path)
+    if nd_side:
+        # 存档必须同时记下当次端口与 app_version（③-3）：主会话已启动，戳记
+        # 在其后补写，取不到也只是少一格追溯字段，绝不让旁证源拖慢或挡住采集。
+        try:
+            MONITOR.session_info["nd_side"] = _nd_side_stamp(nd_side)
+        except Exception as e:
+            MONITOR.session_info["nd_side"] = {"addr": nd_side,
+                                               "first_fetch": f"error: {e}"}
     mode = (f"离线回放（{os.path.basename(replay_path)}）" if replay_path
             else "模拟" if payload.simulate
             else f"真机（BLED112）" if payload.adapter == "bled112"
@@ -1471,6 +1789,60 @@ def monitor_marker(payload: MarkerPayload):
     n = buf.add_marker(label=label)
     MONITOR._emit({"type": "marker", "label": label, "count": n})
     return {"ok": True, "count": n, "label": label}
+
+
+@app.get("/api/ndmetrics")
+def ndmetrics_proxy(target: str):
+    """ZG-076①：NeuraDock 指标平台旁证源代理（**只读**，不入库、不参与质检判定）。
+
+    为什么走后端代理而不是前端直连：平台端口每次随机、与驾驶舱不同源，浏览器
+    跨源取数会被 CORS 挡下（SSE 推送口实测同样**不带** Access-Control-Allow-Origin）；
+    同时拼路径必须由我方负责（基路径 `/api/v1` 实测 404，
+    只填 `IP:端口` 是唯一可靠输入形态）。
+    取数优先用后端订阅的 SSE 推送帧（省轮询、真 1 秒节奏）；帧不新鲜或链路断
+    即**自动回落**单次 GET，两者取到的 data 结构相同，前端渲染不分家。
+    本端点不写任何文件、不进 qc_pipeline、不改阈值（三句边界见 `_nd_side_stamp` 上方）。
+    """
+    try:
+        host, port = _parse_hostport(_normalize_nd_target(target))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    addr = f"{host}:{port}"
+    _nd_sse_ensure(addr)
+    snap = _nd_sse_snapshot()
+    # 订阅槽是全局单槽（一人一面板即可）；若被别的页面切到其他地址，
+    # 本次就只能回落轮询，且**不得把别人的推送状态当自己的报**（数据诚实）。
+    mine = snap.get("target") == addr
+    with _ND_SSE_LOCK:
+        frame = _ND_SSE["frame"] if (mine and _ND_SSE["frame_from"] == addr) else None
+    via, data, err = "poll", None, None
+    if frame is not None and snap.get("age_sec") is not None \
+            and snap["age_sec"] <= ND_SSE_FRESH_SEC:
+        via, data = "sse", frame
+    else:
+        data, err = nd_metrics_fetch(addr)
+    if data is None:
+        raise HTTPException(status_code=502, detail=err or "取不到指标数据")
+    return {"ok": True, "addr": addr,
+            "path": ND_STREAM_PATH if via == "sse" else ND_METRICS_PATH,
+            "via": via,
+            "sse": {"state": snap.get("state") if mine else "elsewhere",
+                    "target": snap.get("target"),
+                    "frames": snap.get("frames") if mine else 0,
+                    "age_sec": snap.get("age_sec") if mine else None,
+                    "err": snap.get("err") if mine
+                           else "推送订阅已被其他页面切到别的地址（本页回落单次拉取）",
+                    "reconnects": snap.get("reconnects") if mine else 0},
+            "proxied_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "data": data}
+
+
+@app.post("/api/ndmetrics/stop")
+def ndmetrics_stop():
+    """关闭旁证源／离开页面时调用：立即退订对方推送，不长期占对方资源。
+    （另有 45 秒无人取数自动退订兜底，见 ND_SSE_IDLE_STOP_SEC。）"""
+    _nd_sse_stop()
+    return {"ok": True, "sse": _nd_sse_snapshot()}
 
 
 @app.get("/api/monitor/status")

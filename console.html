@@ -204,6 +204,28 @@
     border: 1px solid #6a5010; }
   .qbanner.err { display: block; background: #3a1414; color: var(--warn);
     border: 1px solid #6a2020; }
+  /* ZG-076①：NeuraDock 指标 API 旁证源读数区。用青→金色系与自研频段（--accent）
+     区分，标签固定写"对方计算 · 非我方判据 · 不入库"（③边界三句见 JS 段注释）。 */
+  .nds { margin-top: 12px; padding: 10px 14px; border-radius: 6px; font-size: 13px;
+    background: #101a2c; border: 1px solid var(--gold); color: var(--text); }
+  .nds-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    margin-bottom: 8px; }
+  .nds-head b { color: var(--gold); letter-spacing: .5px; }
+  .nds-tag { font-size: 11px; color: var(--dim); border: 1px solid var(--border);
+    border-radius: 10px; padding: 1px 8px; }
+  .nds-meta { margin-left: auto; font-size: 11px; color: var(--dim);
+    font-family: Consolas, monospace; }
+  .nds-rows { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+  .nds-item { min-width: 130px; }
+  .nds-v { font-size: 19px; font-weight: 600; color: var(--gold);
+    font-family: Consolas, monospace; }
+  .nds-v i { font-size: 11px; font-style: normal; color: var(--dim); margin-left: 3px; }
+  .nds-none .nds-v { color: var(--dim); font-size: 15px; font-weight: 400; }
+  .nds-name { font-size: 12px; }
+  .nds-sub { font-size: 10px; color: var(--dim); font-family: Consolas, monospace; }
+  .nds-stale .nds-v { color: var(--warn); }
+  .nds-ours { margin-top: 8px; font-size: 11px; color: var(--dim); }
+  .nds-ours span { color: var(--accent); font-family: Consolas, monospace; }
   .stablebar { display: flex; align-items: center; gap: 10px;
     margin-top: 10px; font-size: 12px; color: var(--dim); }
   .stablebar .sbar { flex: 0 0 180px; height: 8px; background: #0d0d18;
@@ -337,6 +359,29 @@
         <input id="monNd" value="127.0.0.1:9600" placeholder="IP:端口">
       </div>
     </div>
+    <!-- ZG-076①（2026-09-29）：NeuraDock 开发者指标平台 HTTP API ＝ **旁证源**，
+         与上面「数据服务地址」分栏各填各的（那条走原始脑电流，这条只读对方算好的结果）。
+         三句边界（ZG-076 §二-③，写死在此，勿靠记忆）：
+           1. 该源只输出算好的分数与质量、**不含原始脑电**（返回值 raw_eeg_exposed:false）
+              ⇒ 不参与 qc_pipeline.py 任何判定、不替代原始流入库、不进 Zen-EEG 数据工厂；
+           2. 其公式与权重对方未公开（体验类指标 formula_version / baseline_z 为 null）
+              ⇒ 只作并排旁证与差异观察，**不采信为真值、不据此改我方阈值**；
+           3. 该 API 随对方桌面程序生命周期浮动、**端口每次重启随机**（实测 55005/52413/63170）
+              ⇒ 会话存档同时记下当次端口与 app_version（后端 session_info["nd_side"] → npz meta）。
+         本栏允许粘贴整条平台地址（自动剥 http:// 与路径后回显），拼路径由程序负责。 -->
+    <div class="row">
+      <div class="field">
+        <label>旁证源（只读·不入库）</label>
+        <select id="ndSideMode">
+          <option value="off" selected>不启用</option>
+          <option value="metrics_api">NeuraDock 指标 API（HTTP）</option>
+        </select>
+      </div>
+      <div class="field" id="ndSideAddrField" style="display:none">
+        <label>指标平台地址（IP:端口，平台每次重启会变）</label>
+        <input id="ndSideAddr" placeholder="如 127.0.0.1:63170" spellcheck="false">
+      </div>
+    </div>
     <div class="row" id="expParamsRow" style="display:none">
       <div class="field">
         <label>配置文件</label>
@@ -388,6 +433,19 @@
       <div class="lab-main">
         <div id="monWaveWrap"><canvas id="monWave" height="290"></canvas></div>
         <canvas id="monBands" height="175"></canvas>
+        <!-- ZG-076①：旁证读数紧贴自研频段图下方（同屏并排、一眼可辨谁是对方算的）。
+             **只显数字与状态、不画曲线**——对方 window_sec 4／step_sec 1，画折线即
+             等于我方自行补点插值，违反"质量不足不补值"边界（ZG-076 §二-①）。 -->
+        <div class="nds" id="ndSideCard" style="display:none;">
+          <div class="nds-head">
+            <b>旁证 · NeuraDock 指标 API</b>
+            <span class="nds-tag">对方计算 · 非我方判据 · 不入库</span>
+            <span id="ndSideMeta" class="nds-meta">—</span>
+          </div>
+          <div id="ndSideRows" class="nds-rows"></div>
+          <div class="nds-ours">我方自研（本次会话原始流计算）：<span id="ndSideOurs">等待数据…</span></div>
+          <div class="msg" id="ndSideMsg"></div>
+        </div>
         <canvas id="monPsd" height="175"></canvas>
         <canvas id="monPpg" height="115"></canvas>
         <canvas id="monMotion" height="125"></canvas>
@@ -803,8 +861,10 @@ if (ndReloadBtn) ndReloadBtn.onclick = () => loadNdPanel(true);
 async function api(path, opt) {
   // 2026-09-18：加 15s 超时（AbortController），防请求永久悬挂导致按钮/界面假死
   opt = opt || {};
+  const ms = opt.timeout || 15000;   // ZG-076①：旁证源轮询用短超时，防 1 秒节奏堆积
+  delete opt.timeout;
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15000);
+  const timer = setTimeout(() => ctrl.abort(), ms);
   try {
     const res = await fetch(path, Object.assign({}, opt, { signal: ctrl.signal }));
     if (!res.ok) {
@@ -814,7 +874,7 @@ async function api(path, opt) {
     }
     return res.json();
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("请求超时（15 秒无响应）");
+    if (e.name === "AbortError") throw new Error("请求超时（" + (ms / 1000) + " 秒无响应）");
     throw e;
   } finally {
     clearTimeout(timer);
@@ -1213,6 +1273,7 @@ const BAND_META = [
   ["alpha", "α 阿尔法", "#4ecdc4"], ["beta", "β 贝塔", "#ff6b6b"],
   ["gamma", "γ 伽马", "#b39ddb"]];
 function drawBandsChart(bands) {
+  if (bands) lastBands = bands;   // ZG-076①：旁证栏"我方自研"一行取最新值（只读）
   const c2d = monBandsCtx;
   const f = chartFrame(c2d, monBands, { title: "频段能量（分贝）", ylab: "dB" });
   const hi = 40;
@@ -1601,12 +1662,224 @@ function applyWsMode() {
 }
 $("wsMode").onchange = applyWsMode;
 
+/* ── ZG-076①：NeuraDock 开发者指标平台 HTTP API ＝ 旁证源（只读·不入库） ──────
+ * 三句边界（法师派单 ZG-076 §二-③，写死在此，勿靠记忆）：
+ *  1. 该源只输出对方算好的分数与质量、**不含原始脑电**（返回值自带
+ *     raw_eeg_exposed:false）⇒ 不参与 qc_pipeline.py 任何判定、不替代原始流入库、
+ *     不进 Zen-EEG 数据工厂；
+ *  2. 其指标公式与权重对方未公开（体验类指标 formula_version／baseline_z 实测 null）
+ *     ⇒ 只作并排旁证与差异观察，**不采信为真值、不据此改我方阈值**；
+ *  3. 该 API 随对方桌面程序生命周期浮动、**端口每次重启随机**（09-29 实测先后见
+ *     55005／52413／63170）⇒ 会话存档必须同时记下当次端口与 app_version
+ *     （随 start 载荷交后端 session_info["nd_side"] → npz meta）。
+ * 取数经后端 /api/ndmetrics 代理（与平台不同源，且基路径 /api/v1 实测 404，
+ * 拼路径必须我方负责）。前端只做**只读显示**：不写会话文件、不进事件流、
+ * 不画折线——对方 window_sec 4／step_sec 1，跨窗补点即等于我方补值。 */
+const ND_STALE_SEC = 8;   // 数据龄超此值即标"陈旧"：step 为 1 秒，8 秒＝明显断供
+let ndSideTimer = null, ndSideFails = 0, lastBands = null;
+
+// ZG-0926②配套：地址格式在前端先过一遍（毫秒级出中文报错，不发无谓请求）。
+// 主数据源栏（TCP 数据服务）严格拒绝整条 URL；旁证栏按派单①允许粘贴平台
+// 整条地址，剥净 http:// 与路径后**回显规范化结果**——不静默猜端口。
+function parseHostPort(raw, opt) {
+  const allowUrl = !!(opt && opt.allowUrl);
+  let s = String(raw == null ? "" : raw).trim();
+  if (allowUrl) {
+    s = s.replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, "").split("/")[0].replace(/:+$/, "");
+    if (!s) return { err: "粘贴的内容里没有 IP:端口，期望格式：IP:端口（例：127.0.0.1:63170）" };
+  } else if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//i.test(s) || s.indexOf("/") >= 0
+             || s.indexOf("@") >= 0) {
+    return { err: "不要粘贴整条网页地址（含 http:// 或路径），只填 IP:端口，例：127.0.0.1:9600" };
+  }
+  if (!s) return { err: "地址不能为空，期望格式：IP:端口（例：127.0.0.1:9600）" };
+  const i = s.lastIndexOf(":");
+  if (i <= 0) return { err: "缺少端口号，期望格式：IP:端口（例：127.0.0.1:9600）" };
+  const host = s.slice(0, i).trim(), txt = s.slice(i + 1).trim();
+  if (!/^\d+$/.test(txt)) return { err: "「" + txt + "」不是端口号，端口须为 1–65535 的数字" };
+  const port = parseInt(txt, 10);
+  if (port < 1 || port > 65535) return { err: "端口 " + port + " 超出范围，应为 1–65535" };
+  return { host: host, port: port, norm: host + ":" + port };
+}
+
+function ndSideMsg(text, cls) {
+  const el = $("ndSideMsg");
+  el.textContent = text || "";
+  el.className = "msg" + (cls ? " " + cls : "");
+}
+
+function ndSideRender(r) {
+  const d = r.data || {};
+  const q = d.quality || {}, src = d.source || {}, ms = d.metrics || {};
+  // 2026-09-30 实抓：对方在 BLE 断开后自动落到 source.mode="simulation"、
+  // synthetic_not_human_eeg=true，而 quality.grade 仍是 high／7 路 pass——
+  // 只显 state（两种模式都是 streaming）会把仿真分当真人脑电读，故 mode 必显、
+  // 仿真必红字自曝（数据诚实：来源不清即不得作旁证）。
+  const syn = src.synthetic_not_human_eeg === true || src.mode === "simulation";
+  // 取数通道如实标出：SSE 推送（后端订阅对方 /api/v1/stream，1 秒一帧）
+  // 或单次拉取（推送不可用时后端自动回落）。断线回落必须看得见，不许悄悄换路。
+  const sse = r.sse || {};
+  const FALLBACK_WHY = { error: "推送断线", connecting: "推送连接中",
+                         elsewhere: "推送被其他页面占用", stopped: "推送已停",
+                         idle: "推送已空闲退订" };
+  const viaTxt = r.via === "sse"
+    ? "推送SSE·第" + (sse.frames || 0) + "帧"
+      + (typeof sse.age_sec === "number" ? "·龄" + sse.age_sec.toFixed(1) + "s" : "")
+      + (sse.state === "error" ? "（推送刚断·重连中）" : "")
+    : "轮询JSON" + (FALLBACK_WHY[sse.state]
+        ? "（" + FALLBACK_WHY[sse.state] + "，已回落）" : "");
+  $("ndSideMeta").textContent =
+    "对方 v" + (d.app_version || "?") + " · 会话 " + (d.session_id ?? "-")
+    + " · " + (d.session_state || "-") + " · 源 " + (src.mode || "-")
+    + "/" + (src.state || "-") + (syn ? " · ⚠仿真" : "")
+    + " · " + viaTxt
+    + " · 质量 " + (q.grade_label || q.grade || "-")
+    + " · 可用 " + (q.usable_channel_count ?? "-") + " 路";
+  const age = ms && d.measurement ? d.measurement.last_sample_age_sec : null;
+  const rows = [];
+  const names = d.selected_metrics || Object.keys(ms);
+  names.forEach(k => {
+    const m = ms[k] || {};
+    const blocked = m.status === "blocked";
+    const noVal = m.value === null || m.value === undefined;
+    const stale = !noVal && typeof age === "number" && age > ND_STALE_SEC;
+    let v;
+    if (blocked) v = "blocked" + (m.reason_codes && m.reason_codes.length
+      ? "·" + m.reason_codes.join("/") : "");
+    else if (noVal) v = m.status === "accumulating" ? "无值（累积中）"
+      : m.status ? "无值·" + m.status : "无值";
+    else v = Math.round(m.value * 100) / 100 + "<i>" + (m.unit || "") + "</i>";
+    rows.push('<div class="nds-item' + ((blocked || noVal) ? " nds-none" : "")
+      + (stale ? " nds-stale" : "") + '"><div class="nds-v">' + v + '</div>'
+      + '<div class="nds-name">' + (m.name || k) + '</div>'
+      + '<div class="nds-sub">' + k + ' · ' + (m.method || "method?")
+      + ' · 置信 ' + (m.confidence_percent ?? "-") + "%"
+      + (stale ? " · 数据龄 " + Math.round(age) + "s" : "") + '</div></div>');
+  });
+  // 未列进 metrics 的勾选项也照实占位，绝不凭空补值
+  $("ndSideRows").innerHTML = rows.length ? rows.join("")
+    : '<div class="nds-item nds-none"><div class="nds-v">无指标</div>'
+      + '<div class="nds-name">平台未勾选任何指标</div></div>';
+  // ③-3：原始流暴露位为 true 时页面直接自曝越界（对方当前恒为 false）
+  if (syn) {
+    ndSideMsg("⚠ 对方本次为仿真数据（source.mode=" + (src.mode || "-")
+      + "、synthetic_not_human_eeg=true）——不是人脑电；质量等级再高也不作旁证、不存档", "err");
+  } else if (d.raw_eeg_exposed) {
+    ndSideMsg("⚠ 对方本次声明暴露原始脑电（raw_eeg_exposed=true）——旁证源边界已破，"
+      + "本栏数据不得进任何存档", "err");
+  } else if (d.session_state === "error" || src.state === "error") {
+    // 2026-09-30 00:27 实抓：对方 BLE 直连失败时 session_state=error、源 error、
+    // 四项指标全 blocked、grade=pending——界面须把「对方自报异常」说出来，
+    // 不能只留一排 blocked 让人猜是谁坏了。
+    ndSideMsg("对方自报异常（会话 " + (d.session_state || "-") + "／源 "
+      + (src.mode || "-") + "/" + (src.state || "-") + "）——本次数值不可作旁证；"
+      + (d.message ? "对方原话：" + String(d.message).slice(0, 90) + "；" : "")
+      + "对方恢复连接后本栏自动回读，我方不补值", "err");
+  } else if (typeof age === "number" && age > ND_STALE_SEC) {
+    ndSideMsg("对方数据已 " + Math.round(age) + " 秒未更新（源状态 "
+      + (src.state || "-") + "）——数值为陈旧读数，只作参考、未补值", "err");
+  } else {
+    ndSideMsg("");
+  }
+  $("ndSideOurs").textContent = lastBands
+    ? "α " + _nd1(lastBands.alpha) + " ／ θ " + _nd1(lastBands.theta)
+      + " ／ β " + _nd1(lastBands.beta) + " dB"
+    : "等待数据…";
+}
+function _nd1(v) { return v == null ? "-" : (Math.round(v * 10) / 10).toFixed(1); }
+
+async function ndSidePoll() {
+  ndSideTimer = null;
+  const v = $("ndSideAddr").value;
+  const chk = parseHostPort(v, { allowUrl: true });
+  if (chk.err) {
+    ndSideMsg("地址格式不对：" + chk.err, "err");
+    $("ndSideMeta").textContent = "未连接";
+    ndSideSchedule();
+    return;
+  }
+  try {
+    const r = await api("/api/ndmetrics?target=" + encodeURIComponent(chk.norm));
+    ndSideFails = 0;
+    ndSideRender(r);
+  } catch (e) {
+    ndSideFails++;
+    $("ndSideMeta").textContent = "取不到数据";
+    $("ndSideRows").innerHTML = '<div class="nds-item nds-none"><div class="nds-v">—</div>'
+      + '<div class="nds-name">' + (ndSideFails > 2 ? "已连续 " + ndSideFails + " 次失败" : "本次未取到")
+      + '</div></div>';
+    ndSideMsg(String(e.message || e)
+      + "（指标平台端口每次重启会变，请到平台页面复制当次地址重填；本栏取数失败不影响主采集）",
+      "err");
+  }
+  ndSideSchedule();
+}
+
+function ndSideSchedule() {
+  if ($("ndSideMode").value !== "metrics_api") return;
+  ndSideTimer = setTimeout(ndSidePoll, 1000);   // 派单①：1 秒节奏够用
+}
+
+function ndSideApply() {
+  const on = $("ndSideMode").value === "metrics_api";
+  $("ndSideAddrField").style.display = on ? "" : "none";
+  $("ndSideCard").style.display = on ? "" : "none";
+  ndSideFails = 0;
+  if (!on) {
+    if (ndSideTimer) { clearTimeout(ndSideTimer); ndSideTimer = null; }
+    // 关栏即通知后端退订对方 SSE，不长期占对方资源（失败无所谓，后端另有 45 秒空闲自停）
+    api("/api/ndmetrics/stop", { method: "POST", timeout: 3000 }).catch(() => {});
+    $("ndSideRows").innerHTML = "";
+    $("ndSideMeta").textContent = "—";
+    ndSideMsg("");
+    return;
+  }
+  const chk = parseHostPort($("ndSideAddr").value, { allowUrl: true });
+  if (!chk.err && chk.norm !== $("ndSideAddr").value.trim()) {
+    $("ndSideAddr").value = chk.norm;   // 剥净后回显，用户看得见我方拼了什么
+    ndSideMsg("已识别为 " + chk.norm + "（自动剥去 http:// 与路径）", "ok");
+  }
+  ndSidePoll();
+}
+
+$("ndSideMode").onchange = ndSideApply;
+$("ndSideAddr").onchange = ndSideApply;
+// 离开页面即退订对方推送（keepalive 保证请求发得出去）；后端 45 秒空闲自停为兜底
+window.addEventListener("pagehide", () => {
+  if ($("ndSideMode").value !== "metrics_api") return;
+  try { fetch("/api/ndmetrics/stop", { method: "POST", keepalive: true }); } catch (e) {}
+});
+
 $("monStart").onclick = async () => {
   if (monStartBusy) return;   // 2026-09-18：in-flight 守卫，防双击/轮询回写造成重复启动
   monStartBusy = true;
   try {
     const wsMode = $("wsMode").value;
     const mode = $("monMode").value;
+    // ZG-076②：主数据源地址先在前端校验（毫秒级出中文报错，不发无谓请求）。
+    // 旧行为：把整条 URL 原样发下去 → 后端线程内 int() 抛 → 线程静默死亡 →
+    // 界面永久停在下面那句"正在连接数据源…"（复现存证见 ZG076存证 目录）。
+    let ndAddr = null;
+    if (mode === "neuradock") {
+      const chk = parseHostPort($("monNd").value || "127.0.0.1:9600");
+      if (chk.err) {
+        $("monStart").disabled = false;
+        return monMsg("数据服务地址有误：" + chk.err, "err");
+      }
+      ndAddr = chk.norm;
+      $("monNd").value = chk.norm;
+    }
+    // ZG-076①：旁证源若启用，随载荷交后端记入会话存档（当次端口＋app_version）。
+    // 取数失败不挡采集：地址非法只提示并本次不记。
+    let ndSide = null;
+    if ($("ndSideMode").value === "metrics_api") {
+      const c2 = parseHostPort($("ndSideAddr").value, { allowUrl: true });
+      if (c2.err) {
+        ndSideMsg("旁证源未记入本次存档：" + c2.err, "err");
+      } else {
+        ndSide = c2.norm;
+        $("ndSideAddr").value = c2.norm;
+      }
+    }
     const common = {
       simulate: mode === "simulate",
       adapter: mode === "bled112" ? "bled112"
@@ -1614,7 +1887,7 @@ $("monStart").onclick = async () => {
       serial_port: mode === "bled112"
         ? ($("monPort").value.trim() || null)
         : mode === "neuradock"
-          ? ($("monNd").value.trim() || "127.0.0.1:9600") : null,
+          ? (ndAddr || "127.0.0.1:9600") : null,
       address: $("monAddress").value.trim() || null,
       participant: $("monParticipant").value || null,
       session_type: $("monSessionType").value,
@@ -1622,6 +1895,7 @@ $("monStart").onclick = async () => {
       contact_quality: regContactChips.get(),   // 无默认，杜绝虚标 good
       intent: $("monIntent").value || null,
       note: $("monNote").value.trim() || null,
+      nd_side: ndSide,                          // ZG-076①：只读旁证源地址（可空）
     };
     // 2026-09-25 法师现场令：**不再硬拦**——两组芯片可点可不点；未选即如实记 null
     // （不冒充真值），只给一行非阻断提示。旧版直接 return 卡死采集（16:0x 报障），
@@ -1651,6 +1925,7 @@ $("monStart").onclick = async () => {
         config_path: $("inConfigFile").value || null,
         baseline: b, duration: d,
         tag: $("inTag").value.trim() || null });
+      delete payload.nd_side;   // ZG-076①：旁证源存档戳只做在监测路径，闭环载荷不带走
       try {
         $("monStart").disabled = true;
         await api("/api/experiment/start", {
@@ -2850,6 +3125,7 @@ $("histSceneFilter").onchange = renderReports;
 loadConfigList();
 loadProfiles();
 applyWsMode();          // 初始化会话模式（纯监测）的显示状态
+ndSideApply();          // ZG-076①：旁证源初始为"不启用"（隐藏地址栏与读数卡）
 bindNeuraDockExtras();  // 幅程/VR胶囊/质量横幅等新组件
 pollStatus();
 resizeMonWave();

@@ -1,0 +1,104 @@
+ZG-076 补修存证 ③ · 旁证源「仿真源／对方异常」自曝
+窗口：W1-QODER-20260924-B（AI-008·Qoder）
+时区时间：2026-09-30 00:23–00:30 (Asia/Shanghai)
+触发：法师发来指标平台截图（127.0.0.1:62836，V3.2，"蓝牙直连失败（FE:DB:3D:73:E4:F9）：
+      TimeoutError: 蓝牙保持连接但已超过3秒未收到新通知"），问是官方 APP 还是系统的问题。
+      为回答该问做了一轮本机实探，顺手抓到我方界面一处诚实漏洞。
+
+────────────────────────────────────────
+一、本机实探（全部为本次实测，非推断）
+────────────────────────────────────────
+
+1) 端口漂移（边界 3 二次实证）
+   - 截图上的 62836 已 ConnectionRefused（WinError 10061）。
+   - 平台进程 NeuraDock_Developer_Metrics（PID 21660／23364）启动于 2026/9/30 00:21:29／00:21:31，
+     本次监听 127.0.0.1:50061（netstat 实证）。
+   - 累计见端口：55005 → 52413 → 63170（09-29）→ 62836 → 50061（09-30）。
+
+2) 9600 为什么连不上
+   - netstat 全表 LISTENING 中**没有 9600**（127.0.0.1 与 192.168.188.105 皆无）。
+   - 桌面软件 NeuraDock **1.2.0 已安装但当前没有进程在跑**（进程表只见指标平台）。
+     ⇒ 9600 是他家桌面软件的数据服务口，软件没开＝没人监听，连不上是必然，不是故障。
+   - 本机网络栈健康：127.0.0.1:7778 连通 0 ms、127.0.0.1:60269 连通 14 ms、
+     192.168.188.105:139 连通 1 ms ⇒ 排除"Windows 网络／防火墙整体坏了"。
+   - 头环 MAC FE:DB:3D:73:E4:F9 在 Windows 蓝牙设备表中**查不到**（PnP Bluetooth 类只有
+     MediaTek 适配器、BT5.0 Mouse 及其 GATT 服务）⇒ 头环当前未以已配对设备形态挂在系统上。
+
+3) 指标平台 00:23:31 实抓（GET http://127.0.0.1:50061/api/v1/metrics → 200）
+   app_version 3.2.0｜session_id 1｜session_state measuring
+   source = {"mode":"simulation","state":"streaming","synthetic_not_human_eeg":true}
+   quality.grade = high｜usable_channel_count = 7｜status = pass
+   measurement = elapsed_sec 277.0｜sample_index 109250｜last_sample_age_sec 0.0
+   ⇒ **关键**：BLE 断开后对方自动落到仿真源，而质量等级照样报 high／7 路／pass。
+     只看等级＝会把仿真分当真人脑电读。
+
+4) 指标平台 00:27:53 实抓（同口，200）
+   session_id 5｜session_state **error**
+   message = "TimeoutError: 蓝牙保持连接但已超过3秒未收到新通知，请重新连接设备。"
+   source = {"mode":"direct_bluetooth","state":"error","synthetic_not_human_eeg":false}
+   quality.grade = pending｜grade_label 等待数据｜usable 0｜experience_allowed false
+   metrics：focus／visual_load／spectral_complexity／relaxation 四项全
+     value=null、status=**blocked**、method=null、confidence=null
+     （spectral_complexity.formula_version 仍自报 objective-state-v2.0.0）
+   raw_eeg_exposed = false
+   ⇒ 这一态对方语义是干净的：不给分、不补值，与派单①"拔源后显示 blocked／不出补值曲线"完全对上。
+   附：中间还抓到一态 source={"mode":"none","state":"stopped"}、grade pending、
+     四项 status=**awaiting_source**（09-29 未见过的状态值）。
+
+────────────────────────────────────────
+二、我方缺陷（自曝）与修法
+────────────────────────────────────────
+
+缺陷：console.html 旁证源 meta 行原写 `" · 源" + (src.state || src.mode || "-")`。
+      真机与仿真的 state 都是 streaming，**mode 永远被 state 顶掉不显示**；
+      synthetic_not_human_eeg 一位都没用。⇒ 若法师在 00:23 那一态开旁证源，
+      界面会显示"源streaming · 质量 高 · 可用 7 路"＋两个正常分数，
+      **看不出那是仿真数据**——违反数据诚实（来源不清即不得作旁证）。
+
+修法（console.html，共 3 处，均为显示层，未动后端与采集链路）：
+  ① meta 必显 mode／state 两段，仿真时加"⚠仿真"标记；
+  ② 新增最高优先级红字：仿真源（mode=simulation 或 synthetic=true）
+     →"不是人脑电；质量等级再高也不作旁证、不存档"；
+  ③ 新增对方异常红字：session_state=error 或 source.state=error
+     →显示对方 message 原话（截取 90 字），并说明"对方恢复后自动回读、我方不补值"；
+  ④ 无值项带上对方 status（实测 awaiting_source），不再一律只写"无值"。
+
+────────────────────────────────────────
+三、验证（真浏览器跑，非纸面）
+────────────────────────────────────────
+
+服务：console_server.py 8777（00:24 重启；此前该实例已随上一轮会话退出，进程表无 python.exe）。
+仿真态用临时桩复现（_analysis_tmp/nd_sim_stub.py，端口 59999，回包按 00:23 实抓形态构造；
+验完即杀，不入库、不进任何存档）。
+
+A. 桩（仿真态）→ 页面 DOM 实读：
+   meta = "对方 v3.2.0 · 会话 1 · measuring · 源 simulation/streaming · ⚠仿真 · 质量 高 · 可用 7 路"
+   msg（class="msg err"）= "⚠ 对方本次为仿真数据（source.mode=simulation、
+        synthetic_not_human_eeg=true）——不是人脑电；质量等级再高也不作旁证、不存档"
+   rows = 63.02 专注度／66.19 视觉认知负荷（数值照实显示，但整栏已被红字判为不可采信）
+   ⇒ 通过：等级 high 也压不住仿真标记。
+
+B. 真平台（BLE 故障态，50061）→ 页面 DOM 实读：
+   meta = "对方 v3.2.0 · 会话 5 · error · 源 direct_bluetooth/error · 质量 等待数据 · 可用 0 路"
+   msg（class="msg err"）= "对方自报异常（会话 error／源 direct_bluetooth/error）——
+        本次数值不可作旁证；对方原话：TimeoutError: 蓝牙保持连接但已超过3秒未收到新通知，
+        请重新连接设备。；对方恢复连接后本栏自动回读，我方不补值"
+   rows = 四项全 "blocked"，无任何数值
+   ⇒ 通过：截图上那句故障原话，现在在我方驾驶舱里直接读得到，不必切窗口猜是谁坏了。
+
+C. 浏览器 console 消息：**零条**（无 JS 报错）。
+D. 后端代理链路复验：GET /api/ndmetrics?target=127.0.0.1:50061 → 200，
+   信封 {ok, addr, path, proxied_at, data} 完整。
+
+局限（如实记）：本次**未能出截图**——内置浏览器返回
+  NATIVE_BROWSER_VIEWPORT_UNAVAILABLE（viewport=0x0，visibilityState=hidden），
+  take_screenshot 不可用；故本件以 DOM 文本实读取证，字串为页面真实渲染内容，非手写。
+  需要图证时，法师在自己浏览器打开 http://127.0.0.1:8777/ 把旁证源填当次平台端口即可复看。
+
+────────────────────────────────────────
+四、提交状态
+────────────────────────────────────────
+console.html／console_server.py／数据字典 v1 的本轮改动**均未提交**，
+与 ZG-076 主体（①②③）同批候法师金口放行。数据字典已同步补：
+  §三 status 增 awaiting_source；§四 增 mode 必显／仿真自曝／对方异常显原话三条；
+  §五 增第 3、4 条（失源完整形态、端口漂移二次实证）。
