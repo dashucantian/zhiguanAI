@@ -1,0 +1,340 @@
+# ZG-076 旁证源：W1 五道闸复核（续接轮）
+
+窗口：W1（AI-008 线续接，Session `W1-QODER-20260924-B`）｜日期：2026-09-30 02:2x
+依据：法师 09-30 口头派「旁证源验收（平台活在 60526）——抓一次完整读数存证，并复核 W1 那五道闸是否仍成立」
+性质：**只读复核**。未改一行业务代码；桩用完即杀；未提交未 push。
+
+---
+
+## 一、复核时的平台实况（与 W1 记录的差异点）
+
+| 项 | W1 记录（09-30 00:58） | 本次实测（02:2x） |
+|---|---|---|
+| 平台端口 | 50061（62836→50061 二漂） | **60526**（第三漂，边界3 第三次实证） |
+| `source.mode` | 曾抓到 `simulation` | **`direct_bluetooth`** |
+| `synthetic_not_human_eeg` | 曾抓到 `true` | **`false`**（真人脑电，非仿真） |
+| 会话状态 | — | `session_state=connected`（**非 measuring**） |
+| `quality` | grade 曾报 high 却 7 路 pass（已修显示） | `grade=high`、`usable=7/reliable=7`、`status=pass` |
+| 指标 | focus 带值 | **`focus.status=awaiting_source`、`value=null`** |
+| `raw_eeg_exposed` | false | **false**（T6 红线未破） |
+
+> **判定**：平台本次为**真实设备链路**，且 W1 §8.3 修的"仿真位"逻辑正**按设计如实呈现**——本次非仿真，故不显红字；而 `focus` 无值 → 界面照 W1 的"不补值"口径应显「无值（累积中）」/`awaiting_source`，**未出现补值曲线**（合规）。
+
+## 二、五道闸逐闸复核结果
+
+### 闸1｜真平台推送（帧龄 ≤3s、帧号每秒+1）——**成立 ✅**
+
+```
+#1 02:22:25 via=poll sse.state=connecting frames=0
+#2 02:22:26 via=sse  sse.state=live        frames=2  age=0.14
+#3 02:22:27 via=sse  sse.state=live        frames=3  age=0.24
+#4 02:22:28 via=sse  sse.state=live        frames=4  age=0.35
+#5 02:22:29 via=sse  sse.state=live        frames=5  age=0.46
+#6 02:22:31 via=sse  sse.state=live        frames=6  age=0.57
+```
+- `connecting → live` 自动升级（**首请求 poll 属正常，SSE 懒启动**）；帧号每秒 +1；帧龄 0.14–0.57s ≪ 3s 阈值。
+- 平台侧 `sample_index` 同步递增（140100→141370），证实推送确为对方实时帧。
+
+### 闸2｜推送口 404 ⇒ 回落轮询——**成立 ✅**
+
+用自造 404 桩（`_analysis_tmp/nd_404_stub.py`，`/api/v1/stream` 一律 404，`/api/v1/metrics` 200 且 message 标 `POLL-PATH-404STUB`）：
+
+```
+#1 via=poll sse.state=connecting frames=0
+#2 via=poll sse.state=error      err=OSError: 对方推送口返回 HTTP 404
+#3 via=poll sse.state=error      err=OSError: 对方推送口返回 HTTP 404
+data.message=POLL-PATH-404STUB   focus.value=41.0 status=evaluated
+```
+- `via` 恒 `poll`（未硬等推送）；**`state`/`err` 可读且指向 404**；数据仍正常取自轮询口。
+
+### 闸3｜中途掐断自恢复（帧号连续不重置）——**成立 ✅**
+
+用 drop 桩（每连只推 3 帧即掐断，`message` 标 `conn#N frameN`）：
+
+```
+#2..#4  via=sse live     frames=1,2,3   conn#1 frame1..3
+#5      via=sse error    frames=3  reconn=1  age=1.7   ← 断口瞬间仍供最后一帧并标龄
+#6      via=sse live     frames=4  reconn=1  conn#2 frame1
+#9      via=sse error    frames=6  reconn=2
+#10     via=sse live     frames=7  reconn=2  conn#3 frame1
+#14     via=sse error    frames=9  reconn=3
+#15     via=sse live     frames=10 reconn=3  conn#4 frame1
+```
+- 自动重连 **4 次**（conn#1→#4）；**全局帧号 1→11 连续不重置**（不因重连跳号或回退）。
+- 断线瞬间 `frames` 不归零、仍供最后一帧并如实标龄（`error` 态不冒充 live）。
+
+### 闸4｜目标口全死 ⇒ 502 中文可操作——**成立 ✅**
+
+```
+[127.0.0.1:59998] HTTP 502
+  {"detail":"连不上指标 API（127.0.0.1:59998）：[WinError 10061] 由于目标计算机积极拒绝，
+    无法连接。请检查 ①NeuraDock 开发者指标平台已打开；②填的是平台当次随机端口"}
+[not-an-address]  HTTP 400
+  {"detail":"「not-an-address」缺少端口号；期望格式 IP:端口，例：127.0.0.1:9600"}
+```
+- 502 文本**含具体错误码、两步下一步动作、并点明"当次随机端口"**这一易错点；
+- 非法地址 400 亦准（`127.0.0.1` 缺端口、`http://x:99x` 端口非数，均 400）。
+
+### 闸5｜两页抢槽不张冠李戴——**成立 ✅（含 `elsewhere` 分支已复现）**
+
+**先修正一处我方（W1 记录）对"抢槽"的表述理解**：读码后确认 `_nd_sse_ensure()` **每次请求都把订阅槽切到本请求的地址**（`_ND_SSE.update(target=target, …, state="connecting", frames=0)`）。因此：
+- **同址两页** → 复用同槽（共享）；
+- **异址两页** → 后请求者**抢占**槽（先请求者下一次取数时再切回自己）；
+- `elsewhere` 分支＝「`_nd_sse_ensure` 之后、`_nd_sse_snapshot` 之前」目标被换掉时的**防护分支**，窗口以微秒计。
+
+**实测分三步**：
+
+| 步骤 | 方法 | 结果 |
+|---|---|---|
+| 1 | 6 轮真并发异址 | `data` 与 `addr` **6/6 全部匹配**（不张冠李戴） |
+| 2 | 25 轮 + 双实例 80 次受检并发 | `elsewhere` **0 命中**（窗太窄，概率法撞不上） |
+| 3 | **确定性复现**：临时副本把 80ms 延时注入「ensure 之后、snapshot 之前」（**逻辑一字未改**，仅撑窗），跑 6 轮 | **命中 3/6（R2／R4／R6）** |
+
+第 3 步实测输出（R2）：
+```
+A(60526).state=live       target=127.0.0.1:60526   ← 持有方，正常
+B(59999).state=elsewhere  target=127.0.0.1:60526   ← 非持有方如实自报
+   err=「推送订阅已被其他页面切到别的地址（本页回落单次拉取）」
+```
+**判定要点**：`B.sse.target` = **A 的地址（60526）**，即槽指向真正的持有方——**不冒充持有方、不张冠李戴**；B 侧 `data` 由单次 GET 取得（回落路径），未混用 A 的推送帧。
+
+> **结论：闸5 五分之五成立**——`elsewhere` 分支**已确定性复现**（此前"未观察到"系窗口太窄，非分支失效）。
+
+## 三、本轮抓取的完整读数存证
+
+`5_复核_W1五闸_完整读数_20260930-022240.json`（6368 B，含代理返回全文 ＋ 平台 `/api/v1/status` 自报）
+
+要点（代理，`via=sse`）：
+```
+addr=127.0.0.1:60526  path=/api/v1/stream  via=sse
+sse: state=live frames=15 age=0.53 reconnects=0
+source: {mode: direct_bluetooth, state: streaming, synthetic_not_human_eeg: false}
+quality: grade=high usable=7 reliable=7 status=pass  (usable_channels: CP5,CP6,PO3,O1,Oz,O2 +1)
+raw_eeg_exposed=false   session_state=connected   app_version=3.2.0
+measurement: {elapsed_sec: null, last_sample_age_sec: 0.015, sample_index: 143645, window_sec: 4, step_sec: 1}
+metrics.focus: {status: awaiting_source, value: null, confidence_percent: null}
+scientific_scope: 本人、本次、相同协议内的后部传感器级相对指标；非医学诊断。
+```
+平台自报：`running=true`、`port=60526`、`selected_metrics=["focus"]`、`raw_eeg_exposed=false`、**`embedded=true`**、`metrics_url`/`stream_url` 与 W1 常量一致。
+
+## 四、边界与残留自查
+
+- **只读**：本轮未改 `console_server.py`／`console.html`／`qc_pipeline.py`／入库或闭环链路任何一行；未提交、未 push。
+- **桩**：本轮新建 `_analysis_tmp/nd_404_stub.py`（1 件）；复用 W1 的 `nd_sim_stub.py`／`nd_sse_drop_stub.py`。三个桩进程**均已停**，**59999／59997 已无监听**（实测）。
+- **8777 现役服务未受影响**（复核后仍在跑，`status=idle`）。
+- **一处待法师裁**：W1 记"临时桩用完即杀"——其**进程**已杀，但**两件桩文件仍在** `_analysis_tmp/`（该目录整体被 ignore）。删或留请裁；本轮**未擅删他窗文件**。
+- **一处新增待注意**：平台 `embedded=true`（本次为内嵌形态），与 W1 历次记录未含此字段，记此备查。
+
+## 五、附：两条链路的区分（应法师"这两个不一样，问题出在哪里"之问）
+
+法师截图显示的是**控制台『真机蓝牙』扫不到 Muse 头环**；而本复核走的是**HTTP 取 NeuraDock 平台**。二者**无任何共用环节**：
+
+| | 法师截图那条 | 本复核这条 |
+|---|---|---|
+| 数据源选择 | **真机蓝牙（电脑内置适配器）** | **NeuraDock 指标 API（HTTP）** |
+| 传输 | **BLE 蓝牙**（`ble_receiver` → `find_muse` → `MuseS.connect_and_initialize`） | **HTTP**（`GET 127.0.0.1:60526/api/v1/metrics`） |
+| 依赖 | **Muse 头环开机／有电／在广播** ＋ 电脑蓝牙适配器 | 对方桌面程序在跑、端口已知 |
+| 代码路径 | `console_server._worker` → `BleDirectReceiver` | `console_server.ndmetrics_proxy`（本复核全程走此路） |
+| 本复核是否触及 | **完全未触及** | 全部 |
+
+### 只读 BLE 扫描实测（`_analysis_tmp/ble_scan_readonly.py`，12 秒）
+
+```
+发现 16 个 BLE 设备（XJ02-S×2 等）
+Muse 类命中 0
+NeuraDock 类命中 0
+```
+**三条推断**：
+1. **电脑蓝牙适配器工作正常** —— 若适配器异常，`BleakScanner` 一个设备都扫不到；实测扫到 16 个。
+2. **Muse 头环未在广播**（因此 `find_muse` 无从发现，界面停在"正在扫描 Muse 头环（最长 10 秒）…"）。
+   常见成因：头环未开机／电量耗尽／已被其它设备或程序配对占用／距离过远。
+3. **NeuraDock 头环不可见属正常** —— 它正被对方平台独占连接；BLE 设备一旦被连接通常即停止广播，故扫描不见它**反而印证它已连上平台**（与 §一 的 `direct_bluetooth`／`streaming` 一致）。
+
+> **故两条链路互不阻塞**：旁证源（HTTP）可用 ≠ Muse 蓝牙可用；反之亦然。**"8777 怎么连上的"——本复核并未连 Muse，走的是 HTTP 到对方平台。**
+> **复现本复核那条链路的准确操作**：数据源可留原样；只需在「旁证源（只读·不入库）」选 `NeuraDock 指标 API（HTTP）`、地址填平台当次 `IP:端口`（本次 `127.0.0.1:60526`，每次重启会变）。
+## 六、结论
+
+> **五道闸全部成立（5/5）。** 前四闸直接复现；闸5 的 `elsewhere` 防护分支经**确定性撑窗**复现 3/6，
+> 且非持有方如实自报、槽指向真持有方，**不冒充、不张冠李戴**。
+> W1 §8.4 的 SSE 接入**在真实平台上按设计工作**：真推送可用（帧龄 0.14–0.57s）、断链能自恢复且帧号连续、
+> 推送口缺失能回落轮询、目标全死有中文可操作报错（502 含错误码＋两步动作）、两页抢槽不错配。
+
+> **本轮另回答一问**（§五）：法师截图的"真机蓝牙扫不到 Muse"与本复核的"HTTP 取 NeuraDock 平台"
+> **是两条无共用环节的链路**；只读 BLE 扫描实测 16 设备、Muse 命中 0 ⇒ **适配器正常、Muse 头环未在广播**。
+
+---
+
+## 七、追加复核：把「蓝牙那一位」让给平台（2026-09-30 03:0x，应法师令）
+
+> **与 §四 的差别须先说明**：§一是**只读**复核，**未改** `console.html`；本节**按法师令修改了 `console.html` 一处显示层**，
+> **未改** `console_server.py`／采集链路／契约／入库任何一行。两节口径不同，勿混读。
+
+### 7.1 法师之问与实测答案
+
+法师问："`/api/v1/stream` 要接进驾驶舱，**蓝牙那个位置要空出来**；现在那个蓝牙连接是不空的，会冲突。"
+
+实测（`netstat -ano` ＋ `Get-Process` ＋ 只读 BLE 扫描 ＋ `/api/monitor/status`）：
+
+| 端口 | 持有进程 | 状态 |
+|---|---|---|
+| **9600**（NeuraDock TCP 数据服务） | **NeuraDock PID 29460**（02:51:19 启动） | **在听** |
+| **60526**（平台 HTTP 指标 API，上次那个） | 无 | **已不在听**（`WinError 10061` 积极拒绝） |
+| 8777 / 8788（实践驾驶舱） | python PID 25264（00:48:31 启动） | 在听 |
+
+**关键更正**：8777 上 `python` 有 3 个（25264／5224／18876），其中 25264 才是驾驶舱；
+平台**只**在听 9600，**HTTP 指标平台当前根本没开** ⇒ `60526` 不是"坏了"，而是**那次随机会话的旧端口，重启后已换新号**。
+
+### 7.2 "蓝牙连接是不空的"——实测是**遗留标签**，不是真占用
+
+```
+GET http://127.0.0.1:8777/api/monitor/status
+{"status":"idle","running":false,"started_at":"2026-09-30 02:30:46","mode":"真机蓝牙","saved":null}
+```
+
+- `running=false` ⇒ **驾驶舱此刻没跑会话，没连任何头环，本机蓝牙适配器是空的**。
+- 但 `mode` 字段仍回 **「真机蓝牙」**——它是**上一次会话（02:30:46）留下的标签**，
+  `console_server.py` 只在 `start()` 时写 `self.mode`，**空闲时不复位**。
+- 凡读该字段显示"模式：…"的界面（如 `/ndtest` 面板、流程表探活段）**都会显示成"蓝牙还连着"**。
+  **这才是"看起来没空"的来源**——是**读数陈旧**，不是设备被占。
+- 本轮**未改**该字段语义（属 W1 `console_server.py`，且 `/ndtest` 面板在读，改语义须法师裁）；
+  **如实登记为待裁项**：是否改为空闲时不再回上一次的 mode。
+
+### 7.3 让位改动（`console.html`，仅显示层）
+
+1. 「数据源」默认项本就是 `<option value="simulate" selected>模拟模式（无需头环）</option>`——刷新即落在**不占蓝牙**的一档（已实测 8777 供出的页面确认 `selected` 仍在 simulate 上）。
+2. 新增冲突告警行 `#ndConflictRow` ＋ `notifyNdConflict()`：当**「真机蓝牙」× 「旁证源＝NeuraDock 指标 API」**同时成立时，
+   就在采集表单上就地亮红字，**只告警、不替使用者改选择**（不违"AI 不得自写规则"）。
+3. 告警文案经复核修正为**两个正确选项**：「模拟模式（无需头环）」**或**「NeuraDock（TCP 数据服务）」
+   ——**两者都不占蓝牙**，且后者仍能给驾驶舱**真机数据**（平台经 9600 转发，平台自己持有蓝牙）。
+   **只写"改模拟模式"是不周到的**（会让人以为接了 NeuraDock 就没有真数据）。
+
+### 7.4 验证（三项全过）
+
+```
+validate_console.py   PASS：id 157、动态引用 2、JS 函数 149、语法通过
+test_ndconflict.js    8/8 PASS（仅"真机蓝牙×旁证源"两例告警；模拟/TCP 数据服务均不告警）
+8777 实拉首页           ndConflictRow×2、notifyNdConflict×4、「NeuraDock（TCP 数据服务）」×2、
+                       「把蓝牙这一位整个留给平台」×1、simulate 仍 selected
+```
+
+> **不需重启 8777**：`console_server.py` L2846 用 `FileResponse` **每请求读盘**供 `console.html`，
+> 法师**刷新浏览器**（建议 Ctrl+F5 破缓存）即见新版；服务器进程一行未动。
+
+### 7.5 本轮只读扫描（二次，UTF-8 干净输出）
+
+```
+发现 11 个 BLE 设备；Muse 类命中 0；NeuraDock 类命中 0
+```
+**NeuraDock 头环不可见 ⇒ 正被平台（PID 29460）独占连接**，与 §一 的 `direct_bluetooth`／`streaming` 一致；
+**本项目侧此刻不持有任何头环**。
+
+### 7.6 今日（不测 Muse）要让 stream 进驾驶舱，法师只需两步
+
+1. 打开 NeuraDock 的**开发者指标平台**，**读出它当次的随机端口**（`60526` 已作废，**每次重启都变**）。
+2. 驾驶舱「旁证源」选 `NeuraDock 指标 API（HTTP）`、地址填 **`IP:新端口`**；
+   「数据源」保持**模拟模式**或改**「NeuraDock（TCP 数据服务）」`127.0.0.1:9600`**——**都别动「真机蓝牙」**。
+
+> **未做也不该由本轮做**：未替法师选数据源、未起停任何服务、未改 `console_server.py`、未提交。
+
+---
+
+## 八、追加复核：9600 与指标 API 是两条什么数据（应法师四问，2026-09-30 03:2x）
+
+### 8.0 先更正 §7.5 的一处归属错误（如实订正，不静默改写）
+
+§7.5 写"NeuraDock 头环正被**平台**（PID 29460）独占连接"——**错**。
+实测 PID **29460 是 NeuraDock 1.2.0 录屏 APP**（持 9600），**不是** `NeuraDock_Developer_Metrics`（平台）。
+"头环未广播"这一**观测**仍成立，但"被谁持有"当时**判错**，此处订正。
+
+### 8.1 两路数据对照（法师第 1 问）
+
+| | **192.168.188.105:9600** | **指标 API（HTTP，随机端口）** |
+|---|---|---|
+| 是什么 | **全量原始数据**：逐样本时间序列 | **算好的结论**：指标＋质量＋状态元数据 |
+| 内容 | 7 通道 × 250 Hz × µV | `focus`(专注度)／`visual_load`(视觉认知负荷) 等 |
+| 通道 | CP5 CP6 PO3 PO4 O1 Oz O2（第 8 位＝保留位） | 不出样本；只给 `usable_channels`／`bad_channel_candidates` 名单 |
+| 速率 | 250 样本/秒/通道 | 4 秒窗、1 秒步进（≈1 Hz） |
+| 原始脑电 | **有** | **没有**——接口自报 `raw_eeg_exposed=false`（厂商刻意不给） |
+| 握手 | 连上后**必须先发 `start`** | 直接 GET |
+| 在驾驶舱的角色 | **主数据源** → 波形／频段／质检／npz／**入库** | **旁证源** → 只读比对，写进会话存档 `nd_side`，**不入库** |
+| 包形 | 蓝牙模式每行 5 组（42 字段）；USB 模式每行 1 组（10 字段） | JSON |
+
+**依据（我方代码＋厂商公开仓库，非推测）**：`neuradock_receiver.py` L8-19 明载协议出自厂商开源仓库
+`eeg-workstation-agent/docs/data-protocol.md`；通道序、250 Hz、µV、`start` 命令、42/10 字段、
+"TCP 可能把一行拆成多个包"均已定版。厂商 `context/hardware.md` 亦载同一通道表。
+**APP 界面第 8 行波形是平的**由此得解：硬件 16 针定义里 **CH8 = "not used"**
+（`eeg-workstation-hardware` README 的电极排针表）。
+
+### 8.2 实测：关掉那个 APP 之后（法师第 3、4 问的硬证据）
+
+| 时刻 | 9600 | 指标平台 |
+|---|---|---|
+| 03:0x（APP 在跑） | **在听**（PID 29460） | 正常，`session_state=connected` |
+| **03:2x（APP 已关）** | **端口消失**，全机无监听 | `/api/v1/metrics`：`source.state=**error**`、`last_sample_age_sec=**71.4**`、`usable_channel_count=**0**`、`bad_channel_candidates=**全 7 通道**`、`grade=**unqualified（不合格）**` |
+
+> **结论：两条路吊在同一个 exe 上。** 关掉 1.2.0，**9600 与指标平台一起没数据**。
+> 平台自报的 `source.mode=direct_bluetooth` 描述的是**头环那一跳的传输方式**，
+> **不等于**平台自己持有蓝牙连接；与厂商开源 agent 的取数方式（`tcp_default_ip=127.0.0.1`、
+> `tcp_default_port=9600`、`tcp_start_command=b"start"`）完全一致。
+> 〔待一次对照实验坐实：重开 APP，看平台是否秒级恢复——本轮未做，不写成已证。〕
+
+### 8.3 会不会冲突（法师第 2 问）
+
+三者要分清，**只有第三样冲突**：
+
+1. **9600（主数据源）× 指标 API（旁证源）——彼此不冲突。**
+   一个是出站 TCP 到 APP 的套接字，一个是出站 HTTP 到平台；不同进程、不同端口，互不抢。
+2. **驾驶舱自己的「真机蓝牙」——这才是冲突源。**
+   它去抢蓝牙适配器与头环，而头环那一跳在对方手里。法师第二张截图正卡在这一步：
+   数据源＝**真机蓝牙（电脑内置适配器）**、状态＝**"正在扫描 Muse 头环（最长 10 秒）…"**
+   ⇒ **我方正在抢**。（且我们的 BLE 路径是 **Muse 专用 GATT**，对 NeuraDock 头环即使扫到也连不上。）
+3. **同源共死（隐性）。** 二者共用同一个头环、同一个 exe：APP 一关，两条一起断（见 8.2）。
+   另：两者**数值不可能相等**——一个是原始 µV，一个是对方 4 秒窗算出的 0–100 分；
+   旁证只能"对方向"，不能"对数字"。
+
+### 8.4 它在本地跑吗？有没有出网？（法师第 3 问）
+
+- **本地**：是。APP 在**本机开一个 TCP 服务器**，我们把数据接走；原始数据不必经过互联网。
+- **但绑定的是局域网 IP**：APP 界面自报 `ServerSocket.local IP: 192.168.188.105`、端口 `9600`
+  ——**不是 `127.0.0.1`**。即**同一局域网内的机器都可能连上并取走原始脑电**。
+  这是一处**暴露面**，本轮只如实登记，**是否收口（改绑回环／防火墙限制）请法师裁**。
+- **有无出网**：本轮抓取瞬间，全机**没有任何一条指向非内网地址的 ESTABLISHED 连接**
+  （`netstat -ano` 过滤掉 `127.*`／`::1`／`192.168.*` 后为空）⇒ **未观察到上传行为**。
+  此为**快照证据**，不等于"永不联网"；要坐实须持续抓包。
+- **一处须留意的外发口**：厂商 agent 的 LLM 模式会**把允许清单内的指标摘要**送给语言模型，
+  其架构文档明写"**原始脑电与稠密数值数组从不包含在内**"。即：**原始数据不出机，指标摘要可能出机**。
+
+### 8.5 "不开那个 APP 直接接"——可行性核查（法师第 4 问）
+
+**结论：现阶段绕不开；但有一条正当正路。** 依据：
+
+| 证据 | 内容 |
+|---|---|
+| 厂商 agent 源码 | 数据源只有 `simulator｜replay｜**TCP**`，默认 `127.0.0.1:9600` **——连厂商自己的开源程序都不碰蓝牙** |
+| 厂商 Python 教程 | 标题写"Bluetooth real-time streaming"，正文实为 **via TCP (Bluetooth mode)** |
+| **录屏软件仓库** | 只放**发行说明与二进制**，明写"**installer／binary 不自动按开源授权**"⇒ **闭源** |
+| **硬件仓库** | 公开的只有**电极排针**与 **MCU 调试口**；**不含蓝牙 GATT／服务特征 UUID** |
+
+**三条路线（按代价排序，供法师裁）**：
+
+- **甲·立刻可做（零协议风险）**：让那个 exe **随开机自启＋最小化到托盘**，"每次手动打开"这一步就没了。
+  进程仍在，蓝牙仍归它——**这是最省事且不碰红线的做法**。
+- **乙·正路（建议）**：向厂商索取**蓝牙 GATT 接口规范**，或**无界面/服务版**。
+  厂商 GitHub 维护者 **JunwenLuo（罗工）**；我方档案本就有"**罗工回函**"草稿，此问完全对口。
+  硬件仓库自述"为第三方集成提供**接口与端口规范**"⇒ **索取 GATT 属正当请求**。
+- **丙·不推荐（须法师裁）**：自行逆向蓝牙协议（嗅探 GATT）。技术上有手段（bleak／BLED112＋只读扫描），
+  但**等于自造驱动**，违"不猜厂商协议"，且固件升级即失效。
+
+**另一条捷径——USB 模式**：硬件支持 USB 与蓝牙两路；我们的 `TcpReceiver` 支持 `transport=auto`
+（USB 10 字段／蓝牙 42 字段自动识别）。**改用 USB 线连采集模块⇒蓝牙这一位彻底空出**，
+但**仍要开那个 exe**（USB 文本流也是它转发到 9600 的）。即 USB 解决"占蓝牙"，不解决"要开 APP"。
+
+### 8.6 本轮边界
+
+**只读**：未连接任何头环、未改 `console_server.py`／`neuradock_receiver.py`／任何生产文件、
+未起停任何服务、未提交。新增只读动作：`netstat -ano`、`Get-Process`、只读 BLE 扫描、
+`GET /api/v1/status`、`GET /api/v1/metrics`、以及厂商公开仓库的网页查阅。
+
+**另记两条当时状态**（供追溯）：03:0x 时 8777 上一场遗留 `mode=真机蓝牙`；
+03:17:17 起驾驶舱已在跑**模拟**会话——**本项目侧蓝牙为空**。
+**旁证源地址已过期**：法师截图填的是 `127.0.0.1:50061`，**平台现已换到 `49288`**（随机端口每次重启都变）。

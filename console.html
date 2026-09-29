@@ -382,6 +382,15 @@
         <input id="ndSideAddr" placeholder="如 127.0.0.1:63170" spellcheck="false">
       </div>
     </div>
+    <!-- 〔2026-09-30 W1〕冲突提示：NeuraDock 平台与「真机蓝牙」**争同一个蓝牙适配器**。
+         平台连自家头环（BLE）时若本机再去扫描／连接头环，双方互扰。
+         故用 NeuraDock 时**数据源须离开「真机蓝牙」**（选「模拟模式（无需头环）」留空该位）。
+         此提示只作显示层告警，不改任何数据源选择（选什么是使用者的决定）。 -->
+    <div class="row" id="ndConflictRow" style="display:none">
+      <div class="hint" id="ndConflictMsg"
+           style="color:#ff9800; border-left:3px solid #ff9800; padding-left:8px;">
+      </div>
+    </div>
     <div class="row" id="expParamsRow" style="display:none">
       <div class="field">
         <label>配置文件</label>
@@ -1650,7 +1659,32 @@ $("monMode").onchange = () => {
   const v = $("monMode").value;
   $("monPortField").style.display = v === "bled112" ? "" : "none";
   $("monNdField").style.display = v === "neuradock" ? "" : "none";
+  notifyNdConflict();
 };
+
+// ── 〔2026-09-30 W1〕NeuraDock 与「真机蓝牙」争蓝牙适配器 —— 显示层告警 ──
+// 平台连自家头环走 BLE 连接；本机若同时去扫描/连接头环，双方会互扰。
+// 因此用 NeuraDock 时，数据源应离开「真机蓝牙」（选「模拟模式（无需头环）」即空出该位）。
+// 只告警，不替使用者改选择。
+function notifyNdConflict() {
+  const row = $("ndConflictRow");
+  const msg = $("ndConflictMsg");
+  if (!row || !msg) return;
+  const src = $("monMode") ? $("monMode").value : "";
+  const ndOn = ($("ndSideMode") && $("ndSideMode").value === "metrics_api")
+    || src === "neuradock";
+  const ble = (src === "device" || src === "bled112");
+  if (ndOn && ble) {
+    msg.textContent = "⚠ 冲突：NeuraDock 平台与本机「真机蓝牙」争同一个蓝牙适配器"
+      + "——平台连自家头环时，本机再扫描/连接头环会互扰（头环可能互相都找不到）。"
+      + "请把「数据源」改为「模拟模式（无需头环）」或「NeuraDock（TCP 数据服务）」"
+      + "——两者都不占蓝牙，把蓝牙这一位整个留给平台；"
+      + "旁证数据仍照常从「旁证源」读取（HTTP，不占蓝牙）。";
+    row.style.display = "";
+  } else {
+    row.style.display = "none";
+  }
+}
 // ── 会话模式切换：纯监测 / 闭环反馈（统一采集台，2026-09-08）──
 function applyWsMode() {
   const loop = $("wsMode").value === "loop";
@@ -1824,6 +1858,7 @@ function ndSideApply() {
   $("ndSideAddrField").style.display = on ? "" : "none";
   $("ndSideCard").style.display = on ? "" : "none";
   ndSideFails = 0;
+  notifyNdConflict();          // 旁证源开关变化同样可能触发蓝牙冲突，一并刷新告警
   if (!on) {
     if (ndSideTimer) { clearTimeout(ndSideTimer); ndSideTimer = null; }
     // 关栏即通知后端退订对方 SSE，不长期占对方资源（失败无所谓，后端另有 45 秒空闲自停）
@@ -1853,6 +1888,7 @@ $("monStart").onclick = async () => {
   if (monStartBusy) return;   // 2026-09-18：in-flight 守卫，防双击/轮询回写造成重复启动
   monStartBusy = true;
   try {
+    notifyNdConflict();   // 〔2026-09-30 W1〕开跑前再刷一次冲突告警（就地显示在表单上）
     const wsMode = $("wsMode").value;
     const mode = $("monMode").value;
     // ZG-076②：主数据源地址先在前端校验（毫秒级出中文报错，不发无谓请求）。
