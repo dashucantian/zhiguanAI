@@ -195,6 +195,58 @@ def inject_config_table(report_path, cfg, snap_name, mode, started,
     return True
 
 
+def inject_state_word(report_path, summary):
+    """把「脑电状态序列（状态词）」注入 HTML 报告（W3人机建构-01，2026-10-01）。
+
+    方法来源：Mikhaylets et al., Sci Rep (2026) 16:23560 —— 把连续 EEG 切成
+    离散状态段再序列化为"词"，使跨会话可比。此处为单会话低配版，属**探索性
+    观察指标**，不参与任何判定。须在 inject_config_table 之后调用（同锚点
+    注入，保持 四→五 的章节顺序）。
+    """
+    if not report_path or not os.path.exists(report_path):
+        return False
+    if not summary or not summary.get("ok"):
+        return False
+    band_zh = {"delta": "δ（深缓）", "theta": "θ（沉静）", "alpha": "α（放松）",
+               "beta": "β（活跃）", "gamma": "γ（高频）"}
+    rows = []
+    t0 = 0.0
+    for d in summary["states"]:
+        dur = d["epochs"]  # 1 epoch = 1 秒
+        rows.append(
+            f"<tr><td>{chr(ord('A') + d['state'])}</td>"
+            f"<td>{int(t0)//60}:{int(t0)%60:02d} – "
+            f"{int(t0+dur)//60}:{int(t0+dur)%60:02d}</td>"
+            f"<td>{dur} 秒</td>"
+            f"<td>{band_zh.get(d['dominant'], d['dominant'])} 占优</td></tr>")
+        t0 += dur
+    trs = "".join(rows)
+    valid_pct = f"{summary['valid_ratio']:.0%}"
+    section = (
+        '<h2>五、脑电状态序列（状态词 · 探索性观察）</h2>\n'
+        f"<p>本会话脑电被自动切成 <b>{summary['n_states']}</b> 段相对稳定的"
+        "状态，按时间排成「状态词」：<b>"
+        f"{summary['word']}</b>（方法：频段功率分段，QC 同源算法 "
+        f"state_segmentation@{summary.get('version', '')}；"
+        f"有效数据占比 {valid_pct}）。该指标仅供观察与跨会话对照，"
+        "不代表训练好坏的判定。</p>\n"
+        "<table><tr><th>状态</th><th>时间段</th><th>时长</th><th>占优频段</th></tr>"
+        f"{trs}</table>\n"
+    )
+    with open(report_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    anchor = '<p class="note">'
+    if anchor in html:
+        html = html.replace(anchor, section + anchor, 1)
+    elif "</body>" in html:
+        html = html.replace("</body>", section + "</body>", 1)
+    else:
+        return False
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    return True
+
+
 def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                     stop_event=None, session_info=None,
                     adapter="bleak", serial_port=None):
@@ -492,6 +544,7 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
 
     report_path = None
     data_path = None
+    state_word = None
     exp_meta = {"scene": "closedloop", "experiment_tag": exp["tag"],
                 "experiment_mode": mode}
     if session_info:
@@ -502,7 +555,10 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
     # 用**实际运行证据**派生：n_feat>0 → 算出过频段功率（照相）；
     # n_loop>0 → 确实产出过闭环决策（运相）。若基线期即中止、n_loop==0，
     # 则如实不记运相——这正是丙方案相对"按 scene 静态映射"的价值所在。
-    # 融相恒 False（引导多模态层未建成，红线9）；出相恒 False（治理发生在保存之后）。
+    # 融相：A3 修订（2026-09-30 法师裁「是」）只涉曼荼罗场域/VR 反馈路径
+    # （console_server 监测路径已按"锚定到 VR/专注页交互"计入）；本闭环音频
+    # 实验的引导模态＝等时节拍，A3 裁定未涉，仍恒 False（红线9）；
+    # 出相恒 False（治理发生在保存之后）。
     try:
         from muse_local_server import derive_zx_phase
         exp_meta["zx_phase"] = derive_zx_phase(
@@ -521,6 +577,23 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
                                      baseline_db=ctrl.baseline_db)
             print(f"✅ 中文报告: {report_path}"
                   + ("（含配置参数表）" if ok else "（配置表注入失败）"))
+            # 状态词注入（探索性观察指标，失败不影响实验收尾）
+            try:
+                import state_segmentation as _ss
+                eeg_arr = np.column_stack(
+                    [np.asarray(buf.eeg_all[ch], dtype=float)
+                     for ch in buf.channels])
+                _summ = _ss.session_summary(eeg_arr, float(buf.sfreq))
+                if _summ.get("ok"):
+                    if inject_state_word(report_path, _summ):
+                        state_word = _summ["word"]
+                        print(f"✅ 状态词: {state_word}（{_summ['n_states']} 段）")
+                    else:
+                        print("[warn] 状态词注入报告失败（不影响实验）")
+                else:
+                    print(f"[warn] 状态序列弃权：{_summ.get('reason')}")
+            except Exception as _sw_err:
+                print(f"[warn] 状态词计算失败（不影响实验）：{_sw_err}")
     print(f"\n特征日志: {feat_path}")
     print(f"决策日志: {dec_path}")
     print(f"事件日志: {evt_path}")
@@ -545,6 +618,7 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
         "duration_s": dur,
         "report_path": report_path,
         "data_path": data_path,
+        "state_word": state_word,
         "snap_path": snap_path,
         "error": stream_error,
         "stopped": stopped,

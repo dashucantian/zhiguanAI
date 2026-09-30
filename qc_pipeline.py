@@ -34,7 +34,7 @@ from datetime import datetime
 
 # ── 版本与阈值（写进 qc.json，回答"这条质检是哪个阈值版本产生的"）────────
 
-QC_VERSION = "1.0"
+QC_VERSION = "1.1"
 THRESHOLD_VERSION = "20260920"
 
 # 分段口径：沿用报告模板既有值（10 s 窗 / 5 s 步长），**不改判据只改取值来源**
@@ -59,6 +59,12 @@ CH_RAIL_UV = 1800.0           # 绝对幅度超过此值 → 饱和/削顶
 CH_MAINS_RATIO = 0.35         # 50Hz 功率占 45–55Hz 带内比例 → 工频污染
 CH_RMS_BAD_UV = 500.0         # RMS 过高 → 运动/肌电主导
 CH_MIN_SAMPLES = 64           # 样本太少 → unknown（弃权）
+
+# IAF（个体 α 峰频，2026-10-01 W3人机建构-01 增）：静息闭眼 α 段主峰位置，
+# 用法照 Mikhaylets et al., Sci Rep (2026) 16:23560 §2.1（冥想前后静息测算取均）。
+# 仅作描述性指标输出，**不参与 recommend 判定**（守"判据来源唯一"）。
+IAF_SEARCH = (7.0, 13.0)      # 峰值搜索带（略宽于 BANDS["alpha"]，容个体差异）
+IAF_MIN_CONTRAST = 1.3        # 峰功率 / 带内均值 低于此值视为无明确峰（弃权）
 
 
 def _now():
@@ -166,6 +172,51 @@ def _channel_quality(eeg, sfreq, channels):
             out[ch] = {"state": "warn", "reason": f"工频污染（50Hz占比{mains:.0%}）", **metrics}
         else:
             out[ch] = {"state": "ok", "reason": "", **metrics}
+    return out
+
+
+# ── IAF（个体 α 峰频：描述性指标，不进判定链）──────────────────────────
+
+def compute_iaf(eeg, sfreq, channels):
+    """逐通道 α 峰频 + 全通道中位 IAF。
+
+    返回 {"per_channel": {ch: {"iaf_hz": x|null, "contrast": c|null}},
+          "iaf_hz": x|null}。测不出（带内无明确峰/样本不足）如实置 null。
+    """
+    import numpy as np
+    out = {"per_channel": {}, "iaf_hz": None}
+    n = eeg.shape[0]
+    win_needed = int(IAF_SEARCH[0] * 4)      # 至少 4 个最低搜索频率的周期
+    if n < max(CH_MIN_SAMPLES, win_needed) or sfreq <= 0:
+        for ch in channels:
+            out["per_channel"][ch] = {"iaf_hz": None, "contrast": None}
+        return out
+    try:
+        freqs, psd = _psd(eeg, sfreq)
+    except Exception:
+        for ch in channels:
+            out["per_channel"][ch] = {"iaf_hz": None, "contrast": None}
+        return out
+    lo, hi = IAF_SEARCH
+    mask = (freqs >= lo) & (freqs <= hi)
+    vals = []
+    for i, ch in enumerate(channels):
+        if i >= psd.shape[1] or not mask.any():
+            out["per_channel"][ch] = {"iaf_hz": None, "contrast": None}
+            continue
+        p = psd[mask, i]
+        f = freqs[mask]
+        peak_i = int(np.argmax(p))
+        contrast = float(p[peak_i] / max(np.mean(p), 1e-24))
+        if contrast < IAF_MIN_CONTRAST:
+            out["per_channel"][ch] = {"iaf_hz": None, "contrast": round(contrast, 3)}
+            continue
+        iaf = float(f[peak_i])
+        out["per_channel"][ch] = {"iaf_hz": round(iaf, 2),
+                                  "contrast": round(contrast, 3)}
+        vals.append(iaf)
+    if vals:
+        out["iaf_hz"] = round(float(np.median(vals)), 2)
     return out
 
 
@@ -318,6 +369,14 @@ def assess(npz_path, thresholds=None):
         metrics["channel_quality"] = {ch: {"state": "unknown",
                                            "reason": f"{type(ex).__name__}"}
                                       for ch in channels}
+
+    # IAF（QC v1.1 增）：描述性指标，不进 reasons、不影响 recommend
+    try:
+        metrics["iaf"] = compute_iaf(eeg, sfreq, channels)
+    except Exception:
+        metrics["iaf"] = {"per_channel": {ch: {"iaf_hz": None, "contrast": None}
+                                          for ch in channels},
+                          "iaf_hz": None}
     bad = [ch for ch, v in (metrics.get("channel_quality") or {}).items()
            if isinstance(v, dict) and v.get("state") == "bad"]
     if bad:
@@ -539,12 +598,25 @@ def _selftest():
     if not any("channels" in x for x in r5["reasons"]):
         fails.append("⑥ 通道数不一致未被报出")
 
+    # ⑦ IAF（QC v1.1）：10Hz 正弦的干净会话应测得 α 峰 ≈10Hz，且不影响判定
+    iaf1 = r1["metrics"].get("iaf") or {}
+    got = iaf1.get("iaf_hz")
+    if got is None or abs(got - 10.0) > 0.5:
+        fails.append(f"⑦ 干净会话 IAF 应 ≈10Hz（得 {got}）")
+    r_bad = assess(p2)
+    iaf_bad = (r_bad["metrics"].get("iaf") or {}).get("iaf_hz")
+    if iaf_bad is None or abs(iaf_bad - 10.0) > 0.5:
+        fails.append(f"⑦ 含坏通道会话仍应从好通道测得 IAF（得 {iaf_bad}）")
+    if r1["recommend"] != "ingest":
+        fails.append("⑦ IAF 增列不应改变干净会话的 ingest 判定")
+
     if fails:
         for x in fails:
             print("FAIL:", x)
         return 1
     print("PASS: qc_pipeline 自测通过（A1 干净度实算 / A2 通道质量实测 / "
-          "A3 确定性 / A4 版本字段 / P6 弃权 / C-2 长度自洽）")
+          "A3 确定性 / A4 版本字段 / P6 弃权 / C-2 长度自洽 / "
+          "QC1.1 IAF 实算且不进判定链）")
     return 0
 
 
