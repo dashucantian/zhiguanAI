@@ -94,6 +94,26 @@ async function jpost(path, body){
   return d;
 }
 
+/* ── 专注页交互锚定（P0-1，2026-09-30 W1）────────────────────────
+   09-21《EEG×VR 交互分析》P0-1：场景页交互零事件回流 ⇒ 沉淀不出交互数据。
+   本页只发两个离散事件：接入会话（focus_start）与该会话结束（focus_stop），
+   走后端 POST /api/vr/event → 随会话保存写成 experience/vr_interaction
+   （与 marker 同一条 append_event 管道，红线5：不建平行体系）。
+   **不新增任何可见 UI**——"专注态一屏极简"是 09-25 已裁的设计本意，不是缺陷；
+   成败只记在 window.__fxAnchor 诊断钩子上（同 __vrErr 口径），供验收脚本反查。 */
+let fxAnchored = 0;
+async function fxEvent(action){
+  try {
+    const r = await fetch("/api/vr/event", { method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({action, detail:"focus"}) });
+    if (r.ok) { const j = await r.json();
+      window.__fxAnchor = {state:"ok", action, count:j.count}; }
+    else { window.__fxAnchor = {state: r.status === 409 ? "no-session" : "err",
+                                action, why: "HTTP " + r.status}; }
+  } catch (e) { window.__fxAnchor = {state:"err", action, why: e.message}; }
+}
+
 async function sendMarker(label){
   label = (label||"").trim(); if (!label || stopped) return;
   try { const r = await jpost("/api/monitor/marker", { label });
@@ -133,6 +153,7 @@ function watchEnd(){
 }
 function onEnded(){
   leaveIdle();
+  if (fxAnchored === 1) { fxAnchored = 2; fxEvent("focus_stop"); }   // P0-1：配对收尾
   $("elapsed").textContent = "圆坐"; hint("");
   $("done").textContent = "这一坐已结束 · 自评在驾驶舱窗进行";
   $("markerRow").style.display = "none"; $("finish").style.display = "none";
@@ -165,6 +186,7 @@ function attachSession(st){
   $("kicker").textContent = "止 · 观";
   hint("已接入：" + (st.mode || "采集中") + " · 计时随采集走，打点见下方");
   if (!es) attachStream();
+  if (!fxAnchored) { fxAnchored = 1; fxEvent("focus_start"); }   // P0-1：每页只锚一次
 }
 window.addEventListener("focus", checkAlive);   // 从驾驶舱切回来时立刻复查
 

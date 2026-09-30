@@ -71,6 +71,39 @@ let msgT = 0;
 function say(t){ msg.textContent = t; msgT = Date.now(); }
 function saySticky(t){ msg.textContent = t; msgT = Infinity; }  // 错误等需常驻的提示
 
+/* ── 交互事件锚定（P0-1，2026-09-30 W1）────────────────────────────
+   09-21《EEG×VR 交互分析》P0-1 判：本页交互动作（进场景／换模型／出场景）**零事件
+   回流**到 session_events.jsonl ⇒ "VR 迭代一百版也沉淀不出交互数据"。本块把离散动作
+   经 POST /api/vr/event 交后端内存暂存，会话保存时随契约事件流写成
+   experience/vr_interaction —— 复用 marker 同一条 append_event 管道（红线5：不建平行体系）。
+   两条硬边界，破一条即回退：
+     · **引导版一个请求都不发**——09-12 裁定"引导版无任何后端依赖"，
+       且 verify_guided.py 断言引导版零 WS 零 /api/vr/models，本块不得把这条闸弄红；
+     · 无采集会话时后端回 409，HUD **如实显示"未锚定"**——不静默丢弃、不缓存补记
+       （跨会话重放会让 elapsed 失真，宁可不记）。 */
+const VRE = { n: 0, state: 'idle', why: '', text: '交互锚定：初始化中' };
+function vrAnchorRender(){
+  if (isGuided()) VRE.text = '引导版·不锚定（09-12 裁定：无后端依赖）';
+  else if (VRE.state === 'ok') VRE.text = `已锚定 ${VRE.n} 条（随会话保存写入事件流）`;
+  else if (VRE.state === 'no-session') VRE.text = '未锚定（当前无采集会话·不缓存补记）';
+  else if (VRE.state === 'err') VRE.text = '未锚定（' + (VRE.why || '后端异常') + '）';
+  else VRE.text = '交互锚定：待首个动作';
+}
+function vrEvent(action, detail, keepalive){
+  vrAnchorRender();                       // 先更新显示，失败也不让 HUD 停在旧值
+  if (isGuided()) return;                 // 引导版零后端依赖（09-12 裁定）
+  fetch('/api/vr/event', {
+    method: 'POST', keepalive: !!keepalive,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action, detail: detail || ''})
+  }).then(async r => {
+    if (r.ok) { const j = await r.json(); VRE.state = 'ok'; VRE.n = j.count; }
+    else if (r.status === 409) { VRE.state = 'no-session'; }
+    else { VRE.state = 'err'; VRE.why = 'HTTP ' + r.status; }
+  }).catch(() => { VRE.state = 'err'; VRE.why = '后端不可达'; })
+    .then(vrAnchorRender);
+}
+
 /* ── 渲染器 / 场景 ────────────────────────────────────── */
 let renderer;
 try{
@@ -581,7 +614,10 @@ function guidedUpdate(sec){
    主动挂 window 供实测核验 S.a 是否真在自主流转、以及当前处于哪种模式。 */
 window.__vrSaProbe = () => S.a;
 window.__vrMode = () => ({guided: isGuided(), on: GUIDED.on, auto: GUIDED.auto,
-                          aTarget: S.aTarget, thTarget: S.thTarget, elapsed: S.elapsed});
+                          aTarget: S.aTarget, thTarget: S.thTarget, elapsed: S.elapsed,
+                          /* P0-1 诊断钩子：隐藏视口下 rAF 被节流、HUD 不重绘，
+                             无头验收脚本改读这里（同 __vrErr 口径），不看像素自证。 */
+                          anchor: {state: VRE.state, n: VRE.n, text: VRE.text}});
 
 if (isGuided()) {
   // 引导模式：完全不连后端（无 WebSocket、无 /api 请求）→ 可纯离线运行
@@ -656,6 +692,7 @@ async function loadModel(){
     S.modelBox.expandByScalar(0.18);   // 外扩：在"触碰到"体表时即散，而非穿入体内
     relocateInsideParticles();         // 载入瞬间就把已在体内的粒子重排到盒外
     say('模型已载入');
+    vrEvent('model_load', pick.name);
   }catch(err){ saySticky('模型载入失败：'+(err && err.message ? err.message : err)); }
 }
 $('btnModel').onclick = loadModel;
@@ -674,11 +711,14 @@ $('btnVR').onclick = async ()=>{
     session.addEventListener('end', ()=>{
       $('btnVR').classList.remove('on'); $('btnVR').textContent='进入 VR';
       hud.style.display=''; $('bar').style.display='';
+      vrEvent('vr_exit');
     });
+    vrEvent('vr_enter');
   }catch(err){ say('进入 VR 失败：'+err.message); }
 };
 $('btnTheme').onclick = ()=>{ S.autoTheme = !S.autoTheme;
-  $('btnTheme').classList.toggle('on', S.autoTheme); };
+  $('btnTheme').classList.toggle('on', S.autoTheme);
+  vrEvent(S.autoTheme ? 'theme_auto_on' : 'theme_auto_off'); };
 
 /* 声音开关（裁定5：默认关闭）。
    AudioContext 必须由用户手势创建/恢复，故初始化放在点击回调内——
@@ -696,6 +736,7 @@ $('btnSound').onclick = async ()=>{
   $('btnSound').classList.toggle('on', S.soundOn);
   $('btnSound').textContent = '声音：' + (S.soundOn ? '开' : '关');
   audioPush();                             // 立即生效（关→静音，开→按当前指令）
+  vrEvent(S.soundOn ? 'sound_on' : 'sound_off');
 };
 
 /* 冥想引导开关（2026-09-15 法师指示接入）
@@ -813,7 +854,8 @@ renderer.setAnimationLoop(()=>{
         `<b>引导所缘</b> ${GUIDE.bpm} 次/分（呼吸锚，非测量）<br>`+
         `<b>声音</b> ${S.soundOn?'开':'关（默认静音）'}`+
           `${S.beat!=null?` · 节拍 ${S.beat.toFixed(1)}Hz · 音量 ${(S.vol||0).toFixed(2)}`:''}<br>`+
-        `<b>时长</b> ${S.elapsed|0}s`+
+        `<b>时长</b> ${S.elapsed|0}s<br>`+
+        `<b>交互</b> ${VRE.text}`+
         (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`:'');
     } else {
       hud.innerHTML =
@@ -825,7 +867,8 @@ renderer.setAnimationLoop(()=>{
         `${S.beat!=null?` · 节拍 ${S.beat.toFixed(1)}Hz · 音量 ${(S.vol||0).toFixed(2)}`:''}`+
         ` · ${S.audioPhase==='locked'?'基线已锁':(S.audioPhase==='baseline'?'基线采集中':'待启动')}<br>`+
       `<b>心率</b> ${S.hr?Math.round(S.hr)+' bpm':'— （本机无 PPG 设备）'}　<b>时长</b> ${S.elapsed|0}s<br>`+
-      `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}`+
+      `<b>数据源</b> ${S.connected?(S.source||'已连接'):'未连接控制台'}<br>`+
+      `<b>交互</b> ${VRE.text}`+
       (INJ.active?`<br><b style="color:#ffd43b">注入</b> S.a=${INJ.a} S.th=${INJ.th}`+
         (INJ.breath!=null?` 呼吸=${INJ.breath.toFixed(2)}`:'')+
         (INJ.state?` 态=${INJ.state}`:'')+(INJ.wt!=null?` wt=${INJ.wt}`:''):'');
@@ -898,6 +941,12 @@ addEventListener('resize',()=>{
   camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
+
+/* ── P0-1 收尾两个锚点：进入场景（一次）与离开页面（尽力送达）──────────
+   enter 放在模块末尾，确保 GUIDED/isGuided 与 HUD 均已就绪；
+   exit 用 keepalive——页面卸载时仍尽量送达，送不到就如实不记，不伪造。 */
+vrEvent('enter', (isGuided() ? 'guided' : 'eeg') + (INJ.active ? ' +注入' : ''));
+window.addEventListener('pagehide', () => vrEvent('exit', 'pagehide', true));
 </script>
 <script>
 /* ── PWA：注册 Service Worker（2026-09-12 法师裁定：打包为 Pico 通用应用）──

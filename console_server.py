@@ -538,6 +538,7 @@ class MonitorSession:
         self.saved = None
         self.status = "connecting"
         self.started_at = datetime.now()
+        _vr_events_reset()   # P0-1：上一会话的交互事件不带进新会话（防串会话）
         # 回放优先于模拟：给定 npz 即走 ReplaySource（B3／ZG-010）
         if replay_npz:
             self.mode = f"离线回放（{os.path.basename(replay_npz)}）"
@@ -648,6 +649,8 @@ class MonitorSession:
                 # meta.self_report 已由 extra_meta 落盘，事件流是行为侧账本）
                 _append_experience_events(events_path_for(data_path),
                                           info, self.started_at)
+                # VR／专注页交互锚定（P0-1）：同一条 append_event 管道，随保存一次写成
+                _vr_events_flush(events_path_for(data_path))
             except Exception:
                 pass
         return self.saved
@@ -990,6 +993,7 @@ class ExperimentSession:
         self.broadcaster.reset()      # 清空上次会话积压
         self.status = "running"
         self.started_at = datetime.now()
+        _vr_events_reset()   # P0-1：同上，实验会话亦不带入旧事件
         if simulate:
             self.mode = "模拟"
         elif adapter == "bled112":
@@ -1049,6 +1053,7 @@ class ExperimentSession:
                         # 事前登记＋事后自评 → experience 事件（同监测路径，
                         # meta.self_report 由 run_closed_loop 的 session_info 落盘）
                         _append_experience_events(ep, info, self.started_at)
+                        _vr_events_flush(ep)   # P0-1：闭环会话同样锚定 VR／专注交互
                     except Exception:
                         pass
                 except Exception as ex:
@@ -1171,6 +1176,47 @@ class VRSession:
 
 
 VR = VRSession()
+
+
+# ── VR 交互事件锚定（P0-1，2026-09-30 W1）─────────────────────────────
+# 09-21《EEG×VR 交互分析》P0-1 判：VR／专注页面的交互动作（进场景、换模型、
+# 出场景）**零事件回流**到 session_events.jsonl，而 zx_phase 是保存时派生的集合、
+# 无时间点——报告自判"不做，VR 迭代一百版也沉淀不出交互数据"。本块只补"接一根线"：
+# 离散动作 → 内存暂存 → 会话保存时随契约事件流一次写成。
+# 三条既有纪律照守：
+#   · P1a「采集端一次写成」⇒ 不中途开写盘路径（与 marker 同语义）；
+#   · 红线5「复用不复制」⇒ 落盘走 session_contract.append_event 既有管道，
+#     事件型别复用 experience（actor=vr／kind=vr_interaction），**不新建事件体系**；
+#   · 数据诚实（裁定6）⇒ 无会话时 409 如实拒收、**不缓存补记**（跨会话重放会让
+#     elapsed 失真，宁可不记），前端必须把"未锚定"显示出来，不许静默丢弃。
+# 会话互斥由 _assert_no_other_session 保证（同时只有一个在跑），故单缓冲不会串会话。
+_VR_EVENT_ACTIONS = {
+    "enter", "exit", "vr_enter", "vr_exit", "model_load", "sound_on",
+    "sound_off", "theme_auto_on", "theme_auto_off", "variant",
+    "focus_start", "focus_stop",
+}
+_VR_EVENTS = []
+_VR_LOCK = threading.Lock()
+
+
+def _vr_events_reset():
+    with _VR_LOCK:
+        _VR_EVENTS.clear()
+
+
+def _vr_events_flush(events_path, note="VR 交互锚定（P0-1）"):
+    """把暂存的交互事件写成 experience/vr_interaction；契约是附属物，失败不影响保存。
+    返回落盘条数（0＝无事件或事件流不可写，均不报错）。"""
+    from session_contract import append_event
+    with _VR_LOCK:
+        evs = list(_VR_EVENTS)
+        _VR_EVENTS.clear()
+    done = 0
+    for ev in evs:
+        if append_event(events_path, "experience", "vr", "vr_interaction", ev,
+                        note, ts=ev.get("ts")):
+            done += 1
+    return done
 
 
 def _assert_no_other_session(active):
@@ -2218,6 +2264,47 @@ def vr_status():
     return {"clients": VR.count,
             "monitor_running": MONITOR.is_running(),
             "experiment_running": SESSION.is_running()}
+
+
+class VREventPayload(BaseModel):
+    action: str = ""
+    detail: str = ""
+
+
+@app.post("/api/vr/event")
+def vr_event(payload: VREventPayload):
+    """P0-1：VR／专注页把**离散交互动作**锚定到当次会话。
+
+    只在内存暂存（与 marker 同语义：P1a 采集端一次写成，不中途开写盘路径），
+    会话保存时由 `_vr_events_flush` 随契约事件流写成 experience/vr_interaction。
+    无会话＝409 如实拒收，**不缓存补记**——跨会话重放会让 elapsed 失真（数据诚实）。
+    action 走白名单：本端点只收"发生了什么"，不收自由文本，避免变成任意写入面。
+    """
+    sess = MONITOR if MONITOR.is_running() else (SESSION if SESSION.is_running() else None)
+    if sess is None:
+        raise HTTPException(
+            status_code=409,
+            detail="当前没有采集/实验会话，VR 交互不锚定（不缓存补记，免时间失真）")
+    action = (payload.action or "").strip()[:32]
+    if action not in _VR_EVENT_ACTIONS:
+        raise HTTPException(status_code=400,
+                            detail=f"未知交互动作「{action or '空'}」，白名单见 _VR_EVENT_ACTIONS")
+    now = datetime.now()
+    ev = {"action": action,
+          "detail": (payload.detail or "").strip()[:80],
+          "elapsed_sec": round((now - sess.started_at).total_seconds(), 1)
+          if sess.started_at else None,
+          "session_mode": sess.mode,
+          "ts": now.astimezone().isoformat(timespec="seconds")}
+    with _VR_LOCK:
+        _VR_EVENTS.append(ev)
+        n = len(_VR_EVENTS)
+    # 实时让驾驶舱也看得见（观察＞引导：只报"发生了什么"，不加任何指令）
+    try:
+        sess.broadcaster.publish({"type": "vr_event", **ev})
+    except Exception:
+        pass
+    return {"ok": True, "count": n, "elapsed_sec": ev["elapsed_sec"]}
 
 
 @app.get("/api/vr/models")
