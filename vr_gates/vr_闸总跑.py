@@ -53,6 +53,8 @@ PLAN = [
      "S1 反向断言：无粒子/无 bloom/无数据流/无音视频/无定时器＋钩子禁字面量自述"),
     ("mandala-六变体", ["__VARIANTS__"],
      "逐变体像素与帧差（键名从注册表读，不再默认只跑三个）"),
+    ("mandala-S2呼吸", [os.path.join(GATES, "verify_mandala_breath.py")],
+     "S2 三通道呼吸（?breath=on）：回归锚 off ＋ 呼吸存在/无跳变/周期可检出（规格 §四 1~4）"),
     ("引导版零后端", [os.path.join(GATES, "verify_guided.py")],
      "09-12 裁定回归：引导版零 WS 零模型列表；脑电版行为不变（CDP 网络域取证）"),
 ]

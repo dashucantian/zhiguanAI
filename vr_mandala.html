@@ -126,6 +126,9 @@ const VARIANTS = {
        r=12~13.5 是画面最大结构、加色混合亮金，实际占比很可能远超 1.0%。W1 不代改
        配色（美学归设计师＋法师 Pico 终审），问题已回派设计师复核。 */
   },
+  /* 〔2026-09-30 法师裁定·留档标注〕v5stupa 不下线不删：闸门金色占比 0.22% FAIL
+     （09-19 裁丙留档）＋ Pico 真机体感「更兴奋」（约 2 分钟后眩晕，Case-M01 §6.2）同向。
+     留档备终审，参数与几何零改动。 */
   v5stupa: {
     label: 'V5 · 塔影仰观',
     cam: [0, 1.6, 1.5], fog: 0.045,
@@ -138,6 +141,9 @@ const VARIANTS = {
        "仰观巨塔"在几何上成立；但坛体顶缘达 y≈8m、距相机仅 4.5m，压迫感是否过界、
        与 v3immersion（33° 角半径）的区分度是否足够，已回派设计师确认。 */
   },
+  /* 〔2026-09-30 法师裁定·留档标注〕v6void 不下线不删：闸门金色占比 0.06% FAIL
+     （09-19 裁丙留档）＋ Pico 真机体感「不适」（约 2 分钟后眩晕，Case-M01 §6.2）同向。
+     留档备终审，参数与几何零改动。 */
   v6void: {
     label: 'V6 · 虚空',
     cam: [0, 1.6, 5.0], fog: 0.060,
@@ -255,8 +261,8 @@ const centerOrb = new THREE.Mesh(
                                opacity:0.9, fog:false}));
 centerOrb.position.copy(orbPos);
 scene.add(centerOrb);
-/* 中心微光晕（sprite 单枚，暖金，极淡）——给光点一点"呼吸感"的静态暗示，
-   不动画（S1 纪律：完全静态） */
+/* 中心微光晕（sprite 单枚，暖金，极淡）——给光点一点"呼吸感"的静态暗示；
+   默认不动画（S1 纪律），?breath=on 时按通道丙 ±4% 缓动（scale 通道见 S2 块） */
 const glowTex = (()=>{
   const c = document.createElement('canvas'); c.width = c.height = 64;
   const x = c.getContext('2d');
@@ -273,10 +279,65 @@ glow.scale.setScalar(spec.orb.glow);
 glow.position.copy(centerOrb.position);
 scene.add(glow);
 
-/* ── 主循环：S1 完全静态，渲染循环只为 WebXR 帧同步存在 ──────
-   （无任何 per-frame 状态更新——这本身就是 S1 的验收判据之一：
-   连续帧差应恒为 0，"绝对安静"） */
-renderer.setAnimationLoop(()=>{
+/* ── S2 空间呼吸（2026-09-30 法师裁「开工」·ZG-078·AI-008）──────────
+   规格：01_项目管理\20260917_曼荼罗场域S2空间呼吸规格_v1.md §二（幅度实算反解）
+   三通道（彼此独立、可分别验收，覆盖不同深度区间）：
+     甲 · 雾场 FogExp2.density     Δρ=±0.0040 绝对   周期 34s 相位 90°
+     乙 · 各层 opacity ×(1±4%)     三层错相 120°     周期 26s（近身呼吸载体）
+     丙 · 中心光晕 glow.scale ±4%                    周期 13s 相位 180°
+   开关：默认 OFF（＝S1 完全静态：六变体闸 static/帧差判据、S1 闸 11 判据、
+         静态纪律闸的回归锚全部不破）；?breath=on 启用三通道。
+         S2 真机 D 级验收过后再翻默认（候裁登记：D-0930-W1a §六.4）。
+   纪律（规格 §二）：目标值慢正弦驱动＋一阶平滑跟随（τ=周期/6）；dt 取动画循环
+   真实时间差、禁固定步长；相位固定不重算（跳变唯一来源已封）；绝不缩放坛城
+   本体（丙通道缩的是所缘周围微光，规格 §二已论证非本体）；不动视点。 */
+const BREATH_ON = (new URLSearchParams(location.search).get('breath') || 'off') === 'on';
+const BREATH = BREATH_ON ? {
+  fog:  { base: spec.fog,      amp: 0.0040, period: 34, phase: Math.PI / 2,     tau: 34 / 6 },
+  opac: {                      amp: 0.04,   period: 26,                         tau: 26 / 6 },
+  glow: { base: spec.orb.glow, amp: 0.04,   period: 13, phase: Math.PI,         tau: 13 / 6 },
+} : null;
+/* 乙通道按现存层建状态（inner 可为 null 变体）；相位固定 内0°/中120°/外240° */
+const breathLayers = BREATH_ON
+  ? [innerMesh, middleMesh, groundMesh]
+      .map((m, i) => m ? { mesh: m, base: m.material.opacity,
+                           phase: i * 2 * Math.PI / 3, cur: m.material.opacity } : null)
+      .filter(Boolean)
+  : [];
+const breathState = BREATH_ON
+  ? { fog: spec.fog, glow: spec.orb.glow, lastT: null }
+  : null;
+
+/* ── 主循环：默认完全静态（渲染循环只为 WebXR 帧同步存在）──────
+   ?breath=on 时三通道按规格更新——除此之外仍无任何 per-frame 状态更新；
+   breath=off 路径与 S1 逐字节同行为（连续帧差恒 0 的"绝对安静"判据保留） */
+renderer.setAnimationLoop((time)=>{
+  if (BREATH_ON && breathState.lastT !== null) {
+    const t = time / 1000;
+    const dt = Math.min(Math.max(t - breathState.lastT, 0), 0.5);   // 钳大间隙防跳变
+    breathState.lastT = t;
+    const follow = tau => 1 - Math.exp(-dt / tau);
+    const twoPi = Math.PI * 2;
+    /* 甲 · 雾场（主通道，真实纵深——远处起效，近身所缘不动，规格 §二量级论证） */
+    const fogTarget = BREATH.fog.base
+      + BREATH.fog.amp * Math.sin(twoPi * t / BREATH.fog.period + BREATH.fog.phase);
+    breathState.fog += (fogTarget - breathState.fog) * follow(BREATH.fog.tau);
+    scene.fog.density = breathState.fog;
+    /* 乙 · 坛城明暗（近身呼吸载体；三层错相 120°，读作"空间在呼吸"非"整块在闪"） */
+    for (const L of breathLayers) {
+      const opTarget = L.base * (1 + BREATH.opac.amp
+        * Math.sin(twoPi * t / BREATH.opac.period + L.phase));
+      L.cur += (opTarget - L.cur) * follow(BREATH.opac.tau);
+      L.mesh.material.opacity = L.cur;
+    }
+    /* 丙 · 中心光晕尺度（所缘的呼吸暗示；非坛城本体） */
+    const glowTarget = BREATH.glow.base * (1 + BREATH.glow.amp
+      * Math.sin(twoPi * t / BREATH.glow.period + BREATH.glow.phase));
+    breathState.glow += (glowTarget - breathState.glow) * follow(BREATH.glow.tau);
+    glow.scale.setScalar(breathState.glow);
+  } else if (BREATH_ON) {
+    breathState.lastT = time / 1000;   // 首帧只记基准时刻，次帧起呼吸
+  }
   renderer.render(scene, camera);
 });
 
@@ -336,7 +397,7 @@ function depthMetrics(cfg){
   };
 }
 window.__mandalaDiag = {
-  stage: 'S1',
+  stage: BREATH_ON ? 'S2' : 'S1',
   variant: VARIANT_KEY,
   variantLabel: spec.label,
   fog: spec.fog,
@@ -359,7 +420,23 @@ window.__mandalaDiag = {
   drawCallsScene: scene.children.length,
   center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
   palette: PALETTE,
-  static: true,
+  static: !BREATH_ON,
+  /* S2 呼吸自述（verify_mandala_breath.py 可对独立复算）：
+     enabled=false 即默认态＝S1 回归锚；enabled=true 时三通道参数与规格逐值对应 */
+  breath: BREATH_ON ? {
+    enabled: true,
+    spec: '20260917_曼荼罗场域S2空间呼吸规格_v1.md §二',
+    fog:   { base: BREATH.fog.base, amp: BREATH.fog.amp, period: BREATH.fog.period,
+             phaseDeg: 90, tau: BREATH.fog.tau },
+    opacity: { amp: BREATH.opac.amp, period: BREATH.opac.period, tau: BREATH.opac.tau,
+               layerPhasesDeg: breathLayers.map(L =>
+                 +((L.phase * 180 / Math.PI) % 360).toFixed(0)) },
+    glow:  { base: BREATH.glow.base, amp: BREATH.glow.amp, period: BREATH.glow.period,
+             phaseDeg: 180, tau: BREATH.glow.tau },
+  } : {
+    enabled: false,
+    note: '默认静态＝S1 回归锚；?breath=on 启用 S2 三通道呼吸',
+  },
 };
 
 /* HUD 标注当前变体（桌面预览对比时肉眼可辨）
@@ -367,7 +444,7 @@ window.__mandalaDiag = {
    "S1 基准 ·…"，实际渲染成"曼荼罗场域 · S1 · S1 基准 · 三层纵深"（S1 重复）。
    去掉前缀里的 S1，保留 label 的完整题名。 */
 document.getElementById('hud').textContent =
-  '曼荼罗场域 · ' + spec.label;
+  '曼荼罗场域 · ' + spec.label + (BREATH_ON ? ' · S2 呼吸中' : '');
 
 /* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色） */
 document.getElementById('load').style.display = 'none';

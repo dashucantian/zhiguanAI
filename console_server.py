@@ -609,13 +609,19 @@ class MonitorSession:
         #   照相证据：确实算出过频段功率（buf.latest_bp 非空）
         #   运相证据：闭环决策已出基线期并实际产出决策（ctrl_phase=="locked"）
         #             仅在基线期累积、未出决策则为 "baseline"，不计运相
-        #   融相恒 False：引导多模态层尚未建成（红线9：不得记成已发生）
+        #   融相（A3 修订·ZG-077，2026-09-30 法师裁「是」）：曼荼罗场域/VR 反馈
+        #             即"引导多模态层"，其参与证据＝本会话锚定到 VR/专注页交互
+        #             （P0-1 管道暂存的 vr_interaction ≥1 条，客观可查）。
+        #             无锚定事件仍如实不计（红线9：不得把未发生记成已发生）。
+        #             注：此刻 _VR_EVENTS 尚未 flush（flush 在下方保存成功后），
+        #             故此处在锁内只读计数、不清空，flush 语义不变。
         #   出相恒 False：治理/质检发生在此保存动作**之后**
         try:
             from muse_local_server import derive_zx_phase
             info["zx_phase"] = derive_zx_phase(
                 has_bandpower=bool(getattr(buf, "latest_bp", None)),
                 has_closedloop_decision=(self.ctrl_phase == "locked"),
+                has_guided=_vr_events_pending_count() > 0,
             )
         except Exception as e:
             # 五相标注失败不得影响数据保存主流程（同声音决策的容错原则）
@@ -1202,6 +1208,14 @@ _VR_LOCK = threading.Lock()
 def _vr_events_reset():
     with _VR_LOCK:
         _VR_EVENTS.clear()
+
+
+def _vr_events_pending_count():
+    """A3（ZG-077）融相证据读取：锁内只读当前未落盘的锚定事件条数。
+    供保存路径派生 zx_phase 时判定引导多模态层是否参与（≥1 条即参与）；
+    不消费事件，flush 仍由 _vr_events_flush 独占。"""
+    with _VR_LOCK:
+        return len(_VR_EVENTS)
 
 
 def _vr_events_flush(events_path, note="VR 交互锚定（P0-1）"):
