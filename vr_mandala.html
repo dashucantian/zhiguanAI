@@ -285,13 +285,14 @@ scene.add(glow);
      甲 · 雾场 FogExp2.density     Δρ=±0.0040 绝对   周期 34s 相位 90°
      乙 · 各层 opacity ×(1±4%)     三层错相 120°     周期 26s（近身呼吸载体）
      丙 · 中心光晕 glow.scale ±4%                    周期 13s 相位 180°
-   开关：默认 OFF（＝S1 完全静态：六变体闸 static/帧差判据、S1 闸 11 判据、
-         静态纪律闸的回归锚全部不破）；?breath=on 启用三通道。
-         S2 真机 D 级验收过后再翻默认（候裁登记：D-0930-W1a §六.4）。
+   开关：默认 ON（2026-10-01 法师 Pico 真机验收三格全过后金口「翻为开」，
+         D 分片登记）；?breath=off 关断＝S1 完全静态，六变体闸/S1 闸/
+         静态纪律闸的回归锚判据照规格 §三.4 全部改走显式 ?breath=off 复跑，
+         「绝对安静」仍可回归，两者互不掩盖。
    纪律（规格 §二）：目标值慢正弦驱动＋一阶平滑跟随（τ=周期/6）；dt 取动画循环
    真实时间差、禁固定步长；相位固定不重算（跳变唯一来源已封）；绝不缩放坛城
    本体（丙通道缩的是所缘周围微光，规格 §二已论证非本体）；不动视点。 */
-const BREATH_ON = (new URLSearchParams(location.search).get('breath') || 'off') === 'on';
+const BREATH_ON = (new URLSearchParams(location.search).get('breath') || 'on') !== 'off';
 const BREATH = BREATH_ON ? {
   fog:  { base: spec.fog,      amp: 0.0040, period: 34, phase: Math.PI / 2,     tau: 34 / 6 },
   opac: {                      amp: 0.04,   period: 26,                         tau: 26 / 6 },

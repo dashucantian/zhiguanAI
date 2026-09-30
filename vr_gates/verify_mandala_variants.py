@@ -57,7 +57,7 @@ async def evaluate(ws, expr):
 async def verify_variant(ws, key):
     """导航并对单变体跑判据，返回 (fails, diag, png_path)"""
     fails = []
-    await send(ws, "Page.navigate", {"url": f"{BASE}?variant={key}"})
+    await send(ws, "Page.navigate", {"url": f"{BASE}?variant={key}&breath=off"})
     for _ in range(60):
         await asyncio.sleep(0.5)
         gone = await evaluate(ws, "document.getElementById('load').style.display")

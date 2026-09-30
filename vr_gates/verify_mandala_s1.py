@@ -34,7 +34,7 @@ if not EDGE:
     sys.exit(1)
 
 PORT = 9344
-URL = "http://127.0.0.1:8777/mandala"
+URL = "http://127.0.0.1:8777/mandala?breath=off"  # S1 回归锚：呼吸默认已翻 on（2026-10-01 法师金口），照规格 §三.4 显式关断复跑
 # 产物落点＝**脚本自己所在的那棵工作树**（AI-005 2026-09-17 修）。
 # 原为硬编码 C:\Users\tiand\OneDrive\zhiguanAI\output\…，导致从 D 盘工作树跑验收时
 # 截图写进 OneDrive 那棵树——两树权威归属未定前，这是跨树污染源。

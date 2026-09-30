@@ -6,12 +6,15 @@
  如实不判，见末尾"未验证项"）。
 
 判据（本脚本）：
-  1. 回归锚未破：默认 URL（?breath 缺省＝off）stage=S1/static=true，
-     两帧差（2.5s）≤ 1.0/255 —— S1"绝对安静"判据保持可复跑
+  1. 回归锚未破：?breath=off（S1"绝对安静"显式关断）stage=S1/static=true，
+     两帧差（2.5s）≤ 1.0/255 —— S1 判据照规格 §三.4 保持可复跑；
+     另断言默认 URL（不带参数）breath.enabled=true——默认翻转（2026-10-01
+     法师真机验收后金口「翻为开」）如实生效
   2. 呼吸存在：?breath=on 时 stage=S2/static=false/breath.enabled=true，
      三对帧差（各 2.5s，取最大）∈ [0.008, 0.30]/255
-     （〔校准留痕〕规格原提案下限 0.02 对 2.5s 采样窗反推有误，首跑实测 0.0150，
-      依规格 §七"提案值实测后可调、调整须留痕"条款校准为 0.008，候法师追认）
+     （〔校准追认〕规格原提案下限 0.02 对 2.5s 采样窗反推有误，首跑实测 0.0150，
+      依规格 §七"提案值实测后可调、调整须留痕"条款校准为 0.008；
+      2026-10-01 法师金口「是」追认）
   3. 无跳变：?breath=on 连续 12 帧（约 0.6s 间隔）相邻帧差全部 ≤ 0.05/255
   4. 周期可检出：?breath=on 全帧平均亮度序列（≥50s 实测时间戳）自相关峰
      落在雾通道设定周期 ±15%（证"是呼吸不是噪声"）
@@ -125,22 +128,32 @@ async def main():
         await send(ws, "Page.enable")
         await send(ws, "Runtime.enable")
 
-        # ── 判据 1：回归锚（默认 off＝S1 绝对安静）────────────────────
-        print("\n── 判据 1：回归锚未破（默认 URL ＝ breath off）────────────")
-        await navigate_wait(ws, BASE + "?variant=s1")
+        # ── 判据 1：回归锚（显式 ?breath=off＝S1 绝对安静，规格 §三.4）──
+        print("\n── 判据 1：回归锚未破（?breath=off 显式关断）────────────")
+        await navigate_wait(ws, BASE + "?variant=s1&breath=off")
         d = json.loads(await evaluate(ws, "JSON.stringify(window.__mandalaDiag||null)") or "null")
-        check(bool(d) and d.get("stage") == "S1", "stage=S1（默认静态自声明）",
-              f"默认 URL stage 异常：{d and d.get('stage')}")
+        check(bool(d) and d.get("stage") == "S1", "stage=S1（关断后静态自声明）",
+              f"breath=off stage 异常：{d and d.get('stage')}")
         check(bool(d) and d.get("static") is True, "static=true（回归锚自声明）",
-              "默认 URL static 非 true")
+              "breath=off static 非 true")
         check(bool(d) and (d.get("breath") or {}).get("enabled") is False,
-              "breath.enabled=false（默认关，诊断钩子如实）", "默认 URL breath 误报开启")
+              "breath.enabled=false（显式关断，诊断钩子如实）", "breath=off 但钩子报开启")
         a1 = await shot(ws, "off_a")
         await asyncio.sleep(2.5)
         a2 = await shot(ws, "off_b")
         mad1 = float(np.abs(a1 - a2).mean())
         check(mad1 <= 1.0, f"breath=off 两帧差 {mad1:.4f}/255 ≤1.0（绝对安静保持）",
               f"回归锚破坏：off 两帧差 {mad1:.4f}")
+
+        # 默认翻转断言（2026-10-01 法师金口「翻为开」）：裸 URL 应呼吸着
+        print("\n── 判据 1b：默认翻转（裸 URL 缺省＝呼吸开）────────────")
+        await navigate_wait(ws, BASE + "?variant=s1")
+        d0 = json.loads(await evaluate(ws, "JSON.stringify(window.__mandalaDiag||null)") or "null")
+        check(bool(d0) and (d0.get("breath") or {}).get("enabled") is True,
+              "裸 URL breath.enabled=true（默认已翻为开，法师 2026-10-01 金口）",
+              "裸 URL breath 仍是关——默认翻转未生效")
+        check(bool(d0) and d0.get("static") is False,
+              "裸 URL static=false（缺省即 S2）", "裸 URL static 仍为 true")
 
         # ── 判据 2：呼吸存在 ─────────────────────────────────────────
         print("\n── 判据 2：呼吸存在（?breath=on，两帧差双边界）────────────")
@@ -183,11 +196,11 @@ async def main():
             c2 = await shot(ws, "on_d")
             mad_pairs.append(float(np.abs(c1 - c2).mean()))
         mad2 = max(mad_pairs)
-        # 〔判据校准留痕·规格 §七"提案值实测后可调"条款〕下限 0.02→0.008：
+        # 〔判据校准·已追认〕规格 §七"提案值实测后可调"条款：下限 0.02→0.008；
         # 规格自己的量级论证给全周期峰谷 0.08/255（通道乙 ±4%），2.5s 采样窗
         # 单对理论上限 ≈0.024（sin(π·2.5/26)×0.08），随机相位下 0.01x 属正常——
         # 首跑实测 0.0150 被旧下限误杀，呼吸本体已由判据 4 自相关 r=0.91 独立证实。
-        # 上限 0.30 不动。校准已登记 D-0930-W1a 追记（候法师追认）。
+        # 上限 0.30 不动。校准已由法师 2026-10-01 金口「是」追认（D 分片登记）。
         check(0.008 <= mad2 <= 0.30,
               f"breath=on 三对帧差最大 {mad2:.4f}/255 ∈ [0.008, 0.30]（呼吸存在且不过头）",
               f"呼吸存在判据失败：三对帧差 {['%.4f' % m for m in mad_pairs]}"
@@ -276,7 +289,7 @@ async def main():
     print(f"   产物：{OUT}\\（off/on 帧对＋亮度序列.csv）")
     print("\n⚠️ 如实标注的未验证项（规格 §四 判据 5~7，脚本不可替代）：")
     print("   ⑤ 去视觉测试 ⑥ 心率原则（更安静） ⑦ D 级体感「说不出哪里在动，但觉得活着」")
-    print("   —— 唯一判据源＝法师 Pico 真机；S2 默认开关翻转亦候真机验收后裁定")
+    print("   —— 唯一判据源＝法师 Pico 真机（2026-10-01 真机三格全过：A 还在／B 更安静／C 原话留档）")
     return 0
 
 
