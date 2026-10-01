@@ -3308,8 +3308,11 @@ connectMonitorStream();
     // ③ 扇出中转
     if (h && h.listen) {
       $("ndN3Title").textContent = h.listen;
+      // 上游状态**由后端给原因**，不在前端硬写（本轮踩过：把"没下游"写成"②还没开"）
       setNode("ndN3State", "🟢 已在跑 · 下游 " + h.downstreams
-        + (h.upstream_alive ? " · 上游已接" : " · 上游未接（②还没开）"),
+        + (h.upstream_alive
+            ? (" · 上游已接" + (h.lines_forwarded ? "，已转 " + h.lines_forwarded + " 行" : "，暂无数据"))
+            : (" · 上游未接：" + (h.upstream_reason || "原因未知"))),
         h.upstream_alive ? "ok" : "bad");
       const hp = parseInt((h.listen || "").split(":")[1], 10);
       if (hp) hubPort = hp;

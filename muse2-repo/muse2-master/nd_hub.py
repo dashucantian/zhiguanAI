@@ -254,17 +254,22 @@ def launch_if_needed(exe, proc_name, wait_sec=25.0, want_port=False, port_probe=
 class FanoutBridge:
     """独占 1.2.0 的唯一客户端位，把每一行**原样**转发给所有下游。
 
-    上游懒连接：第一个下游接入时才连上游；最后一个下游断开后按 idle_stop_sec 释放上游
-    （避免长期占着那个唯一的客户端位）。
+    **上游默认"立连"（keep_upstream=True）**：`start()` 起来就去连 ②，不等下游。
+    〔2026-10-01 改〕原设计是"懒连接"（第一个下游接入才连上游），实机一看就出问题：
+    ③ 起好后若④还没连，界面显示"上游未接"——而**用户会把它读成"②没开"**（当时②明明在听）。
+    更要紧的是：懒连接让"起了中转"这件事**看不出任何效果**。
+    枢纽本来就是要当那唯一客户端的，占着是对的 ⇒ 改为立连。
+    `keep_upstream=False` 可退回懒连接（保留给"只想按需取数"的场合）。
     """
 
     def __init__(self, upstream=None, listen_host="127.0.0.1", listen_port=0,
-                 idle_stop_sec=30.0, on_line=None):
-        self.upstream = upstream              # (host, port) 或 None（None＝接入时自动发现）
+                 idle_stop_sec=30.0, on_line=None, keep_upstream=True):
+        self.upstream = upstream              # (host, port) 或 None（None＝自动发现②）
         self.listen_host = listen_host
         self.listen_port = listen_port        # 0＝让系统挑一个空闲口
         self.idle_stop_sec = idle_stop_sec
         self.on_line = on_line                # 可选：我方自用回调（驾驶舱记录/入库走这里）
+        self.keep_upstream = keep_upstream    # True＝start() 即连②；False＝有下游才连
 
         self._srv = None
         self._port = None
@@ -294,6 +299,8 @@ class FanoutBridge:
         self._port = self._srv.getsockname()[1]
         self._accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
         self._accept_thread.start()
+        if self.keep_upstream:
+            self._ensure_upstream()          # 立连②：不等下游（见类注释）
         return self._port
 
     def stop(self):
@@ -327,12 +334,25 @@ class FanoutBridge:
             pass
         self._up_sock = None
 
+    def upstream_reason(self):
+        """上游没接上时，**说清是哪一个原因**——不要硬写一个（本轮踩过：把"没下游"写成"②没开"）。"""
+        if self._up_sock:
+            return None
+        if self._stop.is_set():
+            return "已停止"
+        if not (self.upstream or find_app_endpoint()):
+            return "② 未监听（须在 1.2.0 窗口点「Open data sources」）"
+        if self.last_error:
+            return "连接②失败：" + self.last_error
+        return "正在连接②…"
+
     def _upstream_loop(self):
         while not self._stop.is_set():
-            with self._lock:
-                n_down = len(self._downstreams)
-            if n_down == 0 and (time.time() - self._last_downstream_gone) > self.idle_stop_sec:
-                return                                    # 空闲自停，释放唯一客户端位
+            if not self.keep_upstream:                    # 懒连接模式才看下游
+                with self._lock:
+                    n_down = len(self._downstreams)
+                if n_down == 0 and (time.time() - self._last_downstream_gone) > self.idle_stop_sec:
+                    return                                # 空闲自停，释放唯一客户端位
             target = self.upstream or find_app_endpoint()
             if not target:
                 time.sleep(UPSTREAM_RECONNECT_SEC)
@@ -378,6 +398,8 @@ class FanoutBridge:
                 except Exception:
                     pass
                 self._downstreams.remove(c)
+            if not self._downstreams:
+                self._last_downstream_gone = time.time()      # 供懒连接模式判空闲
         if self.on_line:
             try:
                 self.on_line(raw)
@@ -407,6 +429,8 @@ class FanoutBridge:
             "downstreams": len(self._downstreams),
             "upstream": (f"{up[0]}:{up[1]}" if up else None),
             "upstream_alive": bool(self._up_sock),
+            "upstream_reason": self.upstream_reason(),
+            "keep_upstream": self.keep_upstream,
             "lines_forwarded": self.lines_forwarded,
             "upstream_connects": self.upstream_connects,
             "upstream_errors": self.upstream_errors,
