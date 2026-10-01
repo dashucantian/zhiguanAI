@@ -356,7 +356,7 @@
       </div>
       <div class="field" id="monNdField" style="display:none">
         <label>NeuraDock 数据服务地址</label>
-        <input id="monNd" value="127.0.0.1:9600" placeholder="IP:端口">
+        <input id="monNd" placeholder="如 192.168.188.105:9600　（1.2.0 只绑局域网 IP、不绑回环；或点下方「数据源地址填中转口」）">
       </div>
     </div>
     <!-- ZG-076①（2026-09-29）：NeuraDock 开发者指标平台 HTTP API ＝ **旁证源**，
@@ -390,6 +390,41 @@
       <div class="hint" id="ndConflictMsg"
            style="color:#ff9800; border-left:3px solid #ff9800; padding-left:8px;">
       </div>
+    </div>
+    <!-- ═══ NeuraDock 接入（2026-10-01 W1·AI-005·DeepSeek）════════════════════════
+         法师 10-01 令「用。开始嵌入施工」。一屏办三件事：
+           ① 两盏状态灯：1.2.0 数据服务（**只绑局域网 IP，不绑回环**）／指标平台（**端口每次重启随机**）；
+           ② 一键启动缺失者（单例守卫：已在跑就不重起；**只启动、不停止**）；
+           ③ 扇出中转——真机实测：**9600 只服务一个客户端**，第二个一连第一个就被静默踢掉且不自愈
+              ⇒ 枢纽独占 9600，向驾驶舱与平台**逐行原样**扇出多份，两边都连枢纽的回环口，
+                 谁先谁后都不再互踢，且不必写死那个会漂的局域网 IP。
+         嵌入区：平台界面**可 iframe**（实测无 X-Frame-Options／无 CSP，且**可点击**）。
+         只读边界：本卡只做「发现／拉起／中转／切源」，**不解析、不改写任何 EEG 数值**；
+         指标代理仍走既有 /api/ndmetrics（不重复实现）。 -->
+    <div class="row" style="border-top:1px solid var(--border); margin-top:12px; padding-top:10px;">
+      <div class="hint" style="font-weight:700; color:var(--accent); font-size:13px;">🔌 NeuraDock 接入</div>
+    </div>
+    <div class="row">
+      <div class="hint" id="ndHubLamp" style="font-size:12.5px;">⚪ 读取中…</div>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="ndRefresh" type="button">↻ 刷新状态</button>
+      <button class="btn" id="ndLaunch" type="button">▶ 一键启动（缺谁起谁）</button>
+      <button class="btn ghost" id="ndHubStart" type="button">⇄ 起扇出中转</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="ndHubToMon" type="button">▸ 数据源地址填中转口</button>
+      <button class="btn ghost" id="ndToPlatform" type="button">▸ 把平台切到中转</button>
+      <button class="btn ghost" id="ndFillSide" type="button">▸ 回填旁证源端口</button>
+      <button class="btn ghost" id="ndEmbedTgl" type="button">🖼 嵌入平台界面</button>
+    </div>
+    <div class="row">
+      <div class="hint" id="ndHubMsg"></div>
+    </div>
+    <div class="row" id="ndEmbedWrap" style="display:none;">
+      <iframe id="ndEmbed" title="NeuraDock 指标平台"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+              style="width:100%; height:460px; border:1px solid var(--border); border-radius:8px; background:#111;"></iframe>
     </div>
     <div class="row" id="expParamsRow" style="display:none">
       <div class="field">
@@ -1896,7 +1931,10 @@ $("monStart").onclick = async () => {
     // 界面永久停在下面那句"正在连接数据源…"（复现存证见 ZG076存证 目录）。
     let ndAddr = null;
     if (mode === "neuradock") {
-      const chk = parseHostPort($("monNd").value || "127.0.0.1:9600");
+      // 〔2026-10-01 W1·AI-005〕原回退写死 127.0.0.1:9600，**实测连不上**——
+      // 1.2.0 的数据服务只绑局域网 IP、不绑回环。故优先用「NeuraDock 接入」卡
+      // 刚发现到的真实端点；发现不到才退回旧值（并会在连接时报可操作的错）。
+      const chk = parseHostPort($("monNd").value || window.__ndAppEndpoint || "127.0.0.1:9600");
       if (chk.err) {
         $("monStart").disabled = false;
         return monMsg("数据服务地址有误：" + chk.err, "err");
@@ -3169,6 +3207,116 @@ resizeChart();
 redrawMonitor();
 connectStream();
 connectMonitorStream();
+// ═══ NeuraDock 接入卡（2026-10-01 W1·AI-005·DeepSeek）═══════════════════════
+// 只调 /api/nd/*；不改任何既有数据流。设计依据＝真机实测七条（《乙案探索方案》§十）。
+(function () {
+  if (!$("ndHubLamp")) return;                 // 页面为旧版时静默跳过，不报错
+  const lamp = $("ndHubLamp"), msg = $("ndHubMsg");
+  let hubPort = null;
+  function say(t, cls) {
+    if (!msg) return;
+    msg.textContent = t;
+    msg.style.color = (cls === "err") ? "#ff6b6b" : (cls === "ok" ? "#5fd6cb" : "#8fa3c0");
+  }
+  async function jget(u) {
+    const r = await fetch(u, { cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+    return j;
+  }
+  async function jpost(u, b) {
+    const r = await fetch(u, { method: "POST", headers: { "Content-Type": "application/json" },
+                               body: JSON.stringify(b || {}) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || ("HTTP " + r.status));
+    return j;
+  }
+  function dot(on) { return on ? "🟢" : "⚪"; }
+  function paint(st) {
+    const a = st.app || {}, p = st.platform || {}, h = st.hub || null;
+    const at = a.endpoint ? (a.endpoint[0] + ":" + a.endpoint[1])
+                          : (a.running ? "在跑·数据服务未开（须点『Open data sources』）" : "未启动");
+    const pt = p.port ? ("127.0.0.1:" + p.port) : (p.running ? "在跑·端口未发现" : "未启动");
+    lamp.textContent = dot(!!a.endpoint) + " 1.2.0 数据服务：" + at
+      + "　｜　" + dot(!!p.port) + " 指标平台：" + pt
+      + "　｜　" + (h && h.listen ? ("⇄ 中转 " + h.listen + "（下游 " + h.downstreams + "）")
+                                 : "⇄ 中转未起")
+      + (st.discovery_error ? ("　⚠ " + st.discovery_error) : "");
+    if (p.port) lamp.dataset.platformPort = p.port;
+    if (a.endpoint) lamp.dataset.appHost = a.endpoint[0];
+    // 供 monStart 的空值回退用：优先真实的局域网端点，而不是写死的 127.0.0.1:9600
+    window.__ndAppEndpoint = a.endpoint ? (a.endpoint[0] + ":" + a.endpoint[1]) : null;
+  }
+  async function refresh() {
+    try { paint(await jget("/api/nd/status")); }
+    catch (e) { say("读接入状态失败：" + e.message
+                    + "（服务是否已重启到含 /api/nd 的版本？）", "err"); }
+  }
+  async function ensureHub() {
+    if (hubPort) return hubPort;
+    const r = await jpost("/api/nd/hub/start", {});
+    hubPort = r.hub_port;
+    return hubPort;
+  }
+  $("ndRefresh").onclick = refresh;
+  $("ndLaunch").onclick = async () => {
+    say("正在拉起缺失的程序…", "");
+    try {
+      const r = await jpost("/api/nd/launch", { which: "both" });
+      say("① 1.2.0：" + r.app.msg + "　② 指标平台：" + r.platform.msg
+          + "　（平台起来后点「回填旁证源端口」）", "ok");
+      paint(r.status);
+    } catch (e) { say("拉起失败：" + e.message, "err"); }
+  };
+  $("ndHubStart").onclick = async () => {
+    try {
+      const r = await jpost("/api/nd/hub/start", {});
+      hubPort = r.hub_port;
+      say("扇出中转已起：" + r.hub_addr + "　——下游都连这个回环口（解 9600 单客户端）", "ok");
+      refresh();
+    } catch (e) { say("起中转失败：" + e.message, "err"); }
+  };
+  $("ndHubToMon").onclick = async () => {
+    try {
+      const p = await ensureHub();
+      $("monNd").value = "127.0.0.1:" + p;
+      say("已把「NeuraDock 数据服务地址」填成中转口 127.0.0.1:" + p
+          + "　（比直连 1.2.0 的局域网 IP 稳：IP 漂移与单客户端都由枢纽吸收）", "ok");
+    } catch (e) { say("填中转口失败：" + e.message, "err"); }
+  };
+  $("ndToPlatform").onclick = async () => {
+    say("正在把平台切到中转…", "");
+    try {
+      const r = await jpost("/api/nd/platform/connect", { target: "hub" });
+      say("平台数据源已指向 " + r.pointed_at + "（对方回 ok=" + r.ok + "）", r.ok ? "ok" : "err");
+    } catch (e) { say("切平台失败：" + e.message, "err"); }
+  };
+  $("ndFillSide").onclick = async () => {
+    try {
+      await refresh();
+      const p = lamp.dataset.platformPort;
+      if (!p) { say("未发现平台端口——请先「一键启动」并等它起来，再点本钮。", "err"); return; }
+      $("ndSideMode").value = "metrics_api";
+      $("ndSideAddr").value = "127.0.0.1:" + p;
+      if (typeof ndSideApply === "function") ndSideApply();
+      say("旁证源已回填 127.0.0.1:" + p + "（端口每次重启都变，故用回填、不手抄）", "ok");
+    } catch (e) { say("回填失败：" + e.message, "err"); }
+  };
+  $("ndEmbedTgl").onclick = async () => {
+    const w = $("ndEmbedWrap"), f = $("ndEmbed");
+    if (w.style.display !== "none") {
+      w.style.display = "none"; f.src = "about:blank"; say("已收起嵌入区。", ""); return;
+    }
+    await refresh();
+    const p = lamp.dataset.platformPort;
+    if (!p) { say("未发现平台端口，无法嵌入。", "err"); return; }
+    f.src = "http://127.0.0.1:" + p + "/";
+    w.style.display = "";
+    say("已嵌入平台界面（实测无防嵌头、可点击）。空白或点不动＝平台换了端口，刷新后重试。", "ok");
+  };
+  refresh();
+  setInterval(refresh, 20000);
+})();
 </script>
 </body>
 </html>

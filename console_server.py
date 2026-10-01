@@ -74,6 +74,10 @@ from experiment_config_loader import (load_experiment_config, validate_config,
                                       save_snapshot, DEFAULT_CONFIG)
 # 质检唯一实现（P0-1，2026-09-20）：判定一律走 qc_pipeline，不从 report.html 取数
 import qc_pipeline
+# NeuraDock 接入（2026-10-01 W1·AI-005·DeepSeek）：端口发现／单例拉起／扇出中转／数据源切换。
+# 做成"注册式模块"是为把本文件改动面压到最小两行——本文件常有他窗在途改动，
+# 整段写进来会在对方提交时被一并扫走（KZ-0927-W3a 模式）。详见 nd_routes.py 头注。
+import nd_routes
 
 CONFIG_DEFAULT_PATH = os.path.join(SCRIPT_DIR, "experiment_config.json")
 CONFIG_TEMPLATE_PATH = os.path.join(SCRIPT_DIR, "experiment_config_template.json")
@@ -174,6 +178,13 @@ def qc_assess(npz_path, report_path=None):
             "metrics": res["metrics"]}
 
 app = FastAPI(title="实践驾驶舱")
+
+# ── NeuraDock 接入路由（2026-10-01 W1·AI-005·DeepSeek）——**只增不改** ──────
+# 新增 /api/nd/*：① /api/nd/status 状态灯与端口回填；② /api/nd/launch 缺谁起谁（单例守卫、
+# 只启动不停止）；③ /api/nd/hub/start|stop 扇出中转起停（解 9600「只服务一个客户端」）；
+# ④ /api/nd/platform/status 只读转发；⑤ /api/nd/platform/connect 切数据源。
+# 不改任何既有端点、不动既有数据流；指标代理仍走既有 /api/ndmetrics（不重复实现，红线5）。
+nd_routes.register(app)
 
 # ── 共享数据源适配器（供控制台无界面运行硬件层/模拟源） ─────────────────
 
