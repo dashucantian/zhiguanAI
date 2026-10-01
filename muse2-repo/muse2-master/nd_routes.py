@@ -83,17 +83,33 @@ def register(app):
         """缺谁起谁（单例守卫，已在跑就不重起）。**只启动、不停止。**
 
         body: {"which": "app" | "platform" | "both"}
+
+        判据不同（这是有意的）：
+        - **1.2.0**：等"进程出现"即可——它的**数据服务还要人去点『Open data sources』**，
+          程序在跑≠9600 在听，这一步点不了就是点不了，界面如实说；
+        - **平台**：等"**端口在听**"才算就绪——它是 PyInstaller 单文件，可能"先出现再因解包失败退出"，
+          只等进程会出现假阳性。失败时 `err` 带**子进程原话**（不再静默）。
         """
         which = (payload or {}).get("which", "both")
         out = {}
         if which in ("app", "both"):
-            launched, msg = nd_hub.launch_if_needed(nd_hub.APP_EXE, nd_hub.APP_PROC_NAME)
-            out["app"] = {"launched": launched, "msg": msg}
+            out["app"] = nd_hub.launch_if_needed(nd_hub.APP_EXE, nd_hub.APP_PROC_NAME,
+                                                 wait_sec=20.0)
         if which in ("platform", "both"):
-            launched, msg = nd_hub.launch_if_needed(nd_hub.PLATFORM_EXE, nd_hub.PLATFORM_PROC_NAME)
-            out["platform"] = {"launched": launched, "msg": msg}
+            out["platform"] = nd_hub.launch_if_needed(
+                nd_hub.PLATFORM_EXE, nd_hub.PLATFORM_PROC_NAME,
+                wait_sec=30.0, want_port=True, port_probe=nd_hub.discover_platform_port)
         out["status"] = snapshot()
         return out
+
+    @app.post("/api/nd/selftest")
+    def nd_selftest():
+        """**环回自检**：只验"扇出"这条链路本身，不接真机、不进驾驶舱采集、不入库。
+
+        做法＝起一个只说协议的假上游 → 本进程的扇出中转 → 本函数自己的两个下游客户端，
+        验上游独占／多下游／逐行原样／重叠区逐字节一致。**约 4 秒，无副作用。**
+        """
+        return nd_hub.selftest_report()
 
     @app.post("/api/nd/hub/start")
     def nd_hub_start(payload: dict = Body(default={})):

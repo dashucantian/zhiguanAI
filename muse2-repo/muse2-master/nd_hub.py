@@ -172,26 +172,80 @@ def is_running(proc_name):
     return bool(_pids_by_name(proc_name))
 
 
-def launch_if_needed(exe, proc_name, wait_sec=20.0):
-    """已在跑则返回 (False, '已在运行')；否则拉起并等它出现。
+def _errlog_path(proc_name):
+    """子进程 stderr 落盘位置（**不丢进 DEVNULL**——失败时要能说出原话）。"""
+    for d in (os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                           "_analysis_tmp"),
+              os.path.dirname(os.path.abspath(__file__))):
+        try:
+            if d and os.path.isdir(d):
+                return os.path.join(d, f"_nd_launch_{proc_name}.err")
+        except Exception:                                   # noqa: BLE001
+            pass
+    return None
 
-    返回 (launched: bool, msg: str)。**不做停止**——停进程的风险远大于收益（见设计稿 §4.2）。
+
+def launch_if_needed(exe, proc_name, wait_sec=25.0, want_port=False, port_probe=None):
+    """已在跑则不动；否则拉起并等它就绪。
+
+    **就绪判据**：`want_port=False` → 进程出现；`want_port=True` → `port_probe()` 取到端口
+    （比"进程出现"更接近"能用"——PyInstaller 单文件会先出现再因解包失败而退出）。
+
+    返回 dict：{launched, ok, msg, pid, err}。**失败必带 `err`（子进程原话），不静默。**
     """
     if is_running(proc_name):
-        return False, f"{proc_name} 已在运行"
+        return {"launched": False, "ok": True, "msg": f"{proc_name} 已在运行",
+                "pid": None, "err": None}
     if not os.path.exists(exe):
-        return False, f"找不到可执行文件：{exe}"
+        return {"launched": False, "ok": False, "msg": f"找不到可执行文件：{exe}",
+                "pid": None, "err": None}
+
+    logf = _errlog_path(proc_name)
+    fh = None
     try:
-        subprocess.Popen([exe], cwd=os.path.dirname(exe),
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if logf:
+            fh = open(logf, "w", encoding="utf-8", errors="replace")
+        child = subprocess.Popen([exe], cwd=os.path.dirname(exe),
+                                 stdout=(fh or subprocess.DEVNULL),
+                                 stderr=(fh or subprocess.DEVNULL))
     except Exception as e:                                  # noqa: BLE001
-        return False, f"启动失败：{type(e).__name__}: {e}"
+        if fh:
+            fh.close()
+        return {"launched": False, "ok": False,
+                "msg": f"启动失败：{type(e).__name__}: {e}", "pid": None, "err": None}
+
+    pid = child.pid
     t0 = time.time()
     while time.time() - t0 < wait_sec:
-        if is_running(proc_name):
-            return True, f"{proc_name} 已启动"
+        if want_port and port_probe:
+            if port_probe():
+                if fh:
+                    fh.close()
+                return {"launched": True, "ok": True,
+                        "msg": f"{proc_name} 已就绪（端口在听）", "pid": pid, "err": None}
+        elif is_running(proc_name):
+            if fh:
+                fh.close()
+            return {"launched": True, "ok": True,
+                    "msg": f"{proc_name} 已启动", "pid": pid, "err": None}
+        if child.poll() is not None:                        # 已退出，不必等满
+            break
         time.sleep(0.5)
-    return False, f"{proc_name} 启动后未在 {wait_sec:.0f}s 内出现"
+
+    if fh:
+        fh.close()
+    err = None
+    if logf and os.path.exists(logf):
+        try:
+            with open(logf, "r", encoding="utf-8", errors="replace") as f:
+                err = (f.read() or "").strip() or None
+        except Exception:                                   # noqa: BLE001
+            pass
+    exited = child.poll()
+    why = (f"进程已退出（code={exited}）" if exited is not None
+           else f"{wait_sec:.0f}s 内未就绪")
+    return {"launched": True, "ok": False,
+            "msg": f"{proc_name} {why}", "pid": pid, "err": err}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -402,30 +456,40 @@ def platform_connect_tcp(platform_port, host, tcp_port, timeout=15):
 # ══════════════════════════════════════════════════════════════════════
 # 五、自测：不依赖任何厂商程序，验"扇出"这一核心机制
 # ══════════════════════════════════════════════════════════════════════
-def _selftest():
-    """起一个假上游（只说协议、5 组/行、47 字段），验两个下游都能收到同样的行。"""
+def selftest_report(downstream_sec=3.0, max_lines=120):
+    """环回自检：**不碰真机、不进驾驶舱采集、不入库**——只验"扇出"这条链路本身。
+
+    起一个假上游（只说协议：5 组/行、47 字段、末尾 5 常量列）→ FanoutBridge → 两个下游客户端。
+    判据：①上游被独占（连接数=1）；②两个下游都收到行；③字段数原样 47；
+          ④两流各自计数器连续；⑤晚接入者(B)首行不早于先接入者(A)；⑥**重叠区逐字节一致**。
+    返回 dict（供路由/界面直接显示）；**不打印、不写盘**。
+    """
     import threading as th
 
     stop = th.Event()
+    checks = []
+
+    def chk(name, ok, detail=""):
+        checks.append({"name": name, "ok": bool(ok), "detail": detail})
+        return bool(ok)
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("127.0.0.1", 0))
     srv.listen(2)
     up_port = srv.getsockname()[1]
-    print(f"[selftest] 假上游（正式）127.0.0.1:{up_port}")
 
     def upstream_loop():
         conn, _ = srv.accept()
-        conn.recv(16)
+        conn.recv(16)                                       # 收 start 握手
         i = 0
-        while not stop.is_set() and i < 200:
+        while not stop.is_set() and i < 400:
             fields = [f"12:00:{i % 60:02d}.000", str(i)]
             for _g in range(5):
-                for ch in range(7):
-                    fields.append(f"{i + ch:.6f}")
+                for _ch in range(7):
+                    fields.append(f"{i + _ch:.6f}")
                 fields.append("0")
-            fields += ["0", "0", "0", "100", "0"]
+            fields += ["0", "0", "0", "100", "0"]            # 末尾 5 常量列（与真机一致）
             try:
                 conn.sendall((",".join(fields) + "\n").encode())
             except Exception:
@@ -439,8 +503,6 @@ def _selftest():
 
     br = FanoutBridge(upstream=("127.0.0.1", up_port))
     hp = br.start()
-    print(f"[selftest] 枢纽监听 127.0.0.1:{hp}")
-    print(f"[selftest] 枢纽自述: {br.stats()}")
 
     results = {}
 
@@ -451,7 +513,7 @@ def _selftest():
         buf = b""
         lines = []
         t0 = time.time()
-        while time.time() - t0 < 3 and len(lines) < 120:
+        while time.time() - t0 < downstream_sec and len(lines) < max_lines:
             try:
                 chunk = c.recv(65536)
             except socket.timeout:
@@ -468,67 +530,61 @@ def _selftest():
     th.Thread(target=downstream, args=("A",), daemon=True).start()
     time.sleep(0.5)
     th.Thread(target=downstream, args=("B",), daemon=True).start()
-    time.sleep(3.2)
+    time.sleep(downstream_sec + 0.2)
 
     a, b = results.get("A", []), results.get("B", [])
-    print(f"[selftest] 下游A 收到 {len(a)} 行；下游B 收到 {len(b)} 行")
-    ok = True
-    if not a or not b:
-        print("[selftest] ❌ 有下游一行都没收到")
-        ok = False
-    else:
-        widths = {len(x.split(b",")) for x in (a[:20] + b[:20])}
-        print(f"[selftest] 前 20 行字段数集合 = {widths}（应为 {{47}}）")
-        if widths != {47}:
-            print("[selftest] ❌ 字段数不符（应原样透传 47）")
-            ok = False
+    chk("两个下游都收到数据", bool(a) and bool(b), f"A={len(a)} 行，B={len(b)} 行")
 
-        # 桥是**实时流**：晚接入的下游拿不到更早的行。
-        # （首版断言 a[:10]==b[:10] 是**我写错了期望**，不是代码错。）
-        # 正确判据：①两条流各自计数器严格连续；②B 首行不早于 A；③**重叠处整行逐字节相同**。
-        def counters(lines):
-            out = {}
-            for ln in lines:
-                f = ln.split(b",")
+    def counters(lines):
+        out = {}
+        for ln in lines:
+            f = ln.split(b",")
+            try:
                 out.setdefault(int(f[1]), ln)
-            return out
+            except Exception:                               # noqa: BLE001
+                pass
+        return out
 
-        ca, cb = counters(a), counters(b)
-        if sorted(ca) != list(range(min(ca), max(ca) + 1)):
-            print("[selftest] ❌ 下游A 计数器不连续")
-            ok = False
-        if sorted(cb) != list(range(min(cb), max(cb) + 1)):
-            print("[selftest] ❌ 下游B 计数器不连续")
-            ok = False
-        if min(cb) < min(ca):
-            print(f"[selftest] ❌ B 收到比 A 更早的行（B首={min(cb)} < A首={min(ca)}）")
-            ok = False
+    ca, cb = counters(a), counters(b)
+    if a and b:
+        widths = {len(x.split(b",")) for x in (a[:20] + b[:20])}
+        chk("字段数原样透传 47", widths == {47}, f"实测 {sorted(widths)}")
+        chk("下游A 计数器连续", sorted(ca) == list(range(min(ca), max(ca) + 1)),
+            f"{min(ca)}–{max(ca)} 共 {len(ca)}")
+        chk("下游B 计数器连续", sorted(cb) == list(range(min(cb), max(cb) + 1)),
+            f"{min(cb)}–{max(cb)} 共 {len(cb)}")
+        chk("晚接入者(B)首行不早于 A", min(cb) >= min(ca), f"B首={min(cb)} A首={min(ca)}")
         overlap = sorted(set(ca) & set(cb))
-        print(f"[selftest] 重叠 {len(overlap)} 行（A {min(ca)}–{max(ca)}，B {min(cb)}–{max(cb)}）")
-        if not overlap:
-            print("[selftest] ❌ 两条流无重叠，无法比对一致性")
-            ok = False
-        else:
-            bad = [i for i in overlap if ca[i] != cb[i]]
-            if bad:
-                print(f"[selftest] ❌ 重叠区有 {len(bad)} 行内容不一致")
-                ok = False
-            else:
-                print("[selftest] ✅ 重叠区逐字节一致")
+        bad = [i for i in overlap if ca[i] != cb[i]]
+        chk("重叠区逐字节一致", bool(overlap) and not bad,
+            f"重叠 {len(overlap)} 行" + (f"，不一致 {len(bad)} 行" if bad else "，全同"))
+
     st = br.stats()
-    print(f"[selftest] 枢纽统计: {st}")
-    if st["upstream_connects"] < 1:
-        print("[selftest] ❌ 上游未被连接")
-        ok = False
+    chk("上游被独占（只连一次）", st["upstream_connects"] == 1, f"connects={st['upstream_connects']}")
+    chk("枢纽自述有监听地址", bool(st.get("listen")), st.get("listen") or "")
+
     br.stop()
     stop.set()
     try:
         srv.close()
     except Exception:
         pass
+
+    return {"ok": all(c["ok"] for c in checks), "checks": checks,
+            "hub_listen": st.get("listen"), "lines_forwarded": st.get("lines_forwarded"),
+            "note": "环回自检：上游是假数据、下游是本函数自己的两个客户端——"
+                    "**不进驾驶舱采集、不入库、不碰真机**。"}
+
+
+def _selftest():
+    """CLI 版：跑环回自检并打印逐项结论。"""
+    r = selftest_report()
+    for c in r["checks"]:
+        print(f"[selftest] {'✅' if c['ok'] else '❌'} {c['name']}　{c['detail']}")
+    print(f"[selftest] 枢纽统计: listen={r['hub_listen']} lines_forwarded={r['lines_forwarded']}")
     print("[selftest] " + ("✅ 全过：扇出机制成立（上游独占、下游多份、逐行原样）"
-                           if ok else "❌ 有失败项，见上"))
-    return 0 if ok else 1
+                           if r["ok"] else "❌ 有失败项，见上"))
+    return 0 if r["ok"] else 1
 
 
 def _report():
