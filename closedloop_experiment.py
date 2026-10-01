@@ -301,6 +301,9 @@ def run_closed_loop(cfg, simulate=True, address=None, callback=None,
     app = MinimalApp(device="neuradock" if adapter == "neuradock" else "muse")
     buf = app.buffer
     if simulate:
+        # 〔2026-10-01 法师裁定「报告页加『模拟数据』标注」〕谁造的数据谁负责如实说：
+        # 模拟器沿用 Muse 四通道布局，报告与真机长得一样——不标就会被当实测读。
+        buf.source_note = "模拟器产生的合成信号（未经真人采集）"
         receiver = SimulateFeeder(app)
         receiver.start()
     else:

@@ -371,6 +371,10 @@ class DataBuffer:
         self.eeg_raw_all = {ch: [] for ch in self.channels}
         self.has_raw = False
         self.chain_override = None   # 非 None 时 save_bin 以此为准标注链
+        # 〔2026-10-01 法师裁定「报告页加『模拟数据』标注」〕数据来源标注，**由调用方设置**：
+        #   None＝不标（真机）；非 None＝报告顶部打醒目横幅，并写入 meta["source_note"]。
+        #   与 chain_override 同构：本层不认识"来源"，谁造的数据谁负责如实说。
+        self.source_note = None
         # 采集期手打事件标记（T1 睁闭眼等，2026-09-24 法师授权）：
         # 每项 {"epoch": 挂钟秒, "label": 文本}。epoch 与 self.timestamps 同为
         # Unix epoch 秒（add_eeg 用 time.time() 锚定），save_bin 时换算为相对秒
@@ -867,6 +871,8 @@ class DataBuffer:
             "sfreq": self.sfreq,
             "channels": self.channels,
             "device": self.device,
+            # 非 None＝本会话非真人实测（模拟器/回放）；报告页顶部同标一条横幅
+            "source_note": self.source_note,
             "samples": n,
             "duration": duration_val,
             "signal_chain": chain,
@@ -926,7 +932,8 @@ class DataBuffer:
         report_ok = None
         if _ensure_imports():
             try:
-                result = _generate_report_from_array(eeg_arr, self.sfreq, ts, report_path)
+                result = _generate_report_from_array(eeg_arr, self.sfreq, ts, report_path,
+                                                     source_note=self.source_note)
                 if not result:
                     print(f"Report generation returned no output for {report_path}")
                 else:
@@ -1110,8 +1117,21 @@ class DataBuffer:
 
 # ── GUI ─────────────────────────────────────────────────────────────────────
 
-def _generate_report_from_array(eeg_arr, sfreq, session_name, output_path):
-    """Generate an HTML report directly from a numpy EEG array, bypassing .bin files."""
+def _generate_report_from_array(eeg_arr, sfreq, session_name, output_path, source_note=None):
+    """Generate an HTML report directly from a numpy EEG array, bypassing .bin files.
+
+    `source_note`＝**数据来源标注**（2026-10-01 法师裁定「报告页加『模拟数据』标注」）。
+    非 None 时在报告顶部打一条醒目横幅。为什么必须加：**报告本身是"来源盲"的**——
+    模拟器沿用 Muse 四通道布局（TP9/AF7/AF8/TP10），生成的报告与真机的一模一样。
+    实测 `local_20261001_214156.report.html`（29.7 分钟模拟会话）**全文 0 处"模拟/仿真"**，
+    而同一会话的 manifest 里明明写着"模拟器/回放…不建议正式入库"——**读报告的人看不到那句**。
+    """
+    banner = ""
+    if source_note:
+        banner = ('<div style="background:#3a1a1a;border:2px solid #b4463c;border-radius:8px;'
+                  'padding:12px 16px;margin:14px 0;color:#ffb4ad;font-size:14px;line-height:1.7">'
+                  '⚠ <b>本报告所用数据并非真人实测</b>　——　' + str(source_note)
+                  + '<br>不得作为实测结果引用、不得正式入库；仅供流程与界面联调使用。</div>')
     import report_generator as rg
     import matplotlib
     matplotlib.use("Agg")
@@ -1253,6 +1273,7 @@ th{{background:#1a1a2e;color:#fff;padding:6px 8px}}td{{padding:5px 8px;border-bo
 .note{{font-size:11px;color:#888;margin-top:24px;border-top:1px solid #333;padding-top:8px}}
 img{{max-width:100%;border:1px solid #333;border-radius:4px}}</style></head><body>
 <h1>脑电分析报告<br><small>{session_name}</small></h1>
+{banner}
 {noise_html}
 <div class="summary">
 <div><span class="label">记录时长</span><br><span class="value">{duration/60:.1f} 分钟</span></div>

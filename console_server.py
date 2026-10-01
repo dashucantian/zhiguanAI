@@ -704,12 +704,19 @@ class MonitorSession:
                     self._emit({"type": "end", "ok": False, "error": err})
                     self.status = "idle"
                     return
+                # 〔2026-10-01 法师裁定「报告页加『模拟数据』标注」〕非真人实测 ⇒ 如实标来源
+                self.app.buffer.source_note = (
+                    f"离线回放（历史文件 {os.path.basename(replay_npz)}，非本次实测）")
                 self.receiver.start()
                 self.status = "recording"
                 self._emit({"type": "message",
                             "text": f"📼 离线回放已启动（{self.receiver.n_total} 样本，"
                                     f"约 {self.receiver.n_total / getattr(self.receiver, 'sfreq', 256.0):.0f} 秒）"})
             elif simulate:
+                # 〔2026-10-01 法师裁定「报告页加『模拟数据』标注」〕模拟器沿用 Muse 四通道
+                # 布局，报告与真机长得一模一样——必须在报告页与 meta 里标出来，
+                # 否则会被当实测读（实测 local_20261001_214156 全文 0 处"模拟"即此）。
+                self.app.buffer.source_note = "模拟器产生的合成信号（未经真人采集）"
                 self.receiver = MonitorSimulator(self.app)
                 self.receiver.start()
                 self.status = "recording"
