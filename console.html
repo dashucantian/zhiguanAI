@@ -3321,8 +3321,13 @@ connectMonitorStream();
       setNode("ndN3State", "⚪ 未起", "off");
     }
     // ④ 本舱两路
+    // ④ 把「数据源是什么」一并显示——法师 10-01 实测正是栽在"地址填了、源没切"看不见
+    const srcSel = $("monMode");
+    const srcLabel = (srcSel && srcSel.selectedOptions[0]) ? srcSel.selectedOptions[0].textContent : "—";
     const monVal = ($("monNd") && $("monNd").value) || "";
-    setNode("ndN4Mon", "🚗 驾驶舱数据源：" + (monVal || "—"), monVal ? "ok" : "off");
+    const monOk = !!(srcSel && srcSel.value === "neuradock" && monVal);
+    setNode("ndN4Mon", "🚗 驾驶舱：" + srcLabel + (monVal ? " ｜ " + monVal : ""),
+            monOk ? "ok" : (srcSel && srcSel.value === "simulate") ? "bad" : "off");
     setNode("ndN4Plat", "📊 指标平台：" + (p.port ? ("127.0.0.1:" + p.port)
                                              : (p.running ? "在跑·端口未发现" : "未启动")),
             p.port ? "ok" : (p.running ? "bad" : "off"));
@@ -3382,12 +3387,30 @@ connectMonitorStream();
       refresh(true);
     } catch (e) { say("起中转失败：" + e.message, "err"); }
   };
-  $("ndHubToMon").onclick = async () => {                     // ④ 驾驶舱填中转口
+  $("ndHubToMon").onclick = async () => {                     // ④ 驾驶舱接中转
     try {
       const p = await ensureHub();
       $("monNd").value = "127.0.0.1:" + p;
-      say("🚗 已把「NeuraDock 数据服务地址」填成中转口 127.0.0.1:" + p
-          + "　（比直连 1.2.0 的局域网 IP 稳：IP 漂移与单客户端都由③吸收）", "ok");
+      // ⚠ 光填地址不换源 ＝ 根本没接上。法师 10-01 实测就卡在这：
+      // 「数据源」停在「模拟模式（无需头环）」，于是波形与存档都是**本机模拟器**
+      // （它沿用 Muse 四通道 TP9/AF7/AF8/TP10），NeuraDock 的真实数据只进了旁证卡。
+      const srcSel = $("monMode");
+      let switched = false;
+      if (srcSel && srcSel.value !== "neuradock") {
+        srcSel.value = "neuradock";
+        switched = true;
+        if (typeof srcSel.onchange === "function") srcSel.onchange();   // 让串口/TCP 栏跟着显隐
+      }
+      // 真机采集的硬门槛：测试者必选（模拟模式才可留空）
+      const partSel = $("monParticipant");
+      const noPart = !partSel || !partSel.value;
+      let t = "🚗 已把「NeuraDock 数据服务地址」填成中转口 127.0.0.1:" + p
+            + (switched ? "，并把「数据源」切到「NeuraDock（TCP 数据服务）」" : "（数据源已是 NeuraDock）");
+      if (noPart) {
+        t += "\n⚠ 但「测试者」还是空的——**真机采集会被把关拦住**（模拟模式才允许留空）。"
+           + "请先到「管理本机档案」登记一个测试者，再点「开始采集」。";
+      }
+      say(t, noPart ? "err" : "ok");
       refresh(true);
     } catch (e) { say("填中转口失败：" + e.message, "err"); }
   };
