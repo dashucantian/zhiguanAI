@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>止观AI · 完整体验</title>
+<style>
+  /* 完整体验 Demo 向导页（ZG-080，2026-10-01 W1·AI-008）
+     定位：给第一次来的人「双击就能走完一遍」——零概念、每步一个按钮一个动作。
+     本页只调既有 API（monitor/experiment/reports），不建平行后端（红线5）；
+     模拟数据处处如实标注（数据诚实裁定6）。样式独立，不混驾驶舱/禅修页。 */
+  :root { --bg:#141210; --card:#1e1b17; --line:#3a332b; --gold:#d8b36a;
+          --tx:#e8e2d6; --dim:#9a917f; --ok:#8fbf8f; --warn:#d99a6c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--tx);
+         font:16px/1.7 "Microsoft YaHei",system-ui,sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:28px 18px 60px; }
+  h1 { font-size:26px; margin:0 0 4px; color:var(--gold); letter-spacing:2px; }
+  .sub { color:var(--dim); margin:0 0 20px; font-size:14px; }
+  .demo-badge { display:inline-block; border:1px solid var(--warn); color:var(--warn);
+                border-radius:4px; padding:1px 8px; font-size:13px; margin-left:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+          padding:18px 20px; margin-bottom:16px; }
+  .step-no { color:var(--gold); font-size:13px; letter-spacing:1px; }
+  h2 { font-size:19px; margin:2px 0 6px; }
+  .what { color:var(--dim); font-size:14px; margin:0 0 12px; }
+  button { background:var(--gold); color:#1a1712; border:0; border-radius:8px;
+           padding:11px 26px; font-size:16px; font-weight:600; cursor:pointer;
+           font-family:inherit; }
+  button:disabled { background:#5a5245; color:#b7ad9c; cursor:default; }
+  button.ghost { background:transparent; color:var(--gold);
+                 border:1px solid var(--gold); font-weight:400; }
+  a.link { color:var(--gold); text-decoration:underline; cursor:pointer; }
+  .state { margin-top:10px; font-size:14px; min-height:1.5em; }
+  .state.ok { color:var(--ok); } .state.warn { color:var(--warn); }
+  .toplink { text-align:right; margin-bottom:8px; }
+  .pico { color:var(--dim); font-size:13px; margin-top:10px;
+          border-top:1px dashed var(--line); padding-top:8px; }
+  .foot { color:var(--dim); font-size:12px; text-align:center; margin-top:28px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toplink"><a class="link" href="/" target="_blank">打开完整驾驶舱 ↗</a></div>
+  <h1>止观AI · 完整体验<span class="demo-badge">演示模式</span></h1>
+  <p class="sub">不用戴任何设备也能走完一遍（用模拟数据，报告里会如实标注）。四站按顺序玩约十分钟，也可以只玩一站。</p>
+
+  <!-- 第一站 -->
+  <div class="card">
+    <div class="step-no">第一站</div>
+    <h2>看脑电（60 秒）</h2>
+    <p class="what">点下面的按钮，系统开始记录一段「脑电波」，60 秒后自动存好并生成一份中文报告。你什么都不用做，等它跑完就行。</p>
+    <button id="btn-mon">开始记录 60 秒</button>
+    <div class="state" id="st-mon"></div>
+    <div class="state" id="st-mon-rpt"></div>
+  </div>
+
+  <!-- 第二站 -->
+  <div class="card">
+    <div class="step-no">第二站</div>
+    <h2>进空间</h2>
+    <p class="what">一个会「呼吸」的禅修空间：雾的浓淡、画面明暗、中心光晕都在极慢地涨落。点按钮在新窗口打开，安静看一会儿，不必操作。</p>
+    <button class="ghost" onclick="window.open('/mandala','_blank')">打开冥想空间</button>
+    <div class="pico">想用 Pico 头显进：先在电脑上双击 <b>VR备场.bat</b>，把它打印的 https 地址（形如 https://192.168.x.x:8778/mandala）逐字填进头显浏览器，点「继续访问」→「进入 VR」。</div>
+  </div>
+
+  <!-- 第三站 -->
+  <div class="card">
+    <div class="step-no">第三站</div>
+    <h2>听闭环（约 3 分半）</h2>
+    <p class="what">点按钮后，这台电脑的音箱会响起轻轻的节拍声——它的快慢和响度会跟着「脑电状态」自动调整，这就是本系统的核心：脑电驱动声音。前 30 秒很轻（系统在摸底），之后进入跟随。</p>
+    <button id="btn-exp">开始闭环节拍</button>
+    <button class="ghost" id="btn-exp-stop" style="display:none">提前结束并保存</button>
+    <div class="state" id="st-exp"></div>
+    <div class="state" id="st-exp-rpt"></div>
+  </div>
+
+  <!-- 第四站 -->
+  <div class="card">
+    <div class="step-no">第四站</div>
+    <h2>看成果</h2>
+    <p class="what">刚才生成的记录都在这里，每份都配一份中文分析报告。点「打开报告」直接看。</p>
+    <button class="ghost" id="btn-rpt">刷新报告列表</button>
+    <div class="state" id="st-rpt"></div>
+  </div>
+
+  <div class="foot">止观AI 脑电闭环训练系统 · 完整体验 Demo（ZG-080）· 演示模式数据为模拟生成，不冒充真人脑电</div>
+</div>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function set(id, msg, cls) { var el = $(id); el.textContent = msg || "";
+                               el.className = "state" + (cls ? " " + cls : ""); }
+  function post(path, body) {
+    return fetch(path, { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}) })
+      .then(function (r) { return r.json().then(function (j) {
+        return { code: r.status, ok: r.ok, j: j }; }); })
+      .catch(function (e) { return { code: 0, ok: false, j: { detail: String(e) } }; });
+  }
+  function getJSON(path) {
+    return fetch(path).then(function (r) { return r.json(); });
+  }
+  function sleep(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+  function waitSaved(getStatus, btn) {
+    return sleep(2500).then(function loop() {
+      return getJSON(getStatus).then(function (s) {
+        if (!s.running) return s;
+        set(btn, "正在存盘……"); return sleep(1000).then(loop);
+      });
+    });
+  }
+  function latestReport() {
+    return getJSON("/api/reports").then(function (d) {
+      return (d.reports && d.reports[0]) || null;
+    });
+  }
+  function showReportLink(el, rpt) {
+    if (!rpt) { set(el, "没找到报告文件（保存可能失败，去第四站刷新看看）", "warn"); return; }
+    el.innerHTML = "";
+    var a = document.createElement("a");
+    a.className = "link";
+    a.href = "/api/file?path=report/" + encodeURIComponent(rpt.name);
+    a.target = "_blank";
+    a.textContent = "打开报告：" + rpt.mtime + "（" + (rpt.scene === "closedloop" ? "闭环实验" : rpt.scene) + "）";
+    el.appendChild(a);
+  }
+
+  /* 第一站：60 秒模拟监测 → 自动停 → 报告 */
+  var monTimer = null;
+  $("btn-mon").onclick = function () {
+    var btn = $("btn-mon");
+    btn.disabled = true; set("st-mon-rpt", "");
+    set("st-mon", "正在开始……");
+    post("/api/monitor/start", {
+      simulate: true, adapter: null,
+      note: "完整体验Demo（ZG-080）·模拟数据", intent: "日常"
+    }).then(function (r) {
+      if (!r.ok) { set("st-mon", "没能开始：" + ((r.j && r.j.detail) || r.code), "warn");
+                   btn.disabled = false; return null; }
+      var t0 = Date.now(), TOTAL = 60, last = -1;
+      set("st-mon", "记录中……剩 " + TOTAL + " 秒（可以离开页面，回来再看）");
+      monTimer = setInterval(function () {
+        var left = Math.max(0, TOTAL - Math.round((Date.now() - t0) / 1000));
+        if (left !== last) {
+          last = left;
+          set("st-mon", left > 0 ? "记录中……剩 " + left + " 秒" : "时间到，正在保存……");
+        }
+        if (left <= 0) {
+          clearInterval(monTimer);
+          post("/api/monitor/stop", { save: true }).then(function (r2) {
+            if (!r2.ok) { set("st-mon", "停止失败：" + ((r2.j && r2.j.detail) || r2.code), "warn");
+                          btn.disabled = false; return; }
+            return waitSaved("/api/monitor/status", "st-mon").then(function () {
+              set("st-mon", "已保存（60 秒模拟脑电）", "ok");
+              btn.disabled = false; btn.textContent = "再记录一次";
+              return latestReport();
+            }).then(function (rpt) { showReportLink($("st-mon-rpt"), rpt); });
+          });
+        }
+      }, 1000);
+    });
+  };
+
+  /* 第三站：模拟闭环实验（基线 30s＋闭环 180s，服务端音箱出声） */
+  var expTimer = null, expStart = null;
+  function expElapsed() {
+    return expStart ? Math.round((Date.now() - expStart) / 1000) : 0;
+  }
+  $("btn-exp").onclick = function () {
+    var btn = $("btn-exp"), stopBtn = $("btn-exp-stop");
+    btn.disabled = true; set("st-exp-rpt", "");
+    set("st-exp", "正在开始……");
+    post("/api/experiment/start", {
+      simulate: true, tag: "ZG080Demo",
+      baseline: 30, duration: 180,
+      note: "完整体验Demo（ZG-080）·模拟数据"
+    }).then(function (r) {
+      if (!r.ok) { set("st-exp", "没能开始：" + ((r.j && r.j.detail) || r.code), "warn");
+                   btn.disabled = false; return; }
+      expStart = Date.now();
+      stopBtn.style.display = "";
+      set("st-exp", "运行中……前 30 秒是摸底期（声音很轻是正常的）");
+      expTimer = setInterval(function () {
+        getJSON("/api/experiment/status").then(function (s) {
+          if (!s.running) {
+            clearInterval(expTimer); stopBtn.style.display = "none";
+            btn.disabled = false;
+            set("st-exp", "已结束并保存", "ok");
+            return latestReport().then(function (rpt) {
+              showReportLink($("st-exp-rpt"), rpt);
+            });
+          }
+          set("st-exp", "运行中……已进行 " + expElapsed() + " 秒（到 3 分半会自己结束）");
+        });
+      }, 1000);
+    });
+  };
+  $("btn-exp-stop").onclick = function () {
+    var stopBtn = $("btn-exp-stop");
+    stopBtn.disabled = true;
+    set("st-exp", "正在结束并保存……");
+    post("/api/experiment/stop", {}).then(function () {
+      return waitSaved("/api/experiment/status", "st-exp");
+    }).then(function () {
+      clearInterval(expTimer); stopBtn.style.display = "none";
+      $("btn-exp").disabled = false;
+      set("st-exp", "已结束并保存", "ok");
+      return latestReport().then(function (rpt) {
+        showReportLink($("st-exp-rpt"), rpt);
+      });
+    });
+  };
+
+  /* 第四站：最近报告列表 */
+  function refreshReports() {
+    set("st-rpt", "读取中……");
+    getJSON("/api/reports").then(function (d) {
+      var list = (d.reports || []).slice(0, 5);
+      if (!list.length) { set("st-rpt", "还没有任何报告——先玩第一站或第三站", "warn"); return; }
+      set("st-rpt", "");
+      var el = $("st-rpt");
+      list.forEach(function (r) {
+        var row = document.createElement("div");
+        var a = document.createElement("a");
+        a.className = "link"; a.target = "_blank";
+        a.href = "/api/file?path=report/" + encodeURIComponent(r.name);
+        a.textContent = "打开报告";
+        row.appendChild(document.createTextNode(
+          r.mtime + " · " + (r.scene === "closedloop" ? "闭环实验" : r.scene) +
+          " · " + (r.qc ? (r.qc.recommend === "ingest" ? "质检：可入库"
+                          : "质检：进隔离区（原因见报告）") : "质检见报告") + "　"));
+        row.appendChild(a);
+        el.appendChild(row);
+      });
+    }).catch(function () { set("st-rpt", "读取失败", "warn"); });
+  }
+  $("btn-rpt").onclick = refreshReports;
+  refreshReports();
+})();
+</script>
+</body>
+</html>

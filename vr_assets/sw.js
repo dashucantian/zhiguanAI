@@ -28,8 +28,12 @@ const PRECACHE = [
 /* 判断是否属于「绝不缓存」的敏感/动态请求 */
 function isExcluded(url) {
   const p = url.pathname;
+  /* 2026-10-01 ZG-080 修订：排除面从 /api/vr/status 扩到整个 /api——
+     cache-first 曾把 /api/monitor/status 等 GET 永久缓存成旧值（demo 页
+     实测状态卡死），且 SW 注释本就写明"后端动态接口一律不缓存"，
+     此处只是把执行对齐到声明的红线。 */
   return p.startsWith('/vr_assets/tls/') || p.endsWith('.pem')
-      || p === '/api/vr/status' || p.startsWith('/ws');
+      || p.startsWith('/api') || p.startsWith('/ws');
 }
 
 self.addEventListener('install', (e) => {

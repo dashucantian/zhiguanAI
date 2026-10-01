@@ -2132,6 +2132,17 @@ def focus_page():
                         headers={"Cache-Control": "no-store"})
 
 
+@app.get("/demo")
+def demo_page():
+    """完整体验 Demo 向导页（ZG-080，2026-10-01 法师令「先出一个完整版的demo」）。
+
+    零概念四站（看脑电／进空间／听闭环／看成果），全走既有 API，
+    不建平行后端（红线5）；模拟数据处处如实标注（数据诚实裁定6）。"""
+    return FileResponse(os.path.join(SCRIPT_DIR, "demo.html"),
+                        media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+
 @app.get("/ndtest")
 def ndtest_page():
     """NeuraDock 设备性能测试执行面板（独立页，2026-09-25 法师令并入驾驶舱页签）。
