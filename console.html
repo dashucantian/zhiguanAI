@@ -3364,6 +3364,12 @@ connectMonitorStream();
       const p = r.platform;
       let t = "📊 " + p.msg;
       if (p.err) t += "\n子进程原话：" + p.err.split("\n").slice(-3).join("\n");
+      // 把"看不懂的报错"翻成"下一步做什么"（本轮实测：沙箱/受限环境下起驾驶舱会导致此错）
+      if (p.err && /Failed to create parent directory structure/i.test(p.err)) {
+        t += "\n→ 该程序要先在**系统临时目录**里解包才能跑。"
+           + "若驾驶舱本身是在受限环境（沙箱/特殊权限壳）里启动的，请改用**普通命令行或双击**"
+           + "启动 console_server.py，再点本钮。";
+      }
       say(t, p.ok ? "ok" : "err");
       paint(r.status);
     } catch (e) { say("启动失败：" + e.message, "err"); }
