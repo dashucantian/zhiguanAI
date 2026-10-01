@@ -77,6 +77,43 @@ if ($bomHits.Count -gt 0) {
     foreach ($h in $bomHits) { Bad "subject 带 BOM（Set-Content/Out-File 坑）：$h —— 提交信息改走 bash heredoc 或 Write 工具（规约坑010-W）" }
 } else { Ok "近 5 笔提交原始对象 subject 无 BOM。" }
 
+# ---------- 6. 提交日期 vs Session 日期段（2026-10-01 法师立规；缘起 KZ-1001-W1a） ----------
+# 规则：跨日会话每笔提交前重取系统日期，并以该日期定文件名前缀与 Session 日期段。
+# 缘起：W1 窗 10-01 续做时沿用 0930，两笔提交文件名与 Session 均差一日（KZ-1001-W1a）。
+Section "6. 提交日期 vs Session 日期段（跨日会话必重取日期）"
+$headDate = (git log -1 --date=short --format=%ad 2>$null | Select-Object -First 1)
+$headMsg = ((git log -1 --format=%B 2>$null) -join "`n")
+$sesLine = ([regex]::Match($headMsg, '(?m)^Session:\s*(.+)$')).Groups[1].Value.Trim()
+if (-not $sesLine) {
+    Write-Host "[提示] 最新提交无 Session trailer，本门只对含 Session 的提交生效。"
+} elseif ($sesLine -notmatch '(\d{8})') {
+    Write-Host "[提示] Session 不含 8 位日期段（$sesLine），跳过日期比对。"
+} else {
+    $d8 = $Matches[1]
+    $sesFmt = $d8.Substring(0, 4) + '-' + $d8.Substring(4, 2) + '-' + $d8.Substring(6, 2)
+    if ($sesFmt -ne $headDate) {
+        Bad "提交日 $headDate ≠ Session 日期段 $sesFmt（$sesLine）——跨日会话请重取系统日期（KZ-1001-W1a）"
+    } else {
+        Ok "提交日与 Session 日期段一致：$headDate"
+    }
+}
+$addedFiles = @(git log -1 --diff-filter=A --name-only --format= 2>$null)
+$badNames = @()
+foreach ($f in $addedFiles) {
+    if (-not $f) { continue }
+    $m2 = [regex]::Match((Split-Path $f -Leaf), '^(20\d{6})')
+    if ($m2.Success) {
+        $dd = $m2.Groups[1].Value
+        $ff = $dd.Substring(0, 4) + '-' + $dd.Substring(4, 2) + '-' + $dd.Substring(6, 2)
+        if ($ff -ne $headDate) { $badNames += ("$dd  " + (Split-Path $f -Leaf)) }
+    }
+}
+if ($badNames.Count -gt 0) {
+    foreach ($n in $badNames) { Bad "新增文件名日期前缀与提交日不符：$n（历史不改写，请登记留证并改后续口径）" }
+} else {
+    Ok "上一笔新增文件的日期前缀与提交日一致（或无日期前缀）。"
+}
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
