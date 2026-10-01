@@ -158,6 +158,8 @@ v1 时因未取到全文，判"摘要无 first 表述、系自媒体加码"—�
 ModelScope 直链 `resolve/master`（curl 断点续传，实测约 6MB/s），13.8GB 全量：
 `model.safetensors` 9,078,630,512B＋`perception/` 500,368,384B＋`planner-sft/` 2,079,739,550B＋`planner-rl/` 2,079,739,550B＋配置词表——**四件 safetensors 与官方 API 元数据逐字节相等**；代码仓经 codeload zip 拉取（链路不稳，重试 2 次成）。落 `_research_src\qwen-drive\`（gitignore 区）。
 
+> **清理追记（10-01，法师裁"只删大权重"）**：13.8GB 四件 safetensors 已删，仅留代码仓＋demo 数据＋试跑存证（`predictions_direct.jsonl`）约 65MB——理由：权重照本节命令约 40 分钟可全量复原，试跑存证与两坑账现场不可复原。日后若上 N 卡复测感知环或跑分，复原本节命令即可。
+
 ### 7.3 试跑结果（CPU，全部用仓库自带 demo 数据，零外部素材）
 
 | 环 | 命令要点 | 结果 |
