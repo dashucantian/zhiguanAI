@@ -375,6 +375,13 @@ class DataBuffer:
         #   None＝不标（真机）；非 None＝报告顶部打醒目横幅，并写入 meta["source_note"]。
         #   与 chain_override 同构：本层不认识"来源"，谁造的数据谁负责如实说。
         self.source_note = None
+        # 〔2026-10-03 P0-3〕**接收侧计数入档**：由调用方在保存前注入（同 source_note 体例）。
+        # 为什么必须入档：真机那场缺 4,770 样本（0.66%），但"缺在链路还是被丢弃"**无法回看**——
+        # 因为这些计数以往只活在内存里。没有这本账，就分不清是哪一种失败（坑 012 同类）。
+        self.source_stats = None
+        # 〔2026-10-03 P0-1〕快照两段的实测耗时（锁内 / 写盘），供下次真机对账用
+        self._snap_lock_max_ms = 0.0
+        self._snap_write_max_ms = 0.0
         # 采集期手打事件标记（T1 睁闭眼等，2026-09-24 法师授权）：
         # 每项 {"epoch": 挂钟秒, "label": 文本}。epoch 与 self.timestamps 同为
         # Unix epoch 秒（add_eeg 用 time.time() 锚定），save_bin 时换算为相对秒
@@ -419,6 +426,8 @@ class DataBuffer:
         self._snapshot_count = 0
         self._last_snapshot_t = 0.0
         self._last_snapshot_path = None
+        # 〔2026-10-03 修 P0-1〕快照改为后台线程写；此字段用于"上一轮没写完就跳过本轮"
+        self._snap_thread = None
 
     def add_marker(self, label="", epoch=None):
         """记录一个采集期手打标记（挂钟时刻）。返回已记录数。"""
@@ -700,7 +709,10 @@ class DataBuffer:
           · 原子写（tmp → os.replace）＋写后 `np.load` 校验，避免留下半份 zip；
           · 与 `save_bin` 一致地**持锁**取数据（对比历史实现的不持锁是缺陷 B-3）；
           · 出错只返回 None，**绝不抛异常打断采集**（同契约纪律）。
-        返回：快照路径 / None。
+
+        〔2026-10-03 修 P0-1〕**锁的粒度改了**：锁内只做浅拷贝，转换与写盘交后台线程。
+        旧写法虽也"持锁取数据"，但把逐元素转换也放进了锁里 ⇒ 保险机制侵入了实时临界区。
+        返回：快照路径（＝已**排定**，写盘在后台进行）/ None。
         """
         try:
             if self._saved_data_path is not None:
@@ -711,32 +723,71 @@ class DataBuffer:
             if not force and self.snapshot_interval_s > 0:
                 if now - self._last_snapshot_t < self.snapshot_interval_s:
                     return None
+            if self._snap_thread is not None and self._snap_thread.is_alive():
+                return None                      # 上一轮还没写完 ⇒ 跳过本轮（不排队、不堆叠）
+            # ── 锁内：**只做浅拷贝**（C 级指针拷贝，毫秒级），不做任何逐元素转换 ──
+            # 〔2026-10-03 修 P0-1，法师令「现在就动」〕原实现在锁内把 Python list 逐元素转
+            # numpy（48 分钟会话约 **1000 万次**元素转换）⇒ 持锁 ~1 秒；而采集入口 `add_eeg`
+            # 用的是**同一把锁** ⇒ 实测每 60 秒阻塞采集 0.6→1.5 秒（随会话增长），
+            # 造成 **0.66% 真丢样本**（ZEN-20261002-P001-S17）。
+            # 原则：**保险机制不得进入实时临界区**。现把转换与写盘全部移出锁外，并交后台线程。
             with self.lock:
+                _t_lk = time.perf_counter()
                 if not self.eeg_all.get(self.channels[0]):
                     return None
                 n = min(len(self.eeg_all[ch]) for ch in self.channels)
                 if n <= 0:
                     return None
-                eeg = np.zeros((n, self.n_ch))
-                for i, ch in enumerate(self.channels):
-                    eeg[:n, i] = self.eeg_all[ch][:n]
-                raw = None
+                eeg_lists = [self.eeg_all[ch][:n] for ch in self.channels]
+                raw_lists = None
                 if self.has_raw:
                     m = min((len(self.eeg_raw_all[ch]) for ch in self.channels),
                             default=0)
                     if m > 0:
-                        raw = np.zeros((min(n, m), self.n_ch))
-                        for i, ch in enumerate(self.channels):
-                            raw[:raw.shape[0], i] = self.eeg_raw_all[ch][:raw.shape[0]]
-                ts = np.asarray(self.timestamps[:n], dtype=np.float64)
+                        mm = min(n, m)
+                        raw_lists = [self.eeg_raw_all[ch][:mm] for ch in self.channels]
+                ts_list = self.timestamps[:n]
                 started = float(self.session_start) if self.session_start else now
-            if ts.size < n or ts.size == 0:
-                ts = started + np.arange(n) / float(self.sfreq)
+                self._snap_lock_max_ms = max(
+                    self._snap_lock_max_ms, (time.perf_counter() - _t_lk) * 1000.0)
             if self._last_snapshot_path is None:
                 stem = datetime.fromtimestamp(started).strftime("%Y%m%d_%H%M%S")
                 self._last_snapshot_path = os.path.join(
                     self.snapshot_dir, f"local_{stem}.partial.npz")
             out = self._last_snapshot_path
+            self._last_snapshot_t = now          # 节奏按"排定"计，不受写盘快慢影响
+            self._snap_thread = threading.Thread(
+                target=self._snapshot_write,
+                args=(out, eeg_lists, raw_lists, ts_list, started, n, now),
+                daemon=True)
+            self._snap_thread.start()
+            return out
+        except Exception as ex:
+            try:
+                print(f"[warn] 增量快照失败（不影响采集）：{type(ex).__name__}: {ex}")
+            except Exception:
+                pass
+            return None
+
+    def _snapshot_write(self, out, eeg_lists, raw_lists, ts_list, started, n, stamp):
+        """锁外：序列化 → 原子写 → 写后校验。**在后台线程里跑，不阻塞采集与推流。**
+
+        〔2026-10-03 P0-1〕从 `snapshot()` 拆出：这些事既不该在锁内、也不该压在采集路径上。
+        """
+        try:
+            _t_w = time.perf_counter()
+            eeg = np.empty((n, self.n_ch), dtype=np.float64)
+            for i in range(self.n_ch):
+                eeg[:, i] = eeg_lists[i]
+            raw = None
+            if raw_lists is not None:
+                rn = len(raw_lists[0])
+                raw = np.empty((rn, self.n_ch), dtype=np.float64)
+                for i in range(self.n_ch):
+                    raw[:, i] = raw_lists[i]
+            ts = np.asarray(ts_list, dtype=np.float64)
+            if ts.size < n or ts.size == 0:
+                ts = started + np.arange(n) / float(self.sfreq)
             os.makedirs(os.path.dirname(out), exist_ok=True)
             meta = {"timestamp": datetime.now().isoformat(),
                     "timestamp_meaning": "ended_at",
@@ -748,8 +799,7 @@ class DataBuffer:
                     "device": self.device, "samples": int(n),
                     "duration": float(ts[-1] - ts[0]) if ts.size > 1 else 0.0,
                     "note": "P0-4 增量快照（非正式产物；正式保存成功后应被删除）"}
-            tmp = out + ".tmp.npz"   # 注意：np.savez 对无 .npz 后缀的路径会**自动补 .npz**，
-                                     # 故临时名必须以 .npz 结尾（曾因此处使 os.replace 找不到文件）
+            tmp = out + ".tmp.npz"   # np.savez 对无 .npz 后缀的路径会**自动补 .npz**（曾因此踩坑）
             if raw is not None:
                 np.savez(tmp, eeg=eeg, eeg_pre_filter=raw, timestamps=ts, meta=meta)
             else:
@@ -762,22 +812,35 @@ class DataBuffer:
                 except Exception:
                     pass
                 raise
-            # 写后校验：能读回且形状一致才算成功（防半份 zip）
-            with np.load(out, allow_pickle=True) as d:
+            with np.load(out, allow_pickle=True) as d:      # 写后校验：防半份 zip
                 if int(d["eeg"].shape[0]) != int(n):
                     raise ValueError("快照写后校验失败：行数不一致")
             self._snapshot_count += 1
-            self._last_snapshot_t = now
-            return out
+            self._snap_write_max_ms = max(self._snap_write_max_ms,
+                                          (time.perf_counter() - _t_w) * 1000.0)
         except Exception as ex:
             try:
-                print(f"[warn] 增量快照失败（不影响采集）：{type(ex).__name__}: {ex}")
+                print(f"[warn] 增量快照写盘失败（不影响采集）：{type(ex).__name__}: {ex}")
             except Exception:
                 pass
-            return None
 
     def discard_snapshot(self):
-        """正式保存成功后删除快照（避免与正式产物混淆）。"""
+        """正式保存成功后删除快照（避免与正式产物混淆）。
+
+        〔2026-10-03 P0-1〕**先等后台写盘线程收尾**——否则会出现"删完又被写回来"。
+        """
+        t = getattr(self, "_snap_thread", None)
+        if t is not None and t.is_alive():
+            t.join(timeout=30)
+            if t.is_alive():
+                # 写盘线程 30s 未收尾 ⇒ **不能删**：它随时会把文件写回来，
+                # 删除会变成"删了又出现"的假象（宁可留一个已知的多余快照）
+                try:
+                    print("[warn] 快照写盘线程未在 30s 内收尾，本轮不删除快照"
+                          "（保留亦不影响正式产物）")
+                except Exception:
+                    pass
+                return False
         p = self._last_snapshot_path
         if not p:
             return False
@@ -868,11 +931,22 @@ class DataBuffer:
             "snapshot_count": int(self._snapshot_count),
             "snapshot_last_path": (os.path.basename(self._last_snapshot_path)
                                    if self._last_snapshot_path else ""),
+            # 〔2026-10-03〕**如实说明**：正式保存成功后该快照会被 `discard_snapshot()` 删除，
+            # 所以此路径在已保存的会话里**通常已不存在**——是设计使然，不是丢了文件。
+            # （缘起：ZEN-20261002-P001-S17 回看时把悬空路径误读成异常。）
+            "snapshot_last_path_note": (
+                "该快照为崩溃保险；正式保存成功后即被删除，故此路径通常已不存在"),
             "sfreq": self.sfreq,
             "channels": self.channels,
             "device": self.device,
             # 非 None＝本会话非真人实测（模拟器/回放）；报告页顶部同标一条横幅
             "source_note": self.source_note,
+            # 〔2026-10-03 P0-3〕接收侧计数（行数/坏行/传输类型）——"缺的样本去哪了"的对账凭据
+            "source_stats": self.source_stats,
+            # 〔2026-10-03 P0-1〕快照两段实测耗时：下次真机可直接判断"停顿是否为快照所致"
+            "snapshot_perf": {"count": int(self._snapshot_count),
+                              "lock_ms_max": round(self._snap_lock_max_ms, 1),
+                              "write_ms_max": round(self._snap_write_max_ms, 1)},
             "samples": n,
             "duration": duration_val,
             "signal_chain": chain,

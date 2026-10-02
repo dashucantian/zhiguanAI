@@ -637,6 +637,22 @@ class MonitorSession:
         except Exception as e:
             # 五相标注失败不得影响数据保存主流程（同声音决策的容错原则）
             print(f"[warn] zx_phase 派生失败（不影响保存）：{e}")
+        # 〔2026-10-03 P0-3，法师令「现在就动」〕**接收侧计数入档**（对账凭据）。
+        # 缘起：ZEN-20261002-P001-S17 缺 4,770 样本（0.66%），却因计数只在内存里而**无法回看**
+        # 究竟是"链路丢"还是"被丢弃"⇒ 分不清两种失败＝没有告警（坑 012 同类）。
+        try:
+            _rx = getattr(self, "receiver", None)
+            if _rx is not None:
+                buf.source_stats = {
+                    "receiver": type(_rx).__name__,
+                    "packet_count": getattr(_rx, "packet_count", None),
+                    "raw_count": getattr(_rx, "raw_count", None),
+                    "bad_line_count": getattr(_rx, "bad_line_count", None),
+                    "detected_transport": getattr(_rx, "detected_transport", None),
+                    "last_error": getattr(_rx, "last_error", None),
+                }
+        except Exception:
+            pass                      # 计数拿不到不挡保存（同契约纪律：附属物失败不打断主流程）
         result = buf.save_bin(extra_meta=info)
         if result:
             data_path, report_path = result
@@ -660,7 +676,13 @@ class MonitorSession:
                               "clean_ratio": (qc.get("metrics") or {})
                               .get("clean_ratio"),
                               "packet_loss_rate": (qc.get("metrics") or {})
-                              .get("packet_loss_rate")},
+                              .get("packet_loss_rate"),
+                              # 〔2026-10-03 P0-2〕**判定原因必须入档**：原 payload 只有结论
+                              # 与两个数字，回看时**看不到"为什么判隔离"**（今晨分析
+                              # ZEN-20261002-P001-S17 时，靠本地重跑才拿到 reasons）。
+                              "reasons": qc.get("reasons") or [],
+                              "threshold_version": qc_pipeline.THRESHOLD_VERSION,
+                              "qc_version": qc_pipeline.QC_VERSION},
                              "监测路径质检完成")
                 # 事前登记＋事后自评 → experience 事件（2026-09-24 裁定2/6/7；
                 # meta.self_report 已由 extra_meta 落盘，事件流是行为侧账本）
@@ -1070,7 +1092,12 @@ class ExperimentSession:
                                       .get("clean_ratio"),
                                       "packet_loss_rate": (qc.get("metrics")
                                                            or {}).get(
-                                          "packet_loss_rate")},
+                                          "packet_loss_rate"),
+                                      # 〔2026-10-03 P0-2〕与监测路径同口径：原因必入档
+                                      "reasons": qc.get("reasons") or [],
+                                      "threshold_version":
+                                          qc_pipeline.THRESHOLD_VERSION,
+                                      "qc_version": qc_pipeline.QC_VERSION},
                                      "闭环路径质检完成")
                         append_event(ep, "closed", "operator", "measured",
                                      {"saved": True}, "闭环实验结束")
