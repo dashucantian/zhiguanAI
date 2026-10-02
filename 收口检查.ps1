@@ -30,7 +30,16 @@ Section "2. Decision registration (shard mode, rule 2.7)"
 $dline = Select-String -LiteralPath '01_项目管理\止观AI项目分工与决策日志.md' -Pattern '\*\*D(\d+)' |
          ForEach-Object { [int]$_.Matches[0].Groups[1].Value } | Sort-Object -Descending | Select-Object -First 1
 $today = Get-Date -Format 'MMdd'
-$shards = @(Get-ChildItem -LiteralPath '01_项目管理\登记分片' -Filter "D-$today-W*x.md" -ErrorAction SilentlyContinue)
+$shards = @(Get-ChildItem -LiteralPath '01_项目管理\登记分片' -Filter "D-$today-W*.md" -ErrorAction SilentlyContinue)
+# 闸门自检（教训 7.1：本脚本自身判据亦须被核验）——2026-10-03 修：
+# 旧写法 `-Filter "D-$today-W*x.md"` 里的 `x` 是**字面量**，W1a/W2b 这类真实命名**永不匹配**
+# ⇒ 该闸连续两日恒报 0，且只出 NOTE 不出告警，谁也没发现。故补形状自检。
+$shapeProbe = @(Get-ChildItem -LiteralPath '01_项目管理\登记分片' -Filter "D-*-W*.md" -ErrorAction SilentlyContinue)
+if ($shapeProbe.Count -eq 0) {
+    Bad "闸2 自检失败：登记分片目录中竟无 D-*-W*.md —— filter 形状可能有误，本闸可能恒为空转"
+} else {
+    Ok "闸2 自检：D 分片命名形状可匹配（历史 $($shapeProbe.Count) 件）"
+}
 Write-Host "legacy max D = D$dline (frozen tail only); today shards: $($shards.Count) [D-$today-Wxa style]" -ForegroundColor White
 if ($shards.Count -eq 0) { Write-Host "[NOTE] no D-shard today - if this window carried a master decision, write one file per item into 登记分片\ (2.7); pure exec rounds skip" -ForegroundColor Gray }
 else { Ok ("today D-shards registered: " + (($shards | ForEach-Object { $_.BaseName } | Sort-Object) -join ', ')) }
