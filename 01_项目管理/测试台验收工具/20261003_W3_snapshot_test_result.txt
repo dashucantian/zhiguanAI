@@ -1,0 +1,32 @@
+[warn] 快照写盘线程未在 30s 内收尾，本轮不删除快照（保留亦不影响正式产物）
+{
+  "source": "muse2-repo/muse2-master/muse_local_server.py",
+  "method": "AST提取真实方法＋合成夹具，非完整服务/真机验收",
+  "results": [
+    {
+      "test": "background_atomic_file",
+      "passed": true,
+      "detail": "真实方法写入合成数据；后台完成后文件可读"
+    },
+    {
+      "test": "timeout_preserves_file",
+      "passed": true,
+      "detail": "模拟join超时，不等30秒；应返回False且保留文件"
+    },
+    {
+      "test": "completed_discard",
+      "passed": true,
+      "detail": "已完成写线程的快照可删"
+    },
+    {
+      "test": "single_caller_skip_and_capture",
+      "passed": true,
+      "detail": "首次快照不应含排定之后追加值；第二次调用跳过"
+    },
+    {
+      "test": "concurrent_guard_counterexample",
+      "passed": true,
+      "detail": "条件性反例：两个调用者可排定两次；不证明当前生产单调用点会触发"
+    }
+  ]
+}
