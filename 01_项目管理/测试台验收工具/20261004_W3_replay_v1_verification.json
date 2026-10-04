@@ -1,0 +1,92 @@
+{
+  "scope": "traceability only, not claim truth/authorization acceptance",
+  "old_results": [
+    {
+      "event": "E01",
+      "status": "git_version_verified",
+      "sha256": "975c21e0ea5cc106fa1b3c3a1c543fc7e4b731fa001279160a15f882afeaf956"
+    },
+    {
+      "event": "E02",
+      "status": "git_version_verified",
+      "sha256": "77ce042dd71ebb3967eca7e55aa89cda7dbe87472a75f78b5f9351a5f3c96682"
+    },
+    {
+      "event": "E03",
+      "status": "git_version_verified",
+      "sha256": "8e5b5cab0cd5baa67d4cde9564fa0986db1fb8e48f47cf85a438d3a903fae9de"
+    },
+    {
+      "event": "E04",
+      "status": "git_version_verified",
+      "sha256": "d9230e8c7271b4ba900f5e6d74dd8cba313ccf6e18a299bab8d0b02083db4748"
+    },
+    {
+      "event": "E05",
+      "status": "git_version_verified",
+      "sha256": "289993f1f33f39a8168439412fd7ced8c1b87eb8c90ead3feb1c9d19e7ffa279"
+    },
+    {
+      "event": "E05",
+      "status": "git_version_verified",
+      "sha256": "3bf578482ec7df339e33b3ad7b5d4cdc3e75cb99c5659175a0764ca5ab9f2bf5"
+    },
+    {
+      "event": "E06",
+      "status": "working_tree_hash_verified",
+      "sha256": "ba8e4cd3e82a396aad7fcd53c81adfd30411cd9a3a7dc8c29114b8276bea547d"
+    },
+    {
+      "event": "E07",
+      "status": "working_tree_hash_verified",
+      "sha256": "9a94c3efc7c3dfafae7676e432bfa8ed2b993dbc020cfd20c6abd777dc806785"
+    },
+    {
+      "event": "E08",
+      "status": "working_tree_hash_verified",
+      "sha256": "27a12cf50ba92a74d4406e430541aa1653f9862dcb4043ca7d4abf4432ed0e87"
+    },
+    {
+      "event": "E09",
+      "status": "working_tree_changed",
+      "sha256": "c07218050a1646aa92d7be0528cf678b4c175b1b992d46f1f8edaea31a0f61a9"
+    },
+    {
+      "event": "E10",
+      "status": "working_tree_hash_verified",
+      "sha256": "c069d88683ac79e29641adcc4269162a689a98035c89c9cedb6743f62b24ca8f"
+    }
+  ],
+  "new_results": [
+    {
+      "event": "E11",
+      "status": "working_tree_hash_verified",
+      "sha256": "b8741a964eeb47391a46b6fd2f9b5a09dd981659a7b5e182e06b748366a5e0db"
+    },
+    {
+      "event": "E11",
+      "status": "working_tree_hash_verified",
+      "sha256": "5bd5208dafc220c2bd74d7893932f1ee4f940b8e8ca32f434062acf0a4bb6e73"
+    },
+    {
+      "event": "E12",
+      "status": "working_tree_hash_verified",
+      "sha256": "1af05f47a76f2295b85fc774be05d7966c75727262bf1390f0dd41f658f4455f"
+    },
+    {
+      "event": "E13",
+      "status": "working_tree_hash_verified",
+      "sha256": "f4c99fdfdd361c4e0f28a399975e4baa8012ed99e6aea295701428bd369e4d10"
+    },
+    {
+      "event": "E13",
+      "status": "working_tree_hash_verified",
+      "sha256": "1af05f47a76f2295b85fc774be05d7966c75727262bf1390f0dd41f658f4455f"
+    },
+    {
+      "event": "E14",
+      "status": "working_tree_hash_verified",
+      "sha256": "8666f97f70f93bda2f4d9686c6feb32fab7fb9bffd28364fb44ff618185ecab0"
+    }
+  ]
+}

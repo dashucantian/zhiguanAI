@@ -1,0 +1,54 @@
+{
+  "scope": "isolated payload serialization, not full lifecycle/QC calculation",
+  "checks": [
+    {
+      "name": "absent_event_file_skip",
+      "passed": true,
+      "detail": "real append_event extracted from AST; no event file created"
+    },
+    {
+      "name": "payload_line_673_quarantine",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "payload_line_673_keep",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "payload_line_673_missing_metrics_reasons",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "payload_line_1089_quarantine",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "payload_line_1089_keep",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "payload_line_1089_missing_metrics_reasons",
+      "passed": true,
+      "detail": "actual AST payload expression + actual append_event; synthetic qc only"
+    },
+    {
+      "name": "append_write_failure_propagates",
+      "passed": true,
+      "detail": "caller silent except policy NOT behavior-tested"
+    }
+  ],
+  "thresholds": {
+    "QC_VERSION": "1.1",
+    "THRESHOLD_VERSION": "20260920"
+  },
+  "source_sha256": {
+    "console_server.py": "f70a24fd90679533c54cd6444ab67e4e495568c73d91239f36363b5e9da229c5",
+    "session_contract.py": "7af30675c7e8f1509cd890a08d2f53a3b57f6545f76b508a289deafb3f338521",
+    "qc_pipeline.py": "4a1ffc76ac915d7a64daf10a4360c4407c79689766f069348c976ebdff793fdd"
+  }
+}

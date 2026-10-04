@@ -1,0 +1,193 @@
+{
+  "snapshot": {
+    "ok": true,
+    "data": {
+      "fields": [
+        "任务编号",
+        "任务名",
+        "状态",
+        "承担者",
+        "验收标准",
+        "关联文件",
+        "所属阶段",
+        "关联原则",
+        "依赖任务",
+        "计划开始",
+        "计划截止",
+        "裁决确认",
+        "承接状态",
+        "更新时间"
+      ],
+      "record_id_list": [
+        "recvwn4nxv34hl",
+        "recvwn4nSD13ZF",
+        "recvwn4nSDh71Z",
+        "recvwn4nSDPO9U"
+      ],
+      "data": [
+        [
+          "ZG-067",
+          [
+            {
+              "text": "人机建构方法论外推（长期任务线：借鉴→巩固→输出反馈）",
+              "type": "text"
+            }
+          ],
+          "进行中",
+          null,
+          [
+            {
+              "text": "三条硬判据（纲§三）：①外人依母本半日建成自有系统；②一人系统无法师参与自转30天；③反馈改过母本≥1次",
+              "type": "text"
+            }
+          ],
+          null,
+          "N叙事生态",
+          [
+            "统一架构不造冗余",
+            "先方案后动手",
+            "AI不自写规则",
+            "义理真值上交",
+            "机密数据不出网",
+            "独立核校不自证",
+            "涉数值必读实体",
+            "订正登记两处做",
+            "编号先查后取",
+            "镜子非训练器"
+          ],
+          [],
+          1790438400000,
+          null,
+          true,
+          "待承接",
+          1790465411000
+        ],
+        [
+          "ZG-068",
+          [
+            {
+              "text": "①一页纸定稿（个人人机建构方法论）",
+              "type": "text"
+            }
+          ],
+          "已完成",
+          null,
+          [
+            {
+              "text": "法师审后去「草案」冠名定稿；AGENTS.md兼容条＋n8n式打包两处已并入",
+              "type": "text"
+            }
+          ],
+          null,
+          null,
+          null,
+          [
+            "recvwn4nxv34hl"
+          ],
+          null,
+          null,
+          true,
+          "待承接",
+          1790528361000
+        ],
+        [
+          "ZG-069",
+          [
+            {
+              "text": "②模板包×6（规约/状态/分片/判语/信箱/维那SOP 导入即用原子模板）",
+              "type": "text"
+            }
+          ],
+          "待法师审定",
+          null,
+          [
+            {
+              "text": "外人脱离本项目可独立用一套；六包齐且各配一页说明",
+              "type": "text"
+            }
+          ],
+          null,
+          null,
+          null,
+          [
+            "recvwn4nxv34hl"
+          ],
+          null,
+          null,
+          null,
+          null,
+          1790468535000
+        ],
+        [
+          "ZG-073",
+          [
+            {
+              "text": "⑥居士内测邀请（3–5人闭环反馈）",
+              "type": "text"
+            }
+          ],
+          "进行中",
+          null,
+          [
+            {
+              "text": "≥3位内测人半日各自建成；反馈≥1条回流改母本",
+              "type": "text"
+            }
+          ],
+          null,
+          null,
+          null,
+          [
+            "recvwn4nxv34hl"
+          ],
+          null,
+          null,
+          null,
+          null,
+          1790611526000
+        ]
+      ]
+    },
+    "provenance": {
+      "source_label": "offline capture of observed Feishu record_search shape",
+      "normalized_at_utc": "2026-10-04T09:26:36.437893+00:00",
+      "pagination": "complete_declared",
+      "source_currentness": "not independently verified by this offline bridge",
+      "dropped_field_names": [],
+      "limitation": "白名单不等于脱敏：保留字段内容仍须人工批准可上云与可分享",
+      "query_scope": "Filtered auto-number numeric values 67,68,69,73; complete selected query only",
+      "table_complete": false,
+      "capture_processed_at_utc": "2026-10-04T09:26:36.437921+00:00",
+      "remote_retrieved_at_utc": null,
+      "capture": "tool response manually transcribed; semantic spot-readback, not original wire bytes",
+      "checkbox_missing_semantics": "null means not returned; false is retained explicitly",
+      "not_requested_fields": [
+        "承担者",
+        "关联文件",
+        "AI执行记录",
+        "裁决"
+      ],
+      "null_cell_semantics": "not returned/not requested, not proof of empty remote field",
+      "capture_file_sha256": "1bde2be3ab7457115ca0f628095fcc8916734ff1e76ece1fb932caa4499026f6"
+    }
+  },
+  "audit": {
+    "record_count": 4,
+    "with_principles": 1,
+    "with_full_schedule": 0,
+    "dependency_edge_count": 3,
+    "issues": [
+      {
+        "kind": "partial_schedule",
+        "task": "ZG-067"
+      }
+    ],
+    "limitations": [
+      "本地快照不是远端实时状态",
+      "不以文件mtime当业务更新时间",
+      "零依赖不证明任务互相独立",
+      "本工具只查结构，不能判定验收证据充分或法师授权有效"
+    ],
+    "scope": "selected-query structure, not full-table audit or task acceptance"
+  }
+}

@@ -1,0 +1,17 @@
+test_duplicate_operations (__main__.CoverageTests) ... ok
+test_dynamic_path_flagged (__main__.CoverageTests) ... ok
+test_exact_converter (__main__.CoverageTests) ... ok
+test_grouped_bold_rows_and_root (__main__.CoverageTests) ... ok
+test_malformed_matrix_fails_closed (__main__.CoverageTests) ... ok
+test_multi_methods_decorator (__main__.CoverageTests) ... ok
+test_nested_registration_ws_separate (__main__.CoverageTests) ... ok
+test_no_source_execution (__main__.CoverageTests) ... ok
+test_prefix_manual_registration_flagged (__main__.CoverageTests) ... ok
+test_prose_cannot_hide_missing_operation (__main__.CoverageTests) ... ok
+test_same_path_two_methods (__main__.CoverageTests) ... ok
+test_scope_excludes_later_prose (__main__.CoverageTests) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.027s
+
+OK
