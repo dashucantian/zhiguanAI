@@ -1,0 +1,37 @@
+{
+  "source": "console_server.py 两位点＋session_contract.append_event＋qc_pipeline.qc_assess",
+  "method": "静态断言＋真实函数合成夹具，非完整服务/真机验收",
+  "version": "v2（v1 三败根因已修：消费位点误计/跳过语义预建/沙箱 TEMP 受限改项目内临时区）",
+  "results": [
+    {
+      "test": "T1a_two_emit_sites",
+      "passed": true,
+      "detail": "发射位点=2（行 [673, 1089]），消费位点=1（行 [2806]，不计入）"
+    },
+    {
+      "test": "T1b_site1_contract_keys",
+      "passed": true,
+      "detail": "监测路径位点 payload 三键齐"
+    },
+    {
+      "test": "T1b_site2_contract_keys",
+      "passed": true,
+      "detail": "闭环路径位点 payload 三键齐"
+    },
+    {
+      "test": "T2a_skip_when_absent",
+      "passed": true,
+      "detail": "文件不存在→返回 False（契约期望 False）且不建文件：是"
+    },
+    {
+      "test": "T2b_roundtrip_and_keys",
+      "passed": true,
+      "detail": "返回 True；读回 1 事件，qc_done=1，payload 键齐"
+    },
+    {
+      "test": "T3_qc_assess_synthetic",
+      "passed": true,
+      "detail": "recommend=quarantine reasons=1 条 THRESHOLD_VERSION=20260920"
+    }
+  ]
+}
