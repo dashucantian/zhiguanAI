@@ -686,6 +686,21 @@ class MonitorSession:
                 _vr_events_flush(events_path_for(data_path))
             except Exception:
                 pass
+            # ── 批 C1（2026-10-06·金口七项#2 学习用途）：会话收口→从此养脑入队 ──
+            # 只入队（append 任务行＋queued 事件），单 worker 线程串行消化；
+            # 准入在入队前（QC recommend=ingest＋非 test/smoke/replay＋撤回者
+            # 不入队）；附属物纪律：入队失败不影响保存主流程（同 qc_done 契约）。
+            try:
+                import congci_pipeline
+                congci_pipeline.enqueue(
+                    data_path, qc=qc,
+                    session_type=(self.session_info or {}).get("session_type")
+                    or "",
+                    participant=(self.session_info or {}).get("participant")
+                    or "",
+                    scene="monitor")
+            except Exception as _ce:
+                print(f"[warn] 从此养脑入队失败（不影响保存）：{_ce}")
         return self.saved
 
     def _build_ingest_cmd(self, data_path, report_path, qc=None):
@@ -1121,6 +1136,21 @@ class ExperimentSession:
                 result = {"ok": False, "error": f"实验异常: {ex}"}
                 self.broadcaster.publish({"type": "error", "text": str(ex)})
             self.last_result = result
+            # ── 批 C1：闭环会话收口→从此养脑入队（只入队；_emit_saved_card 已落
+            # npz 路径）。准入在入队前自判（QC/类型/撤回者），不入队即静默跳过；
+            # 附属物纪律：入队失败不影响闭环收口。
+            try:
+                if self.saved and self.saved.get("npz"):
+                    import congci_pipeline
+                    congci_pipeline.enqueue(
+                        self.saved["npz"],
+                        session_type=(self.session_info or {}).get(
+                            "session_type") or "",
+                        participant=(self.session_info or {}).get(
+                            "participant") or "",
+                        scene="closedloop")
+            except Exception as _ce:
+                print(f"[warn] 从此养脑入队失败（不影响闭环收口）：{_ce}")
             self.status = "idle"
 
         self.thread = threading.Thread(target=worker, daemon=True)

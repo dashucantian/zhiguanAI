@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 zhiguan_cadence_bridge.py — 止观闭环 × Cadence 均衡沉降脑 接引桥（v2）
@@ -201,6 +201,163 @@ class ZhiGuanCadenceBridge:
             with open(path, "wb") as f:
                 pickle.dump(self.brain, f)
             return path
+
+
+# ── 批 C1（2026-10-06·金口七项#2 学习用途）：会话收口养脑 ────────────────┐
+# 注：上行框线为对齐装饰，勿改。
+# process_session＝既有正式会话 npz 离线回放进脑（持久脑跨坐续修）。
+# 口径承 cadence_replay_experiment.py（W4 已验证回放件，逐字同源）：
+#   · 特征走 state_segmentation.extract_features（1s epoch，BANDS/RATIOS 同源）；
+#   · 跨通道平均 log10 功率 → z → z(α−θ)/z(β−α)；in_state 代理＝z(α−θ)>IN_STATE_Z；
+#   · 无效 epoch → 弃权拍（不动脑、不记经历）；零有效 epoch → 整坐弃权。
+# 事务边界归 congci_pipeline（准入/幂等/认领/锁/索引/事件），本函数只做
+# 「计算＋产物写出」：trace JSON 原子替换＋候选脑件（cadence 真实路径返还）。
+# 不写 processed_index、不发 congci_brain 事件——账本与事件单一出口在管线。
+# 确定性：固定 seed，同输入两次运行逐字一致（判语011；脑续修同命）。
+IN_STATE_Z = 0.8                     # in_state 代理阈值（承回放演示口径；非修行判据）
+ALGO_VERSION = "congci-feed-1.0.0"   # 特征/处理算法版本常量（幂等键第三元，随桥声明）
+
+
+def process_session(npz, *, brain_path=None, out_dir=None, session_key=None,
+                    seed: int = 42) -> dict:
+    """把一份会话 npz 回放进脑（持久脑跨坐续修），返回摘要与产物路径。
+
+    参数：
+      npz         会话 npz 路径（须含 eeg (N,C)；timestamps 可选→推 sfreq）
+      brain_path  持久脑路径——存在则载入续修，不存在则按 seed 新生（首坐）
+      out_dir     产物目录：写 trace.json（原子替换）＋brain.candidate.npz
+      session_key 会话身份（Zen-ID 或内容 hash；仅入摘要，不参与计算）
+      seed        新生脑种子（固定 42＝判语011 确定性）
+
+    返回 dict：
+      ok/abstained/reason —— 无效输入（零有效 epoch/npz 不可解析/sfreq 不可用）
+                              弃权返回，不动脑不落候选件；
+      summary —— epochs/valid_ratio/in_state_ratio/action_hist/final_*/state_word；
+      trace_path —— out_dir/trace.json；candidate_path —— 候选脑真实路径；
+      brain_loaded —— 是否自 brain_path 载入既有脑（False＝首坐新生）。
+    处理中断/依赖缺失等异常由调用方按 failed 处置（可重试语义）。
+    """
+    import json as _json
+    from datetime import datetime as _dt
+
+    def _abstain(reason: str) -> dict:
+        return {"ok": True, "abstained": True, "reason": reason,
+                "summary": None, "trace_path": None, "candidate_path": None,
+                "brain_loaded": bool(brain_path and os.path.exists(brain_path))}
+
+    try:
+        d = np.load(npz, allow_pickle=False)
+    except FileNotFoundError:
+        raise
+    except Exception as e:
+        return _abstain(f"npz 不可解析（{type(e).__name__}），弃权")
+
+    if "eeg" not in d.files:
+        return _abstain("npz 缺 eeg 数组，弃权")
+    eeg = np.asarray(d["eeg"], dtype=float)
+    if eeg.ndim != 2 or eeg.shape[0] < 1 or eeg.shape[1] < 1:
+        return _abstain("eeg 需为 (N,C) 二维数组，弃权")
+
+    if "timestamps" in d.files:
+        dt = np.diff(np.asarray(d["timestamps"], dtype=float))
+        dt = dt[dt > 0]
+        sfreq = float(np.round(1.0 / np.median(dt))) if len(dt) else 0.0
+        sfreq_src = "inferred_from_timestamps"
+    else:
+        sfreq = 256.0                       # muse2 report 标准率（未存时间戳）
+        sfreq_src = "assumed_muse256"
+    if sfreq < 50:
+        return _abstain(f"sfreq 不可用（{sfreq}），弃权")
+
+    from state_segmentation import extract_features, session_summary
+    feats, valid = extract_features(eeg, sfreq)
+    if feats is None:
+        return _abstain("有效 epoch 不足（不足 1 个完整 1s epoch），弃权")
+    if not valid.any():
+        return _abstain("无有效 epoch（全部被质量剔除），弃权")
+
+    n_ch = eeg.shape[1]
+    powm = feats[:, :5 * n_ch].reshape(-1, n_ch, 5).mean(axis=1)   # (T,5)
+    log = np.log10(np.maximum(powm, 1e-12))
+    z = (log - log.mean(0)) / np.maximum(log.std(0), 1e-9)
+    z_at = z[:, 2] - z[:, 1]        # alpha − theta（z 空间差）
+    z_ba = z[:, 3] - z[:, 2]        # beta − alpha
+
+    in_state = z_at > IN_STATE_Z
+    br = ZhiGuanCadenceBridge(seed=seed, brain_path=brain_path)
+    brain_loaded = bool(brain_path and os.path.exists(brain_path))
+    dwell, res_norm, prev = 0, 0.0, False
+    trace = []
+    T = int(feats.shape[0])
+    for t in range(T):
+        if not valid[t]:
+            trace.append({"t": t + 1, "abstain": True})
+            continue
+        obs = br.build_observation(float(z_at[t]), float(z_ba[t]),
+                                   bool(in_state[t]), dwell / 30.0, res_norm)
+        r = br.observe_reward(prev, bool(in_state[t]), float(z_ba[t]) > 0.0)
+        out = br.step(obs, reward=r, done=(t == T - 1))
+        dwell = dwell + 1 if in_state[t] else 0
+        res_norm = out["settlement"]["residual"]
+        prev = bool(in_state[t])
+        trace.append({"t": t + 1, **out["settlement"], "action": out["action"],
+                      "beat": round(out["beat"], 3),
+                      "volume": round(out["volume"], 4),
+                      "z_at": round(float(z_at[t]), 3),
+                      "in_state": bool(in_state[t])})
+
+    ss = None
+    try:
+        ss = session_summary(eeg, sfreq)
+    except Exception:
+        ss = None
+    ss_ok = bool(ss and ss.get("ok"))
+    actions = [e["action"] for e in trace if "action" in e]
+    res = [e["residual"] for e in trace if "residual" in e]
+    summary = {
+        "ok": True, "npz": os.path.abspath(str(npz)),
+        "session_key": session_key, "algo_version": ALGO_VERSION,
+        "seed": seed, "sfreq": sfreq, "sfreq_source": sfreq_src,
+        "channels": int(n_ch), "epochs": T,
+        "epochs_valid": int(valid.sum()),
+        "valid_ratio": round(float(valid.mean()), 4),
+        "in_state_ratio": round(float(in_state[valid].mean()), 4),
+        "action_hist": ({str(k): int(v) for k, v in
+                         zip(*np.unique(actions, return_counts=True))}
+                        if actions else {}),
+        "residual_mean": round(float(np.mean(res)), 8) if res else None,
+        "final_beat": round(br.beat, 3), "final_volume": round(br.volume, 4),
+        "obs_dim": OBS_DIM, "action_dim": ACTION_DIM,
+        "brain_loaded": brain_loaded,
+        "state_word": (ss.get("word") if ss_ok else None),
+        "n_states": (ss.get("n_states") if ss_ok else None),
+        "finished_at": _dt.now().astimezone().isoformat(timespec="seconds"),
+    }
+
+    trace_path = candidate_path = None
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+        trace_path = os.path.join(out_dir, "trace.json")
+        tmp = trace_path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                _json.dump({"summary": summary, "trace": trace}, f,
+                           ensure_ascii=False, indent=1)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, trace_path)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+        # 候选脑件（正式脑经 os.replace 提升前先落候选——事务顺序①）
+        candidate_path = br.save(os.path.join(out_dir, "brain.candidate"))
+    return {"ok": True, "abstained": False, "reason": None,
+            "summary": summary, "trace_path": trace_path,
+            "candidate_path": candidate_path, "brain_loaded": brain_loaded,
+            "trace_len": len(trace)}
 
 
 # ── 合成会话（自测用）────────────────────────────────────────────────┐
