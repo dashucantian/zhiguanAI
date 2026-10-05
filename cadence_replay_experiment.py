@@ -28,7 +28,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from state_segmentation import extract_features
+from state_segmentation import extract_features, session_summary
 from zhiguan_cadence_bridge import ZhiGuanCadenceBridge
 
 IN_STATE_Z = 0.8
@@ -93,6 +93,8 @@ def main() -> int:
                       "z_at": round(float(z_at[t]), 3),
                       "in_state": bool(in_state[t])})
 
+    ss = session_summary(eeg, sfreq)
+    ss_ok = bool(ss.get("ok"))
     actions = [e["action"] for e in trace if "action" in e]
     res = [e["residual"] for e in trace if "residual" in e]
     summary = {
@@ -106,6 +108,10 @@ def main() -> int:
         "final_beat": round(br.beat, 3),
         "final_volume": round(br.volume, 4),
         "obs_dim": 6, "actions_dim": 4, "seed": 42,
+        # 语义系统种子（20261005 愿景框架）：EEG 状态序列 → 状态词（字母序列）
+        "state_word": (ss["word"] if ss_ok else None),
+        "n_states": (ss["n_states"] if ss_ok else None),
+        "states_desc": (ss["states"] if ss_ok else None),
     }
 
     os.makedirs(a.out, exist_ok=True)
