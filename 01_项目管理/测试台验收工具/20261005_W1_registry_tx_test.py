@@ -162,6 +162,47 @@ def main() -> int:
         tx.ingest_append_locked(row("ZEN-20261005-P001-S99"), csvp)  # 释放后可获锁
         ok("锁件：活锁按超时拒绝（TimeoutError），释放后恢复")
 
+        # ── 批 C0 锁族安全修订（2026-10-06·W3 反例消费）──
+        # ① 三态存活：自身=alive／不存在 pid=dead／空 pid=unknown
+        assert tx._pid_status(os.getpid()) == "alive", "自身 pid 应 alive"
+        assert tx._pid_status(999999999) == "dead", "不存在 pid 应 dead"
+        assert tx._pid_status(0) == "unknown", "空 pid 应 unknown"
+        # ② 活持有者锁不可夺（即便 mtime 极旧）：本进程 pid＋1 小时前时间戳
+        #    → 短超时锁定被拒（DEAD-only 接管，W3 反例①）
+        lp2 = lp + ".alive-old"
+        with open(lp2, "w", encoding="utf-8") as f:
+            f.write(f"holder_pid={os.getpid()}\nowner_token=ghost\npurpose=old\n")
+        old = __import__("time").time() - 3600
+        os.utime(lp2, (old, old))
+        t0 = __import__("time").monotonic()
+        try:
+            with tx.locked(purpose="no-steal-alive", lock_path=lp2, timeout=0.6):
+                raise AssertionError("活持有者锁被夺（W3 反例①复现！）")
+        except TimeoutError:
+            pass
+        assert __import__("time").monotonic() - t0 < 5, "活锁判定异常慢"
+        ok("锁族安全①：活持有者锁不可夺（mtime 旧亦然，DEAD-only 接管）")
+        # ③ owner token 释放比对：H1 释放不得删 H2 的新锁（W3 反例②）
+        lp3 = lp + ".token"
+        held3, rel3 = threading.Event(), threading.Event()
+
+        def hold3():
+            with tx.locked(purpose="h1", lock_path=lp3):
+                held3.set()
+                rel3.wait(10)
+        th3 = threading.Thread(target=hold3)
+        th3.start()
+        held3.wait(5)
+        with open(lp3, encoding="utf-8", errors="ignore") as f:
+            assert "owner_token=" in f.read(), "锁件缺 owner_token"
+        with open(lp3, "w", encoding="utf-8") as f:   # 模拟 H2 接管（不同 token）
+            f.write("holder_pid=999999999\nowner_token=H2-token\npurpose=h2\n")
+        rel3.set()
+        th3.join(5)
+        assert os.path.exists(lp3), "H1 释放误删了 H2 的新锁（W3 反例②复现！）"
+        os.remove(lp3)
+        ok("锁族安全②：owner token 比对，H1 释放不删 H2 新锁")
+
         # ── 真实双进程并发（跨进程互斥实证）：2×30 append，零丢失零重复 ──
         worker = (
             "import sys; sys.path.insert(0, r'D:\\Project\\zhiguanAI');"

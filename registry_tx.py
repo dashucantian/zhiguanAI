@@ -16,8 +16,9 @@ registry_tx.py — Zen-EEG 会话登记表跨进程事务原语（批 C0·账本
   open("w") 截断）。
 
 本模块三件套（W1 设计承诺，消费回执在案）：
-  1. 跨进程锁件（O_CREAT|O_EXCL 原子创建；内容=pid/时刻/用途；
-     陈旧接管=持锁 pid 已死或 mtime 超阈）；
+  1. 跨进程锁件（O_CREAT|O_EXCL 原子创建；内容=pid/owner_token/时刻/用途；
+     陈旧接管=**仅持锁 pid 确证已死**〔2026-10-06 批 C0 锁族安全修订·W3
+     反例消费〕；释放前 owner_token 比对，防误删接管者新锁；unknown 不接管）；
   2. 原子替换（临时件写入→flush→读回校验→os.replace）；
   3. 写时锁内重读合并（append/回填都基于锁内最新表查重——旧快照
      不再被写回，丢更新与状态回退反例在机制上消除）。
@@ -48,7 +49,8 @@ FIELDNAMES = ["session_id", "participant_id", "date", "session_type",
               "duration_seconds", "status", "manifest_path"]
 
 LOCK_TIMEOUT_S = 10.0     # 获取锁最长等待（忙重试，不无限挂）
-LOCK_STALE_S = 120.0      # 锁件 mtime 超此值且持锁 pid 已死才可接管
+LOCK_STALE_S = 120.0      # 〔2026-10-06 安全修订·W3 反例〕已弃用：DEAD-only
+                          # 接管不再按 mtime 夺活锁；常量保留防外部引用告警
 
 
 def lock_path_for(csv_path: str) -> str:
@@ -58,44 +60,51 @@ def lock_path_for(csv_path: str) -> str:
 
 # ── 进程存活探测（Windows 安全）─────────────────────────────────────────
 
-def _pid_alive(pid: int) -> bool:
-    """pid 是否存活。Windows 走 ctypes OpenProcess（只查询、绝不终止）。"""
+if os.name == "nt":
+    import ctypes
+    _K32 = ctypes.WinDLL("kernel32", use_last_error=True)  # 保 last-error 供错误码判定
+else:
+    _K32 = None
+
+
+def _pid_status(pid) -> str:
+    """进程存活三态：alive（确证存在）／dead（确证不存在）／unknown（无法判定）。
+
+    〔2026-10-06 批 C0 锁族安全修订·W3 反例消费〕旧 `_pid_alive` 返回 bool 时，
+    Windows OpenProcess 失败（拒绝访问 5 或探测失败）与进程不存在（87）都被
+    折叠成 False＝"已死"→ 活进程锁可被误夺；且 `age>LOCK_STALE_S` 分支可夺
+    活持有者锁。本函数把「无法判定」与「确证已死」严格分列——**unknown 一律
+    不当死**（W3 反例结论：无法判定存活时保留 unknown/超时拒绝，不自动接管）。
+    """
     if not pid:
-        return False
-    try:
-        import psutil  # type: ignore
-        return psutil.pid_exists(pid)
-    except Exception:
-        pass
+        return "unknown"
     if os.name == "nt":
         try:
-            import ctypes
-            k32 = ctypes.windll.kernel32
             PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
             STILL_ACTIVE = 259
-            h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False,
-                                int(pid))
+            h = _K32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False,
+                                 int(pid))
             if not h:
-                return False
+                # 87=ERROR_INVALID_PARAMETER（进程不存在，确证 dead）；
+                # 5=拒绝访问／其它＝unknown（不得当死）
+                return "dead" if _K32.GetLastError() == 87 else "unknown"
             try:
                 code = ctypes.c_ulong()
-                if not k32.GetExitCodeProcess(h, ctypes.byref(code)):
-                    return False
-                return code.value == STILL_ACTIVE
+                if not _K32.GetExitCodeProcess(h, ctypes.byref(code)):
+                    return "unknown"
+                return "alive" if code.value == STILL_ACTIVE else "dead"
             finally:
-                k32.CloseHandle(h)
+                _K32.CloseHandle(h)
         except Exception:
-            return True  # 探测不了时保守处理（不接管）
+            return "unknown"
     # POSIX 退路（本项目主力 Windows；保留跨平台语义）
     try:
         os.kill(pid, 0)
-        return True
+        return "alive"
     except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
+        return "dead"
+    except Exception:
+        return "unknown"
 
 
 @contextmanager
@@ -107,8 +116,18 @@ def locked(timeout: float = LOCK_TIMEOUT_S, purpose: str = "",
             rows = registry_tx.read_rows(csv)
             ...  # 锁内改
             registry_tx.write_rows_atomic(rows, csv)
+
+    〔2026-10-06 批 C0 锁族安全修订·W3 反例消费〕：
+      · 锁件内容含 owner_token（本获锁唯一令牌）；释放前比对令牌，令牌不符
+        不删除——新主锁不被旧持有者 finally 误删（W3 反例②）；
+      · 陈旧接管＝**仅当持锁 pid 确证已死（_pid_status=="dead"）**；活持有者
+        锁无论持有多久都不可夺（age 分支已删除，W3 反例①）；
+      · unknown（拒绝访问/无法判定）一律不接管——锁泄漏由调用方超时
+        TimeoutError＋人工按坑 018 口径核持有者处置。
     """
+    import secrets
     lp = lock_path or lock_path_for(REGISTRY_CSV)
+    token = secrets.token_hex(8)
     deadline = time.monotonic() + timeout
     fd = None
     while True:
@@ -123,19 +142,27 @@ def locked(timeout: float = LOCK_TIMEOUT_S, purpose: str = "",
     try:
         os.write(fd, (
             f"holder_pid={os.getpid()}\n"
+            f"owner_token={token}\n"
             f"time={datetime.now().isoformat(timespec='seconds')}\n"
             f"purpose={purpose}\n").encode("utf-8"))
         os.close(fd)
         yield
     finally:
+        # owner token 比对后才删除：防把接管者（新主）的锁件误删。
+        # 注意：句柄须先关再删（Windows 下打开中的文件不可删，WinError 32）。
         try:
-            os.remove(lp)
+            with open(lp, encoding="utf-8", errors="ignore") as _f:
+                _content = _f.read()
+            if f"owner_token={token}" in _content:
+                os.remove(lp)
         except FileNotFoundError:
             pass
 
 
 def _try_stale_takeover(lp: str) -> None:
-    """陈旧锁接管：持锁 pid 已死或 mtime 超阈值才移除（证据在锁件内）。"""
+    """陈旧锁接管：**仅持锁 pid 确证已死**（_pid_status=="dead"）才移除。
+    活持有者锁不可夺（无论持有多久）；unknown（无法判定）不接管——
+    证据在锁件内，判据在进程状态（W3 反例消费）。"""
     try:
         st = os.stat(lp)
     except FileNotFoundError:
@@ -149,8 +176,8 @@ def _try_stale_takeover(lp: str) -> None:
                     break
     except Exception:
         return
-    age = time.time() - st.st_mtime
-    if (pid and not _pid_alive(pid)) or age > LOCK_STALE_S:
+    del st  # 不再用 mtime 判接管（age 分支已按 W3 反例删除）
+    if pid and _pid_status(pid) == "dead":
         try:
             os.remove(lp)
         except FileNotFoundError:

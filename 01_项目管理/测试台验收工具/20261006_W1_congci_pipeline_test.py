@@ -156,6 +156,21 @@ def main() -> int:
         assert len(res) == 1 and res[0]["status"] == "committed", f"释放后未消化：{res}"
         ok("反例①两路同 npz：在队幂等拦第二路＋认领件挡并发处理，释放后单次收口")
 
+        # ── 认领件安全（批 C0 锁族安全修订·W3 反例消费同款语义）──
+        ck2 = "dead-claim-test"
+        cp2 = cp._claim_path(ck2)
+        os.makedirs(os.path.dirname(cp2), exist_ok=True)
+        with open(cp2, "w", encoding="utf-8") as f:
+            f.write("holder_pid=999999999\nowner_token=ghost\n")
+        assert cp._claim_acquire(ck2), "死 pid 认领未接管（同款缺陷复现！）"
+        cp._claim_release(ck2)
+        assert not os.path.exists(cp2), "认领释放未删除"
+        # 活持有者认领不可夺（自身 pid 在持）＋owner token 释放
+        assert cp._claim_acquire(skA), "认领应可获取"
+        assert not cp._claim_acquire(skA), "活持有者认领被夺（同款缺陷复现！）"
+        cp._claim_release(skA)
+        ok("认领件安全：死 pid 接管＋活持有者不可夺＋token 释放")
+
         # ── 反例②不同 npz 共脑（脑锁串行）＋脑锁争用＝跳过 ────────────
         pB = os.path.join(tmp, "sB.npz")
         make_npz(pB, seed=2)

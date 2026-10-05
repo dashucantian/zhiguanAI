@@ -30,10 +30,11 @@ congci_pipeline.py — 从此养脑管线（批 C1·会话收口事务化·2026-
 
 纪律（与项目规约同向）：
   · 锁与原子写原语单一实现＝registry_tx（批 C0；红线5：本模块只复用
-    registry_tx.locked/_pid_alive，禁另写第二份锁逻辑）。JSON 原子替换
-    依 registry_tx.write_rows_atomic 同一模式（tmp→flush→fsync→读回校验
-    →os.replace），系本域产物写手（processed_index 非 CSV，不能直接
-    复用 CSV DictWriter 版），非第二份登记表写逻辑；
+    registry_tx.locked/_pid_status，禁另写第二份锁逻辑；认领件与锁件同款
+    安全语义＝DEAD-only 接管＋owner token 释放比对，W3 反例消费）。JSON
+    原子替换依 registry_tx.write_rows_atomic 同一模式（tmp→flush→fsync→
+    读回校验→os.replace），系本域产物写手（processed_index 非 CSV，不能
+    直接复用 CSV DictWriter 版），非第二份登记表写逻辑；
   · 事件单一出口：session_contract.append_event，type=experience /
     actor=pipeline / kind=congci_brain，单 kind＋status 字段（仅 committed
     在全部一致产物落定后发；queued/failed/duplicate/abstained 各自可观察）；
@@ -78,7 +79,8 @@ _CFG = {
     or registry_tx.ZEN_ROOT,
     "index_lock_timeout": registry_tx.LOCK_TIMEOUT_S,   # 索引 RMW（短临界区）
     "brain_lock_timeout": 15.0,     # 脑级长临界区获取等待（处理中=持有方在跑）
-    "claim_stale_s": 6 * 3600,      # 认领件 mtime 兜底阈值（pid 探测为主判据）
+    "claim_stale_s": 6 * 3600,      # 〔2026-10-06 安全修订〕已弃用（DEAD-only 接管
+                                    #  不再按 mtime 夺活锁），保留键位防配置方传参报错
     "poll_s": 2.0,                  # worker 轮询间隔
     "auto_worker": True,            # enqueue 后是否懒启动后台 worker（测试置 False）
 }
@@ -449,44 +451,59 @@ def enqueue(npz_path: str, *, session_key: str = None, qc=None,
 
 
 # ── 认领件（反例1：两路/两进程同 npz 竞处理）────────────────────────────
+# 〔2026-10-06 批 C0 锁族安全修订·W3 反例消费〕认领件与 registry_tx 锁件
+# 同款安全语义：仅持认领 pid **确证已死**才可接管（活持有者无论持有多久
+# 不可夺）；owner token 记账比对后才释放（防误删接管者新认领）；unknown
+# 不接管（泄漏由人工按坑 018 口径核持有者处置）。
+
+_CLAIM_TOKENS = {}          # session_key -> owner_token（本进程认领记账）
+
 
 def _claim_path(session_key: str) -> str:
     return os.path.join(claims_dir(), _safe_name(session_key) + ".claim")
 
 
 def _claim_acquire(session_key: str) -> bool:
-    """O_CREAT|O_EXCL 原子认领；陈旧接管＝持认领 pid 已死（registry_tx
-    同一探测实现）或 mtime 超阈。成功 True；他人新鲜持有 False。"""
+    """O_CREAT|O_EXCL 原子认领；陈旧接管＝持认领 pid 确证已死（registry_tx
+    同一三态探测实现）；活持有者/unknown 一律不接管。成功 True；他人持有 False。"""
+    import secrets
     os.makedirs(claims_dir(), exist_ok=True)
     cp = _claim_path(session_key)
+    token = secrets.token_hex(8)
     try:
         fd = os.open(cp, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, (f"holder_pid={os.getpid()}\ntime={_now()}\n"
-                      f"purpose=congci_feed\n").encode("utf-8"))
+        os.write(fd, (f"holder_pid={os.getpid()}\nowner_token={token}\n"
+                      f"time={_now()}\npurpose=congci_feed\n").encode("utf-8"))
         os.close(fd)
+        _CLAIM_TOKENS[session_key] = token
         return True
     except FileExistsError:
         pass
     try:
-        st = os.stat(cp)
         pid = 0
         with open(cp, encoding="utf-8", errors="ignore") as f:
             for line in f:
                 if line.startswith("holder_pid="):
                     pid = int(line.split("=", 1)[1].strip() or 0)
                     break
-        age = time.time() - st.st_mtime
-        if (pid and not registry_tx._pid_alive(pid)) or age > _CFG["claim_stale_s"]:
-            os.remove(cp)                    # 陈旧接管（证据在认领件内）
+        if pid and registry_tx._pid_status(pid) == "dead":
+            os.remove(cp)               # 陈旧接管（确证死 pid，证据在件内）
             return _claim_acquire(session_key)
     except (FileNotFoundError, ValueError, OSError):
-        return False
+        pass
     return False
 
 
 def _claim_release(session_key: str) -> None:
+    """owner token 记账比对后才删除——误删接管者（新主）的认领件会破互斥
+    （W3 反例②同款语义）。"""
+    cp = _claim_path(session_key)
+    token = _CLAIM_TOKENS.pop(session_key, None)
     try:
-        os.remove(_claim_path(session_key))
+        with open(cp, encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        if token and f"owner_token={token}" in content:
+            os.remove(cp)
     except FileNotFoundError:
         pass
 
