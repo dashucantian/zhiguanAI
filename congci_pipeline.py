@@ -69,9 +69,13 @@ if SCRIPT_DIR not in sys.path:
 import registry_tx  # 批 C0 单一事务原语（锁/进程探测）；红线5：不另写第二份
 
 # ── 可配置根（生产默认真实分域；测试先 configure(tmp_root) 隔离）──────────
+# CONGCI_PIPELINE_ROOT 环境变量＝服务实例级覆写（C2 浏览器验收用测试根，
+# 生产 8777 不设即用真实分域；与 configure() 同源，后者优先）
 _CFG = {
-    "root": os.path.join(SCRIPT_DIR, "output", "cadence_replay", "congci"),
-    "zen_root": registry_tx.ZEN_ROOT,
+    "root": os.environ.get("CONGCI_PIPELINE_ROOT")
+    or os.path.join(SCRIPT_DIR, "output", "cadence_replay", "congci"),
+    "zen_root": os.environ.get("CONGCI_PIPELINE_ZEN_ROOT")
+    or registry_tx.ZEN_ROOT,
     "index_lock_timeout": registry_tx.LOCK_TIMEOUT_S,   # 索引 RMW（短临界区）
     "brain_lock_timeout": 15.0,     # 脑级长临界区获取等待（处理中=持有方在跑）
     "claim_stale_s": 6 * 3600,      # 认领件 mtime 兜底阈值（pid 探测为主判据）
@@ -107,11 +111,25 @@ def configure(root=None, zen_root=None, brain_lock_timeout=None,
 
 
 def _algo_version() -> str:
-    """幂等键第三元＝桥件声明的算法版本常量（单一声明处）。"""
+    """幂等键第三元＝桥件声明的算法版本常量（单一声明处）。
+
+    **读取方式＝源码静态提取，不 import 桥件**：桥件顶层 `from cadence
+    import Brain` 在 8777 解释器（P312）首跑会阻塞数分钟（numba JIT 缓存
+    编译，沙箱实证）；若本函数走 import，则挂点 enqueue 的同步调用会被
+    卡死（保存主流程连带阻塞）。常量文本读取同样服从"随桥件声明"（单一
+    声明处＝zhiguan_cadence_bridge.py），只免去重型依赖导入。
+    """
+    import re
     global ALGO_VERSION
     if ALGO_VERSION is None:
-        from zhiguan_cadence_bridge import ALGO_VERSION as _av
-        ALGO_VERSION = _av
+        try:
+            with open(os.path.join(SCRIPT_DIR, "zhiguan_cadence_bridge.py"),
+                      encoding="utf-8") as _f:
+                _m = re.search(r'^ALGO_VERSION\s*=\s*"([^"]+)"', _f.read(),
+                               re.M)
+            ALGO_VERSION = _m.group(1) if _m else "unknown"
+        except Exception:
+            ALGO_VERSION = "unknown"
     return ALGO_VERSION
 
 

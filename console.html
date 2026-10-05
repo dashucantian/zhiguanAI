@@ -718,6 +718,20 @@
     <div id="ctOut" class="outbox" style="display:none;"></div>
   </div>
   <div class="card">
+    <h2>从此脑 · 观照曼陀罗（只读 · 该坐收口入脑后可见）</h2>
+    <div class="hint">驾驶舱只读卡（批 C2）：选中会话后经窄读端点 <b>/api/congci/brain/&#123;session_key&#125;/record</b> 取脑档案，渲染数据与脑档案逐字一致；失联／旧 trace／无文件三态在卡内明示，不留白屏。</div>
+    <div class="toolbar" style="margin-top:0;margin-bottom:10px;">
+      <label class="stat">会话：</label>
+      <select id="congciSid"><option value="">（清单加载中…）</option></select>
+      <input id="congciKey" placeholder="或手填 ZEN-… 会话号" style="width:230px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text);">
+      <button class="btn ghost" id="congciLoad">观这一坐</button>
+    </div>
+    <div id="congciBanner" class="hint"></div>
+    <div id="congciOut" class="outbox" style="display:none;">
+      <iframe id="congciIframe" src="/cadence-mandala" style="display:none;width:100%;height:540px;border:1px solid var(--border);border-radius:8px;background:#0b0e14;"></iframe>
+    </div>
+  </div>
+  <div class="card">
     <h2>实验日志组（特征 / 决策 / 事件 / 配置快照）</h2>
     <table>
       <thead><tr><th>时间</th><th>文件</th></tr></thead>
@@ -970,7 +984,11 @@ async function api(path, opt) {
     if (!res.ok) {
       let detail = res.statusText;
       try { detail = (await res.json()).detail || detail; } catch (e) {}
-      throw new Error(detail);
+      // 2026-10-06 批 C2：detail 为对象时 Error() 会退化成 "[object Object]"——
+      // 附加 err.detail 保结构（既有消费方仍读 e.message，不受影响）
+      const err = new Error(typeof detail === "string" ? detail : "请求失败（详见 err.detail）");
+      err.detail = detail;
+      throw err;
     }
     return res.json();
   } catch (e) {
@@ -3086,6 +3104,7 @@ window.ingestFromHistory = async (r, pSel, tSel) => {
 
 async function loadHistory() {
   loadCtOptions();   // 四透镜 CT 会话清单（同属回顾组惰性加载）
+  loadCongciOptions();   // 从此脑卡会话清单（批 C2）
   try {
     const [rep, exp] = await Promise.all([api("/api/reports"), api("/api/experiments")]);
     reportsCache = rep.reports;
@@ -3210,6 +3229,96 @@ $("ctLoad").onclick = async () => {
     (a.zx_phase ? JSON.stringify(a.zx_phase) : "无") +
     " ｜ 词汇层组织参照（判语013）：本卡不构成对任何一坐的判定。";
   out.appendChild(foot);
+};
+
+// ── 从此脑 · 观照曼陀罗卡（2026-10-06 批 C2·纯读零写）──
+// 只经窄读端点 /api/congci/brain/{session_key}/record 取数据（禁 /api/file 任意读）；
+// 三态（失联/无文件/旧 trace 或非终态）在卡内明示；iframe 数据经 postMessage
+// （cadence_mandala.html 侧做 origin＋schema 校验，方案稿 v2 §三）。
+async function loadCongciOptions() {
+  const sel = $("congciSid");
+  if (!sel) return;
+  try {
+    const r = await api("/api/session/list");
+    sel.textContent = "";
+    const o0 = document.createElement("option");
+    o0.value = ""; o0.textContent = "（选择已归档会话）";
+    sel.appendChild(o0);
+    (r.archived || []).forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.session_id;
+      o.textContent = s.session_id + " · " + (s.participant || "?") + " · " + (s.date || "");
+      sel.appendChild(o);
+    });
+    if (sel.options.length === 1) {
+      const o = document.createElement("option");
+      o.value = ""; o.textContent = "（暂无已归档会话）";
+      sel.appendChild(o);
+    }
+  } catch (e) { console.error(e); }
+}
+$("congciSid").onchange = () => { $("congciKey").value = $("congciSid").value; };
+let _congciPending = null;   // iframe 未就绪前暂存待投数据
+function _congciSend(payload) {
+  const ifr = $("congciIframe");
+  if (ifr.contentWindow && ifr.getAttribute("data-loaded") === "1") {
+    ifr.contentWindow.postMessage({ type: "congci-mandala", payload },
+                                  window.location.origin);
+  } else {
+    _congciPending = payload;   // 监听器未就绪先缓冲，load 后补投
+  }
+}
+$("congciIframe").addEventListener("load", function () {
+  this.setAttribute("data-loaded", "1");
+  if (_congciPending) {
+    this.contentWindow.postMessage({ type: "congci-mandala", payload: _congciPending },
+                                   window.location.origin);
+    _congciPending = null;
+  }
+});
+$("congciLoad").onclick = async () => {
+  const key = ($("congciKey").value || $("congciSid").value || "").trim();
+  const bn = $("congciBanner"), out = $("congciOut"), ifr = $("congciIframe");
+  if (!key) { bn.className = "msg warn"; bn.textContent = "请先选择会话或填入会话号。"; return; }
+  out.style.display = ""; ifr.style.display = "none"; _congciPending = null;
+  bn.className = "hint"; bn.textContent = "载入中…（" + key + "）";
+  let d;
+  try {
+    d = await api("/api/congci/brain/" + encodeURIComponent(key) + "/record");
+  } catch (e) {
+    const det = e.detail;   // api() 附结构（批 C2）：{error, reason}
+    bn.className = "msg warn";
+    if (det && det.error === "no_record") { bn.textContent = "失联：该会话未进入养脑管线（无脑档案）。"; }
+    else if (det && det.error === "no_file") { bn.textContent = "无文件：索引有记录但档案缺失（no_file）。"; }
+    else if (det && det.error === "bad_key") { bn.textContent = "会话号非法（仅字母数字._-）。"; }
+    else { bn.textContent = "加载失败：" + ((det && det.reason) || e.message); }
+    return;
+  }
+  // 版本/身份一致性：卡显示的 key 必须与所取一致（响应回显 session_key 复核）
+  if (d.session_key !== key) {
+    bn.className = "msg warn"; bn.textContent = "身份不一致：请求 " + key + "，返回 " + d.session_key;
+    return;
+  }
+  if (d.status !== "committed") {
+    bn.className = "msg warn";
+    bn.textContent = "非终态：" + d.status + (d.reason ? "（" + d.reason + "）" : "")
+      + "——该坐尚未收口入脑（如实）。";
+  } else if (d.stale) {
+    bn.className = "msg warn";
+    bn.textContent = "旧 trace：算法版本 " + d.algo_version + " ≠ 当前 "
+      + d.current_algo_version + "（旧算法产物，如实标注，不判好坏）。";
+  } else {
+    bn.className = "hint";
+    bn.textContent = "从此脑 v" + (d.brain_version ?? "?") + " · " + key
+      + " 已收口入脑（committed）· " + (d.finished_at || "").slice(0, 16).replace("T", " ");
+  }
+  if (d.trace_missing || !d.trace || !d.trace.trace || !d.trace.trace.length) {
+    bn.textContent += " ｜ trace 缺失（无文件）——曼陀罗不可渲染。";
+    return;
+  }
+  const payload = { summary: d.record.summary || d.trace.summary, trace: d.trace.trace };
+  ifr.style.display = "block";
+  _congciSend(payload);
 };
 
 // ── 引导体验（他山之石）──

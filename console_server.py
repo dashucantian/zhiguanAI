@@ -2903,6 +2903,71 @@ def session_analysis(sid: str):
     }
 
 
+@app.get("/cadence-mandala")
+def get_cadence_mandala():
+    """从此·观照曼陀罗页（批 C2·iframe 来源白名单专用路由）。
+    固定单文件（cadence_mandala.html），不开放目录遍历；console.html
+    「从此脑」卡 iframe 来源，数据经 postMessage（origin＋schema 校验）。"""
+    return FileResponse(os.path.join(SCRIPT_DIR, "cadence_mandala.html"))
+
+
+@app.get("/api/congci/brain/{session_key}/record")
+def get_congci_brain_record(session_key: str, include_trace: bool = True):
+    """从此养脑窄读端点（批 C2·方案稿 v2 §三）：只读 record JSON（trace 并入）。
+
+    安全：session_key 仅限字母数字._-（_safe_name 收敛恒等校验）＋长度 ≤128，
+    禁路径分隔——**不借 /api/file 任意读面**；档案路径一律由索引行
+    （session_key→unit_id）解析，绝不接受用户路径直接拼文件系统。
+    三态（卡内明示）：no_record（失联：该会话未入养脑管线）／no_file（索引
+    有行但档案缺失）／stale（旧算法产物，algo_version≠当前）＋非终态
+    （status≠committed）。
+    """
+    import congci_pipeline as cp
+    sk = cp._safe_name(session_key)
+    if (not session_key or len(session_key) > 128 or sk != session_key):
+        raise HTTPException(status_code=400,
+                            detail={"error": "bad_key",
+                                    "reason": "session_key 非法（仅字母数字._-，禁路径分隔）"})
+    doc = cp._read_index()
+    rows = [r for r in doc["rows"] if r.get("session_key") == sk]
+    if not rows and sk.startswith("ZEN-"):
+        # 兜底：C1 入队时未入库（以内容 hash 为键）的行——按归档 npz 路径匹配
+        arch = os.path.join(cp._CFG["zen_root"], "02_raw", sk, "eeg_raw.npz")
+        rows = [r for r in doc["rows"]
+                if r.get("npz_path") == arch or r.get("npz_resolved") == arch]
+    if not rows:
+        raise HTTPException(status_code=404,
+                            detail={"error": "no_record",
+                                    "reason": "该会话未进入养脑管线（失联：无记录）"})
+    row = sorted(rows, key=lambda r: (r.get("queued_at") or "", r.get("unit_id") or ""))[-1]
+    rp = cp._record_path(row["unit_id"])
+    if not os.path.exists(rp):
+        raise HTTPException(status_code=404,
+                            detail={"error": "no_file",
+                                    "reason": "索引有记录但档案文件缺失（无文件）"})
+    with open(rp, "r", encoding="utf-8") as f:
+        record = json.load(f)
+    cur_av = cp._algo_version()
+    resp = {"session_key": sk, "unit_id": row["unit_id"],
+            "status": row["status"], "algo_version": row.get("algo_version"),
+            "current_algo_version": cur_av,
+            "stale": row.get("algo_version") != cur_av,
+            "brain_version": row.get("result_brain_version")
+            or row.get("brain_base_version"),
+            "queued_at": row.get("queued_at"), "finished_at": row.get("finished_at"),
+            "reason": row.get("reason"), "record": record}
+    if include_trace:
+        tp = record.get("trace_path") or row.get("trace_path")
+        if tp and os.path.exists(tp):
+            with open(tp, "r", encoding="utf-8") as f:
+                resp["trace"] = json.load(f)
+            resp["trace_missing"] = False
+        else:
+            resp["trace"] = None
+            resp["trace_missing"] = True
+    return resp
+
+
 def _dashboard_data():
     """实验回顾六卡（样本/质量/标注/模型/伦理/进度）——纯读聚合，
     每个数字带来源会话清单，可点进源文件（P1c 原型口径）。"""

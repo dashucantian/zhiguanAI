@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -192,26 +192,41 @@ document.getElementById("jump").onclick = function(){
   }
   alert("后面没有入静段了（如实）。");
 };
+function loadTracePayload(blob){
+  /* 批 C2（2026-10-06）：把「文件载入解析」抽成可复用函数——文件选择器与
+     console.html 从此脑卡 postMessage 共用同一消费口径（单一实现，红线5）。 */
+  const S = blob.summary, tr = blob.trace, st = 8;
+  const sub = tr.filter(function(_,i){ return i%st===0; });
+  P.stride=st; P.t=sub.map(function(x){return x.t;}); P.beat=sub.map(function(x){return x.beat;});
+  P.vol=sub.map(function(x){return x.volume;}); P.res=sub.map(function(x){return x.residual;});
+  P.act=sub.map(function(x){return x.action;}); P.in_st=sub.map(function(x){return x.in_state;});
+  P.z_at=sub.map(function(x){return x.z_at;}); P.epochs_total=S.epochs;
+  P.in_state_ratio=S.in_state_ratio; P.residual_mean=S.residual_mean;
+  P.final_beat=S.final_beat; P.final_volume=S.final_volume; P.npz=S.npz;
+  P.sfreq=S.sfreq; P.sfreq_source=S.sfreq_source; P.valid_ratio=S.valid_ratio;
+  renderSummary(); cur=0;
+}
 document.getElementById("file").onchange = function(e){
   const f = e.target.files[0]; if(!f) return;
   const rd = new FileReader();
   rd.onload = function(){
     try{
-      const blob = JSON.parse(rd.result);
-      const S = blob.summary, tr = blob.trace, st = 8;
-      const sub = tr.filter(function(_,i){ return i%st===0; });
-      P.stride=st; P.t=sub.map(function(x){return x.t;}); P.beat=sub.map(function(x){return x.beat;});
-      P.vol=sub.map(function(x){return x.volume;}); P.res=sub.map(function(x){return x.residual;});
-      P.act=sub.map(function(x){return x.action;}); P.in_st=sub.map(function(x){return x.in_state;});
-      P.z_at=sub.map(function(x){return x.z_at;}); P.epochs_total=S.epochs;
-      P.in_state_ratio=S.in_state_ratio; P.residual_mean=S.residual_mean;
-      P.final_beat=S.final_beat; P.final_volume=S.final_volume; P.npz=S.npz;
-      P.sfreq=S.sfreq; P.sfreq_source=S.sfreq_source; P.valid_ratio=S.valid_ratio;
-      renderSummary(); cur=0;
+      loadTracePayload(JSON.parse(rd.result));
     }catch(err){ alert("轨迹 JSON 解析失败：" + err); }
   };
   rd.readAsText(f);
 };
+window.addEventListener("message", function(ev){
+  /* 批 C2（2026-10-06）：console.html「从此脑」卡 iframe 数据通道。
+     方案稿 v2 §三：postMessage 须 origin 校验＋schema 校验，缺一不用。 */
+  if (ev.origin !== window.location.origin) return;      // 仅同源
+  const d = ev.data;
+  if (!d || d.type !== "congci-mandala") return;         // schema：type 白名单
+  const pl = d.payload;
+  if (!pl || !pl.summary || !pl.trace || !pl.trace.length) return;  // schema：字段
+  try { loadTracePayload(pl); }
+  catch (err) { console.error("曼陀罗载入失败（postMessage）：", err); }
+});
 function renderSummary(){
   const s = document.getElementById("sum");
   const rows = [["数据", P.npz || "(嵌入片段)"], ["采样率", P.sfreq + " Hz (" + (P.sfreq_source||"") + ")"],
