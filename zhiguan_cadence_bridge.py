@@ -42,8 +42,15 @@ from typing import Optional
 
 import numpy as np
 
-from cadence import Brain
-from cadence.learning import LearnerConfig
+try:
+    from cadence import Brain
+    from cadence.learning import LearnerConfig
+except Exception as _e:  # except as 的名字出块即解绑（本窗踩过：NameError）
+    # 双击可能落在未装 cadence-net 的解释器上（本窗实测 Python312 即无）。
+    # 不炸在 import：__main__ 给排障指引并停窗；库用途须先 pip install cadence-net。
+    _IMPORT_ERROR = _e
+    Brain = None
+
 
 # ── 反馈参数边界（反馈＞干预：只在引导参数的温和区间内动）──────────────
 FEEDBACK_BOUNDS = {
@@ -343,12 +350,27 @@ def _demo(ticks: int = 40, seed: int = 7) -> None:
 
 if __name__ == "__main__":
     import sys
+    if Brain is None:
+        print("缺依赖：当前解释器没有 cadence-net（%s）" % _IMPORT_ERROR)
+        print("修法（任选其一）：")
+        print("  A. 双击本目录「止观桥演示.bat」（内部指向已装好的 Python）；")
+        print("  B. 或在当前解释器执行：python -m pip install cadence-net==0.74.0")
+        try:
+            input("[按回车关闭窗口…]")
+        except EOFError:
+            pass
+        sys.exit(2)
     args = sys.argv[1:]
-    if "--selftest" in args:
-        code = _selftest()
-    else:
-        code = _selftest() or 0
-        _demo()
+    try:
+        if "--selftest" in args:
+            code = _selftest()
+        else:
+            code = _selftest() or 0
+            _demo()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        code = 1
     if "--no-hold" not in args:
         try:
             input("\n[按回车关闭窗口…]")

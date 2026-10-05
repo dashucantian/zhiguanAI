@@ -119,3 +119,13 @@ python zhiguan_cadence_bridge.py --selftest
    - "下一入静段"跳段按钮；**下方曲线＝整座全貌**——"一个小时"的正确呈现处（静观全局看曲线，动观过程走环）。
 2. **"zhiguan_cadence_bridge.py 双击闪退"**：桥是引擎库、无界面，双击＝跑完即退（exit 0）——属预期但不可用。v2 订正：无参数双击＝自检（9 项）＋合成一坐逐拍演示（40 拍打印观之读出）＋停窗等回车；`--no-hold` 可关停窗；`--selftest` 行为不变（供管线）。
    - 验收：node --check 语法过；无头 Edge dump-dom 实测 `已坐 00:01 / 61:44 · 1×`、summary 含 `assumed_muse256`；`--no-hold` 退出码 0。
+
+### 8.8 二轮订正（用户复测反馈：仍闪退／时钟不动）——根因与修复
+
+1. **仍闪退**：根因＝**双击解释器错配**。cadence-net 装在 harness Python(3.14)；本机系统 Python312 **无 cadence**（本窗实测 `ModuleNotFoundError`），双击按注册表关联落在后者，`import` 行即炸、`__main__` 的 try 根本来不及接。修复三件：
+   - 桥内 `import` 守卫：numpy/cadence 导入失败不炸，`__main__` 打印排障指引＋停窗（exit 2）；
+   - **`止观桥演示.bat`**（工作区工具件，循 NeuraDock模拟器.bat 先例不入库）：内部指向 harness Python 绝对路径，回退 PATH；
+   - 留证：`except ... as` 的名字出块即解绑（本窗踩成 `NameError: _IMPORT_ERROR`），已落别名。
+   - 验收：Python312 跑＝出指引不闪退（exit 2）；harness 跑＝自检＋演示全绿（exit 0）。
+2. **时钟不动**：根因＝**索引映射恒零**——`idx(floor(k))` 在 k∈[0,1] 上恒为 0，整条时间线只读第 0 个采样点（时钟永停 00:01；环的着色/残差也只画第 0 点状态，此前"几秒扫完"扫的只是位置不是状态）。修复：`x = k*(len-1)` 连续映射（val 插值＋draw 读出同步改）。留证：步长 0.04 按 40ms 设计，rAF≈16.7ms 下速度虚标 2.4×，已改真实 dt 推进。
+   - 验收：**node 虚拟帧测试**（桩 DOM/Canvas，60fps 帧距推 130 虚拟秒）＝`已坐 02:10 · 第 130 拍`，与真实打坐 1:1——PASS；`node --check` 过；无头 Edge DOM 实测 clock 正常渲染。

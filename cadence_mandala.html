@@ -98,7 +98,10 @@ const N = 302;
 let cur = 0, playing = false, spd = 1;
 function idx(i){ return Math.min(P.t.length-1, Math.max(0, i)); }
 function val(k, key){
-  const i = idx(Math.floor(k)), j = idx(i+1), f = k - Math.floor(k);
+  /* 留证：旧版 idx(floor(k)) 在 k∈[0,1] 恒为 0——全片只读第 0 个采样点，
+     时钟因此永停 00:01（用户报"时间数字没反应"的根因）。正确映射：x=k*(len-1)。 */
+  const x = Math.min(P.t.length-1, Math.max(0, k*(P.t.length-1)));
+  const i = Math.floor(x), j = Math.min(P.t.length-1, i+1), f = x - i;
   const a = P[key][i], b = P[key][j];
   if (a === undefined || a === null) return b;
   if (b === undefined || b === null) return a;
@@ -109,7 +112,7 @@ function fmt(sec){ sec = Math.max(0, Math.floor(sec));
 function draw(k){
   const W = cv.width, H = cv.height, cx = W/2, cy = H/2;
   ctx.fillStyle = "#070a10"; ctx.fillRect(0,0,W,H);
-  const i = idx(Math.floor(k));
+  const i = idx(Math.floor(k*(P.t.length-1)));
   const inSt = P.in_st[i] === true, act = P.act[i], res = (P.res[i]===undefined?0:P.res[i]);
   const beat = val(k,"beat"), vol = val(k,"vol");
   const R = Math.min(W,H)*0.36;
@@ -147,7 +150,8 @@ function draw(k){
   ctx.strokeStyle = "#d9b36a"; ctx.beginPath(); ctx.moveTo(px, gy-66); ctx.lineTo(px, gy+10); ctx.stroke();
   ctx.fillStyle = "#5b6673"; ctx.textAlign = "left"; ctx.font = "12px system-ui";
   ctx.fillText("z(α−θ) · 阈值 0.8＝入静代理", gx, gy+22);
-  const now = P.t[i]===undefined?0:P.t[i], total = P.epochs_total;
+  const nowF = val(k, "t");
+  const now = Math.floor(nowF===undefined?0:nowF), total = P.epochs_total;
   document.getElementById("clock").textContent =
     "已坐 " + fmt(now) + " / " + fmt(total) + " · 第 " + now + " 拍 · " + spd + "×";
 }
@@ -222,6 +226,8 @@ function renderSummary(){
     "· 双击 zhiguan_cadence_bridge.py＝自检＋合成一坐逐拍演示（窗口停住等回车）；<br>" +
     "· 弃权拍（嵌入片段口径）：" + (P.abstain_count === undefined ? "-" : P.abstain_count);
 }
+document.getElementById("spdnote").textContent =
+    "全座约 " + fmt(P.epochs_total / spd) + (spd===1 ? "（与打坐同速）" : "");
 renderSummary();
 draw(0);
 requestAnimationFrame(loop);
