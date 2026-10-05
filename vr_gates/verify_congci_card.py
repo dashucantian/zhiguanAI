@@ -27,8 +27,9 @@ EDGE = next((p for p in [
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"]
     if os.path.exists(p)), None)
-PORT = 8777
-CDP_PORT = 9345
+# 端口可参数化（验收实例避让生产 8777；HTTPS 子端口显式关闭防撞生产 8778）
+PORT = int(os.environ.get("CONGCI_ACCEPT_PORT", "8777"))
+CDP_PORT = int(os.environ.get("CONGCI_ACCEPT_CDP", "9345"))
 SK = "ZEN-20261006-P001-S99"
 ENV = json.load(open(os.path.join(PROJ, "_analysis_tmp", "_c2_env.json"),
                      encoding="utf-8"))
@@ -114,7 +115,7 @@ async def main() -> int:
                 open(errf, "w", encoding="utf-8") as le:
             server = subprocess.Popen(
                 [P312, "-X", "utf8", os.path.join(PROJ, "console_server.py"),
-                 "--port", str(PORT)],
+                 "--port", str(PORT), "--https-port", "0"],
                 cwd=PROJ, env=env, stdout=lo, stderr=le)
         ok_ready = False
         for _ in range(60):
@@ -155,6 +156,12 @@ async def main() -> int:
                            "document.getElementById('congciKey') ? '1' : '0'",
                            "1", timeout=30)
         check(v == "1", "主控台加载，从此脑卡元素在位", "主控台未就绪")
+        # 批 C3 声带消费面（上屏行/日志元素在位；SSE 数据流另由端到端验收覆盖）
+        voice_ui = await evaluate(
+            ws, "!!(document.getElementById('congciVoiceLine') && "
+                "document.getElementById('congciVoiceLog'))")
+        check(voice_ui is True, "声带上屏消费面在位（声带行＋日志）",
+              "声带消费面元素缺失")
         await send(ws, "Runtime.evaluate",
                    {"expression": "document.querySelector('[data-tab=\"review\"]').click()"})
         await asyncio.sleep(1.0)
@@ -168,16 +175,32 @@ async def main() -> int:
         check(SK in (bn or ""), "身份一致性：横幅回显所请求 session_key", f"横幅缺 key：{bn}")
         vis = await evaluate(ws, "document.getElementById('congciIframe').style.display")
         check(vis == "block", "iframe 显示（曼陀罗容器展开）", f"iframe 未显示：{vis}")
-        plen = await wait_for(ws,
-                              "document.getElementById('congciIframe').contentWindow && "
-                              "document.getElementById('congciIframe').contentWindow.P ? "
-                              "document.getElementById('congciIframe').contentWindow.P.t.length : -1",
-                              -1, timeout=25)
-        check(plen is not None and plen >= 100,
-              f"曼陀罗数据载入（P.t={plen} 点，每 8 拍 1 点压缩）", f"曼陀罗 P 未载入：{plen}")
-        et = await evaluate(ws,
-                            "document.getElementById('congciIframe').contentWindow.P.epochs_total")
-        check(et == 120, f"数据与脑档案一致（epochs_total={et}＝120）", f"epochs_total 异常：{et}")
+        # 曼陀罗数据断言走 iframe 内 DOM（cadence_mandala 的 P 为 const 脚本
+        # 绑定、不挂 window——2026-10-06 自验实测：读 contentWindow.P 恒为
+        # undefined，系测试方法缺陷而非渲染缺陷）：#sum 由 renderSummary 填、
+        # #clock 由 draw 每帧刷新，均含拍数/总时长。
+        sum_txt = await wait_for(
+            ws, "document.getElementById('congciIframe').contentDocument && "
+                "document.getElementById('congciIframe').contentDocument."
+                "getElementById('sum') ? document.getElementById('congciIframe')."
+                "contentDocument.getElementById('sum').textContent : ''",
+            "120", timeout=25)
+        check(sum_txt and "120" in sum_txt,
+              f"曼陀罗数据载入（iframe #sum 含 120 拍）：{str(sum_txt)[:80]}",
+              f"曼陀罗数据未载入：{sum_txt!r}")
+        clock_txt = await evaluate(
+            ws, "document.getElementById('congciIframe').contentDocument."
+                "getElementById('clock').textContent")
+        check(clock_txt and "02:00" in clock_txt,
+              f"整座时长渲染（#clock={clock_txt}）", f"#clock 异常：{clock_txt!r}")
+        has_cv = await evaluate(
+            ws, "!!document.getElementById('congciIframe').contentDocument."
+                "getElementById('cv')")
+        check(has_cv is True, "曼陀罗画布在位（canvas#cv）", "画布缺失")
+        # 截图前把卡滚入视口（供法师视角查看卡本体，非页顶仪表盘）
+        await evaluate(ws, "document.getElementById('congciBanner')"
+                           ".scrollIntoView({block:'center'})")
+        await asyncio.sleep(0.8)
         shot = await send(ws, "Page.captureScreenshot", {"format": "png"})
         with open(os.path.join(OUT, "console_card_committed.png"), "wb") as f:
             f.write(base64.b64decode(shot["result"]["data"]))
@@ -194,12 +217,17 @@ async def main() -> int:
             f.write(base64.b64decode(shot2["result"]["data"]))
         print(f"  截图：{OUT}\\console_card_lost.png")
 
-        # ── 5. 坏 key：路径字符拒绝（400 bad_key 卡内明示）─────────────
-        await evaluate(ws, "document.getElementById('congciKey').value='../../etc'")
+        # ── 5. 坏 key：超长 key 拒绝（400 bad_key 卡内明示）─────────────
+        # 注：路径字符类 key（如 ../../etc）会被浏览器在发请求前归一化，
+        # 到达服务端前已是 /etc/record → 404 Not Found（2026-10-06 自验实测）；
+        # 故用不含路径字符的超长 key 直击校验层（unit 测试另覆盖路径字符面）。
+        long_key = "a" * 129
+        await evaluate(ws, "document.getElementById('congciKey').value='" + long_key + "'")
         await evaluate(ws, "document.getElementById('congciLoad').click()")
         bn3 = await wait_for(ws, "document.getElementById('congciBanner').textContent",
                              "非法", timeout=15)
-        check(bn3 and "非法" in bn3, "坏 key 明示（bad_key）", f"坏 key 横幅异常：{bn3}")
+        check(bn3 and "非法" in bn3, "坏 key 明示（bad_key 校验层拒绝）",
+              f"坏 key 横幅异常：{bn3}")
 
         if fails:
             print(f"FAIL: {len(fails)} 项未过")

@@ -70,6 +70,19 @@ def main() -> int:
         assert "学习成功" not in CongciVoice.voice_cue({"status": "data_saved"})
         ok("五态句式：确定性＋不混称＋未知事件兜底")
 
+        # ── 1b. 管线 status → 声带五态名 接合（自验实捉缺陷回归）──────
+        # 2026-10-06 端到端自验：管线发 queued/committed/… 而声带表用 brain_*，
+        # 两侧未接合时每个事件都成「未知事件」——本用例锁死映射。
+        pairs = {"queued": "brain_queued", "committed": "brain_committed",
+                 "failed": "brain_failed", "duplicate": "brain_duplicate",
+                 "abstained": "brain_abstained", "data_saved": "data_saved"}
+        for raw, canon in pairs.items():
+            assert CongciVoice.voice_state_of(raw) == canon, f"映射错：{raw}"
+            s = CongciVoice.voice_cue({"status": raw, "session_key": "SK"})
+            assert "未知事件" not in s, \
+                f"管线原名未接合（自验缺陷复现！）{raw} → {s}"
+        ok("status 接合：管线原名→声带五态名（单一映射点），无「未知事件」")
+
         # ── 2. say_async 单飞通道 ────────────────────────────────────
         vp = CongciVoice(enabled=False)                 # 强制 print 后端
         assert vp.backend == "print"

@@ -1198,10 +1198,14 @@ def _congci_ui_cb(payload: dict) -> None:
     schema：congci_brain 状态事件落会话流（C1 已建），congci_said 上屏）。"""
     try:
         from congci_voice import CongciVoice, get_voice
-        text = CongciVoice.voice_cue(payload)
+        text = CongciVoice.voice_cue(payload)          # 内部已含 status 映射
         get_voice().say_async(text)
         CONGCI_BROADCASTER.publish({
-            "type": "congci_said", "status": payload.get("status"), "text": text,
+            # 契约 v0.3：SSE status 发声带五态名（管线原名经单一映射点转换）
+            "type": "congci_said",
+            "status": CongciVoice.voice_state_of(payload.get("status")),
+            "pipeline_status": payload.get("status"),
+            "text": text,
             "session_key": payload.get("session_key"),
             "unit_id": payload.get("unit_id"), "reason": payload.get("reason"),
             "ts": datetime.now().astimezone().isoformat(timespec="seconds")})

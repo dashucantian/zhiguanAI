@@ -753,12 +753,20 @@ def _finish_failed(row: dict, reason: str) -> dict:
 
 def recover_pending() -> dict:
     """pending 行恢复：候选可载入＋record 在→提升补 committed；
-    候选损坏/缺失→failed 带原因。索引提交恒最后（事务顺序自证）。"""
+    候选损坏/缺失→failed 带原因。索引提交恒最后（事务顺序自证）。
+
+    **只处理「已开工」行**（picked_at 非空）——2026-10-06 自验实测缺陷修复：
+    新入队的在队行尚未开工、天然无 record；旧实现把这类行当「事务②前中断」
+    直接标 failed，致生产模式（auto_worker=True，worker 启动即先跑恢复扫描）
+    下每次入队都被误判失败、C1 主路径不可用。未开工行一律留给正常 worker
+    路径消化（不在此判死）。
+    """
     out = {"committed": [], "failed": []}
     lp = index_lock_path()
     with registry_tx.locked(purpose="congci_recover_scan", lock_path=lp):
         doc = _read_index()
-        pending = [r for r in doc["rows"] if r.get("status") == "pending"]
+        pending = [r for r in doc["rows"] if r.get("status") == "pending"
+                   and r.get("picked_at")]      # ← 仅已开工（见 docstring）
     if not pending:
         return out
     for row in pending:

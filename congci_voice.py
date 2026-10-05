@@ -109,14 +109,29 @@ class CongciVoice:
         return "复讲完毕。未学句式命中率，从%.0f%%到%.0f%%。" % (before * 100, after * 100)
 
     # ── 批 C3：服务端单点五态句式（纯函数）────────────────────────
+    # 管线 status（queued/committed/failed/duplicate/abstained，方案稿 v2 §2.4）
+    # → 声带五态名（brain_*，§四）的**单一映射点**。2026-10-06 端到端自验实捉：
+    # 两套词汇未接合时声带对每个管线事件都回「未知事件」——映射收在此处。
+    STATUS_ALIASES = {"queued": "brain_queued", "committed": "brain_committed",
+                      "failed": "brain_failed", "duplicate": "brain_duplicate",
+                      "abstained": "brain_abstained"}
+
+    @staticmethod
+    def voice_state_of(status: str) -> str:
+        """管线 status → 声带五态名（data_saved 原样透传）。"""
+        s = str(status or "")
+        return CongciVoice.STATUS_ALIASES.get(s, s)
+
     @staticmethod
     def voice_cue(event: dict) -> str:
         """声带五态句式（判语011：同输入同句）。
         event.status ∈ {data_saved, brain_queued, brain_committed,
-        brain_failed, brain_duplicate, brain_abstained}；session_key 可选项
-        附于句末（无则省略）。"""
+        brain_failed, brain_duplicate, brain_abstained}；亦接受管线原名
+        queued/committed/failed/duplicate/abstained（经 voice_state_of 映射）。
+        session_key 可选项附于句末（无则省略）。"""
         ev = event or {}
-        st = str(ev.get("status") or ev.get("type") or "unknown")
+        st = CongciVoice.voice_state_of(ev.get("status") or ev.get("type")
+                                        or "unknown")
         sk = str(ev.get("session_key") or "").strip()
         tag = "（%s）" % sk if sk else ""
         table = {

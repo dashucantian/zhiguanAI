@@ -274,11 +274,15 @@ def main() -> int:
         ok("反例⑥处理版本变化：algo_version 入键，同内容异版本＝新单元")
 
         # ── 恢复注入·候选损坏/候选缺失 → failed 不重学 ────────────────
+        # 注：崩溃行必是「已开工」行（picked_at 非空）——恢复扫描只认已开工行
+        # （2026-10-06 自验缺陷修复，见下方未开工行回归用例）
         bad = {"schema_version": cp.INDEX_SCHEMA, "unit_id": "u-corrupt",
                "session_key": "u-corrupt", "source_hash16": "0" * 16,
                "algo_version": cp._algo_version(), "lineage_id": cp.LINEAGE_ID,
                "brain_base_version": 0, "brain_base_sha16": "",
-               "status": "pending", "npz_path": pB, "queued_at": "2026-10-06T00:00:00+08:00"}
+               "status": "pending", "npz_path": pB,
+               "picked_at": "2026-10-06T00:00:01+08:00",
+               "queued_at": "2026-10-06T00:00:00+08:00"}
         with tx.locked(purpose="test-fabricate", lock_path=cp.index_lock_path()):
             doc = cp._read_index()
             doc["rows"].append(bad)
@@ -294,6 +298,32 @@ def main() -> int:
         assert "u-corrupt" in rec["failed"], f"损坏候选应转 failed：{rec}"
         assert row_of("u-corrupt")["status"] == "failed", "损坏候选未标 failed"
         ok("恢复注入·候选损坏：pending＋损坏候选→failed 带原因，不重学不提升")
+
+        # ── 自验缺陷修复回归（2026-10-06 端到端自验实捉）──────────────
+        # 生产模式（auto_worker=True）下 worker 启动即先跑恢复扫描：新入队的
+        # 在队行尚未开工（picked_at 空、天然无 record），旧实现当「事务②前
+        # 中断」直接标 failed → 每次入队都失败、C1 主路径不可用。修复＝恢复
+        # 扫描只处理已开工行；本用例锁死该语义。
+        fresh = {"schema_version": cp.INDEX_SCHEMA, "unit_id": "u-fresh",
+                 "session_key": "u-fresh", "source_hash16": "2" * 16,
+                 "algo_version": cp._algo_version(),
+                 "lineage_id": cp.LINEAGE_ID,
+                 "brain_base_version": 0, "brain_base_sha16": "",
+                 "status": "pending", "npz_path": pB,
+                 "queued_at": "2026-10-06T00:00:02+08:00"}   # picked_at 缺省＝未开工
+        with tx.locked(purpose="test-fresh", lock_path=cp.index_lock_path()):
+            doc = cp._read_index()
+            doc["rows"].append(fresh)
+            cp._write_index(doc)
+        rec2 = cp.recover_pending()
+        assert "u-fresh" not in rec2["failed"], \
+            f"未开工在队行被误判 failed（生产缺陷复现！）：{rec2}"
+        assert row_of("u-fresh")["status"] == "pending", "未开工行应保持 pending 待消化"
+        with tx.locked(purpose="test-fresh-clean", lock_path=cp.index_lock_path()):
+            doc = cp._read_index()
+            doc["rows"] = [r for r in doc["rows"] if r["unit_id"] != "u-fresh"]
+            cp._write_index(doc)
+        ok("自验缺陷修复回归：未开工在队行不被恢复扫描判死（保持 pending）")
 
         # ── failed→可重试（attempt 计数）＋失败不动正式脑 ──────────────
         brain_before = cp.sha256_file(cp.brain_path())
