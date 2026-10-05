@@ -149,7 +149,7 @@ class ZhiGuanCadenceBridge:
 
     # ── 睡梦/串习：离线复讲当日经历，固化慢权重 ─────────────────────
     def rehearse(self, rounds: int = 8, teacher: Optional[list] = None,
-                 batch: int = 32) -> dict:
+                 batch: int = 32, last_n: Optional[int] = None) -> dict:
         """睡梦/串习：离线复讲当日经历，固化慢权重。
 
         走 0.74 正牌通道 Brain.fit（独立样本教学，逐轮返回 qualified
@@ -158,11 +158,12 @@ class ZhiGuanCadenceBridge:
           · teacher=list → 以事后已知正确反馈复讲（改过复讲；不预测未来）。
         每轮＝梦中把当日碎片重放一遍。空日→弃权返回零统计。
         """
-        if not self.episode:
+        eps = self.episode[-last_n:] if last_n else self.episode
+        if not eps:
             return {"rounds": 0, "replayed": 0, "history": [], "train_acc": None}
-        obs_batch = np.asarray([e[0] for e in self.episode], dtype=float)
+        obs_batch = np.asarray([e[0] for e in eps], dtype=float)
         if teacher is None:
-            labels = np.asarray([e[3] for e in self.episode], dtype=np.int64)
+            labels = np.asarray([e[3] for e in eps], dtype=np.int64)
         else:
             labels = np.asarray(teacher, dtype=np.int64)
         history = self.brain.fit(obs_batch, labels, epochs=rounds, batch=batch)
