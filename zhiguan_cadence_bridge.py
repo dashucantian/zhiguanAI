@@ -318,6 +318,40 @@ def _selftest() -> int:
     return 0
 
 
+def _demo(ticks: int = 40, seed: int = 7) -> None:
+    """点击运行时的小演示：合成一坐，逐拍打印观之读出（不碰音频设备）。"""
+    br = ZhiGuanCadenceBridge(seed=42)
+    rng = np.random.default_rng(seed)
+    in_prev, dwell, res_norm = False, 0.0, 0.0
+    print("—— 合成一坐（%d 拍）：观 → 止 → 一念 ——" % ticks)
+    print("%4s %4s %8s %7s %12s %4s" % ("拍", "动作", "节拍Hz", "音量", "沉降残差", "入静"))
+    for t in range(ticks):
+        calm = np.tanh(t / 14.0) + 0.1 * rng.standard_normal()
+        restless = 0.5 * np.tanh(-t / 20.0) + 0.1 * rng.standard_normal()
+        in_state = calm > 0.6
+        obs = br.build_observation(calm, restless, in_state, dwell / 30.0, res_norm)
+        r = br.observe_reward(in_prev, in_state, restless > 0.0)
+        out = br.step(obs, reward=r, done=(t == ticks - 1))
+        dwell = dwell + 1 if in_state else 0
+        res_norm = out["settlement"]["residual"]
+        in_prev = in_state
+        print("%4d %4d %8.2f %7.3f %12.2e %4s" % (
+            t + 1, out["action"], out["beat"], out["volume"],
+            out["settlement"]["residual"], "是" if in_state else "·"))
+    print("—— 一坐毕。此脑可 save() 续修：同一命，跨会话。——")
+
+
 if __name__ == "__main__":
     import sys
-    sys.exit(8 if "--selftest" in sys.argv and _selftest() else 0)
+    args = sys.argv[1:]
+    if "--selftest" in args:
+        code = _selftest()
+    else:
+        code = _selftest() or 0
+        _demo()
+    if "--no-hold" not in args:
+        try:
+            input("\n[按回车关闭窗口…]")
+        except EOFError:
+            pass
+    sys.exit(code)

@@ -96,7 +96,7 @@ def main() -> int:
     actions = [e["action"] for e in trace if "action" in e]
     res = [e["residual"] for e in trace if "residual" in e]
     summary = {
-        "ok": True, "npz": a.npz, "sfreq": sfreq, "channels": n_ch,
+        "ok": True, "npz": a.npz, "sfreq": sfreq, "sfreq_source": sfreq_src, "channels": n_ch,
         "epochs": int(T), "valid_ratio": round(float(valid.mean()), 4),
         "in_state_ratio": round(float(in_state[valid].mean()), 4),
         "action_hist": ({str(k): int(v) for k, v in
