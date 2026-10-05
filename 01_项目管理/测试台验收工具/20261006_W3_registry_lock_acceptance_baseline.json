@@ -1,0 +1,49 @@
+{
+  "scope": "candidate proposal-level takeover checks; not overall lock safety approval",
+  "source_sha256": "4a17a55d3c1f6cb40505309fbd530ec476f517571be49ff671c0f0fab615b707",
+  "results": [
+    {
+      "case": "live_old_holder",
+      "expected_lock_retained": true,
+      "actual_lock_retained": false,
+      "error": null,
+      "passed": false
+    },
+    {
+      "case": "live_young_holder",
+      "expected_lock_retained": true,
+      "actual_lock_retained": true,
+      "error": null,
+      "passed": true
+    },
+    {
+      "case": "missing_holder_old",
+      "expected_lock_retained": true,
+      "actual_lock_retained": false,
+      "error": null,
+      "passed": false
+    },
+    {
+      "case": "unknown_holder_old",
+      "expected_lock_retained": true,
+      "actual_lock_retained": false,
+      "error": null,
+      "passed": false
+    },
+    {
+      "case": "dead_old_holder",
+      "expected_lock_retained": false,
+      "actual_lock_retained": false,
+      "error": null,
+      "passed": true
+    }
+  ],
+  "all_passed": false,
+  "not_tested": [
+    "Windows PID access-denied",
+    "owner-token release",
+    "takeover TOCTOU",
+    "multiprocess persistence",
+    "crash recovery"
+  ]
+}

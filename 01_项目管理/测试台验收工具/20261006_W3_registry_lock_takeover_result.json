@@ -1,0 +1,26 @@
+{
+  "scope": "synthetic counterexample, not actual holder death/live proof",
+  "checks": [
+    {
+      "name": "live_holder_age_alone_removes_lock",
+      "observed": true,
+      "meaning": "mock holder alive; old lock removed by actual predicate"
+    },
+    {
+      "name": "fresh_dead_holder_removes_lock",
+      "observed": true,
+      "meaning": "dead PID alone sufficient without stale-age condition"
+    },
+    {
+      "name": "missing_holder_old_lock_removed",
+      "observed": true,
+      "meaning": "old incomplete lock has no verified owner but removed"
+    },
+    {
+      "name": "fresh_live_holder_retained",
+      "observed": true,
+      "meaning": "control case, young live lock retained"
+    }
+  ],
+  "source_sha256": "4a17a55d3c1f6cb40505309fbd530ec476f517571be49ff671c0f0fab615b707"
+}

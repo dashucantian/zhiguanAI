@@ -1,0 +1,428 @@
+{
+  "scope": "static declarations only; not runtime/behavior/schema/privacy approval",
+  "http_decorators": 55,
+  "http_operations": 55,
+  "http_unique_paths": 54,
+  "websocket_operations": 1,
+  "documented_http_operations": 55,
+  "missing_from_matrix": [],
+  "not_in_source": [],
+  "duplicate_source_operations": [],
+  "duplicate_matrix_operations": [],
+  "extraction_issues": [],
+  "grouped_rows": [
+    {
+      "line": 90,
+      "cell": "GET /vr /mandala /focus /demo /ndtest"
+    }
+  ],
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/",
+      "source": "console_server.py",
+      "line": 3001,
+      "handler": "index"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config",
+      "source": "console_server.py",
+      "line": 1311,
+      "handler": "get_config"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/files",
+      "source": "console_server.py",
+      "line": 1380,
+      "handler": "list_config_files"
+    },
+    {
+      "method": "GET",
+      "path": "/api/config/template",
+      "source": "console_server.py",
+      "line": 1396,
+      "handler": "get_template"
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "source": "console_server.py",
+      "line": 2992,
+      "handler": "dashboard"
+    },
+    {
+      "method": "GET",
+      "path": "/api/experiment/status",
+      "source": "console_server.py",
+      "line": 2085,
+      "handler": "experiment_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/experiment/stream",
+      "source": "console_server.py",
+      "line": 2090,
+      "handler": "experiment_stream"
+    },
+    {
+      "method": "GET",
+      "path": "/api/experiments",
+      "source": "console_server.py",
+      "line": 2413,
+      "handler": "list_experiments"
+    },
+    {
+      "method": "GET",
+      "path": "/api/file",
+      "source": "console_server.py",
+      "line": 2473,
+      "handler": "get_file"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ingest/qc",
+      "source": "console_server.py",
+      "line": 2612,
+      "handler": "ingest_qc"
+    },
+    {
+      "method": "GET",
+      "path": "/api/monitor/status",
+      "source": "console_server.py",
+      "line": 1953,
+      "handler": "monitor_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/monitor/stream",
+      "source": "console_server.py",
+      "line": 1958,
+      "handler": "monitor_stream"
+    },
+    {
+      "method": "GET",
+      "path": "/api/nd/platform/status",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 127,
+      "handler": "nd_platform_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/nd/status",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 76,
+      "handler": "nd_status"
+    },
+    {
+      "method": "GET",
+      "path": "/api/ndmetrics",
+      "source": "console_server.py",
+      "line": 1899,
+      "handler": "ndmetrics_proxy"
+    },
+    {
+      "method": "GET",
+      "path": "/api/profiles",
+      "source": "console_server.py",
+      "line": 2498,
+      "handler": "get_profiles"
+    },
+    {
+      "method": "GET",
+      "path": "/api/quarantine",
+      "source": "console_server.py",
+      "line": 2620,
+      "handler": "list_quarantine"
+    },
+    {
+      "method": "GET",
+      "path": "/api/registry",
+      "source": "console_server.py",
+      "line": 2523,
+      "handler": "get_registry"
+    },
+    {
+      "method": "GET",
+      "path": "/api/reports",
+      "source": "console_server.py",
+      "line": 2436,
+      "handler": "list_reports"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/list",
+      "source": "console_server.py",
+      "line": 2671,
+      "handler": "session_list"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/{sid}/analysis",
+      "source": "console_server.py",
+      "line": 2767,
+      "handler": "session_analysis"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/{sid}/events",
+      "source": "console_server.py",
+      "line": 2719,
+      "handler": "session_events"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/{sid}/manifest",
+      "source": "console_server.py",
+      "line": 2704,
+      "handler": "session_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/api/session/{sid}/posthoc",
+      "source": "console_server.py",
+      "line": 2208,
+      "handler": "session_posthoc"
+    },
+    {
+      "method": "GET",
+      "path": "/api/vr/model",
+      "source": "console_server.py",
+      "line": 2393,
+      "handler": "vr_model"
+    },
+    {
+      "method": "GET",
+      "path": "/api/vr/models",
+      "source": "console_server.py",
+      "line": 2380,
+      "handler": "vr_models"
+    },
+    {
+      "method": "GET",
+      "path": "/api/vr/status",
+      "source": "console_server.py",
+      "line": 2332,
+      "handler": "vr_status"
+    },
+    {
+      "method": "GET",
+      "path": "/demo",
+      "source": "console_server.py",
+      "line": 2180,
+      "handler": "demo_page"
+    },
+    {
+      "method": "GET",
+      "path": "/focus",
+      "source": "console_server.py",
+      "line": 2167,
+      "handler": "focus_page"
+    },
+    {
+      "method": "GET",
+      "path": "/mandala",
+      "source": "console_server.py",
+      "line": 2155,
+      "handler": "mandala_page"
+    },
+    {
+      "method": "GET",
+      "path": "/manifest.webmanifest",
+      "source": "console_server.py",
+      "line": 2288,
+      "handler": "pwa_manifest"
+    },
+    {
+      "method": "GET",
+      "path": "/ndtest",
+      "source": "console_server.py",
+      "line": 2191,
+      "handler": "ndtest_page"
+    },
+    {
+      "method": "GET",
+      "path": "/sw.js",
+      "source": "console_server.py",
+      "line": 2297,
+      "handler": "pwa_sw"
+    },
+    {
+      "method": "GET",
+      "path": "/vr",
+      "source": "console_server.py",
+      "line": 2147,
+      "handler": "vr_page"
+    },
+    {
+      "method": "GET",
+      "path": "/vr_assets/{path:path}",
+      "source": "console_server.py",
+      "line": 2308,
+      "handler": "vr_asset"
+    },
+    {
+      "method": "POST",
+      "path": "/api/config/save",
+      "source": "console_server.py",
+      "line": 1351,
+      "handler": "save_config"
+    },
+    {
+      "method": "POST",
+      "path": "/api/config/validate",
+      "source": "console_server.py",
+      "line": 1331,
+      "handler": "validate_config_api"
+    },
+    {
+      "method": "POST",
+      "path": "/api/experiment/self_report",
+      "source": "console_server.py",
+      "line": 2064,
+      "handler": "experiment_self_report"
+    },
+    {
+      "method": "POST",
+      "path": "/api/experiment/start",
+      "source": "console_server.py",
+      "line": 2017,
+      "handler": "start_experiment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/experiment/stop",
+      "source": "console_server.py",
+      "line": 2048,
+      "handler": "stop_experiment"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ingest",
+      "source": "console_server.py",
+      "line": 2571,
+      "handler": "ingest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/monitor/marker",
+      "source": "console_server.py",
+      "line": 1880,
+      "handler": "monitor_marker"
+    },
+    {
+      "method": "POST",
+      "path": "/api/monitor/save",
+      "source": "console_server.py",
+      "line": 1869,
+      "handler": "monitor_save"
+    },
+    {
+      "method": "POST",
+      "path": "/api/monitor/self_report",
+      "source": "console_server.py",
+      "line": 1850,
+      "handler": "monitor_self_report"
+    },
+    {
+      "method": "POST",
+      "path": "/api/monitor/start",
+      "source": "console_server.py",
+      "line": 1762,
+      "handler": "monitor_start"
+    },
+    {
+      "method": "POST",
+      "path": "/api/monitor/stop",
+      "source": "console_server.py",
+      "line": 1834,
+      "handler": "monitor_stop"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nd/hub/start",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 114,
+      "handler": "nd_hub_start"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nd/hub/stop",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 122,
+      "handler": "nd_hub_stop"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nd/launch",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 81,
+      "handler": "nd_launch"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nd/platform/connect",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 142,
+      "handler": "nd_platform_connect"
+    },
+    {
+      "method": "POST",
+      "path": "/api/nd/selftest",
+      "source": "muse2-repo/muse2-master/nd_routes.py",
+      "line": 105,
+      "handler": "nd_selftest"
+    },
+    {
+      "method": "POST",
+      "path": "/api/ndmetrics/stop",
+      "source": "console_server.py",
+      "line": 1945,
+      "handler": "ndmetrics_stop"
+    },
+    {
+      "method": "POST",
+      "path": "/api/profiles",
+      "source": "console_server.py",
+      "line": 2503,
+      "handler": "set_profiles"
+    },
+    {
+      "method": "POST",
+      "path": "/api/registry/preregister",
+      "source": "console_server.py",
+      "line": 2528,
+      "handler": "preregister"
+    },
+    {
+      "method": "POST",
+      "path": "/api/vr/event",
+      "source": "console_server.py",
+      "line": 2344,
+      "handler": "vr_event"
+    },
+    {
+      "method": "WS",
+      "path": "/ws/vr",
+      "source": "console_server.py",
+      "line": 2128,
+      "handler": "vr_ws"
+    }
+  ],
+  "ok": true,
+  "inputs": [
+    {
+      "path": "console_server.py",
+      "sha256": "f70a24fd90679533c54cd6444ab67e4e495568c73d91239f36363b5e9da229c5"
+    },
+    {
+      "path": "muse2-repo/muse2-master/nd_routes.py",
+      "sha256": "693a0ba627bd37bbf01f943d6b3c5c01cef6a8536374f2bb34d8162050f8df14"
+    },
+    {
+      "path": "01_项目管理/20261004_驾驶舱前后端接口契约_v0.md",
+      "sha256": "752e81c5f17adf987b0a16ba2fbcec42b91594c302d6648fb660af9d774c2c09"
+    }
+  ]
+}

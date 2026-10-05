@@ -1,0 +1,34 @@
+{
+  "scope": "deterministic synthetic interleavings, NOT evidence real data was lost; NOT end-to-end concurrent HTTP",
+  "checks": [
+    {
+      "name": "preregister_then_stale_ingest_loses_new_row",
+      "expected_counterexample_observed": true,
+      "detail": "two stale snapshots; exact ingest writer rewrites old rows"
+    },
+    {
+      "name": "ingest_then_stale_preregister_reverts_status",
+      "expected_counterexample_observed": true,
+      "detail": "finished backfill reverted by stale console rewrite"
+    },
+    {
+      "name": "two_prereg_snapshots_allocate_same_id",
+      "expected_counterexample_observed": true,
+      "detail": "both callers can derive S02 before either sees the other write; no runtime request scheduler tested"
+    },
+    {
+      "name": "rewrite_failure_can_leave_truncated_csv",
+      "expected_counterexample_observed": true,
+      "detail": "controlled injected writeheader error; source open(w) has already truncated synthetic file"
+    },
+    {
+      "name": "retained_fixture_can_restore_synthetic_rows",
+      "expected_counterexample_observed": true,
+      "detail": "test manually restores retained snapshot; no production backup/transaction guarantee"
+    }
+  ],
+  "source_hash": {
+    "console_server.py": "f70a24fd90679533c54cd6444ab67e4e495568c73d91239f36363b5e9da229c5",
+    "05_产品与开发/muse-direct/tools/ingest_session.py": "1d905030d8ad38f36a5fd7dfb1d8402a37b611ccb6bd1efe507dd22f129ff5a0"
+  }
+}

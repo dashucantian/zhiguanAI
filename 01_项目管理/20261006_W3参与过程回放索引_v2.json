@@ -1,0 +1,372 @@
+{
+  "schema": "participation-replay-index-v2",
+  "agent": "AI-014",
+  "window": "W3",
+  "session": "W3-DESKTOPOR-20261006-A",
+  "scope": "本窗口公开判断、行动与产物的回放试件，非完整会话导出，非隐藏推理记录",
+  "created_date": "2026-10-06",
+  "replay_limits": [
+    "历史指针必须区分Git版本与可变工作区",
+    "模型与外部服务不保证逐字可复现",
+    "只知日期不虚构具体时间",
+    "未授权敏感资料不纳入回放",
+    "旧窗session_info转录含文本与调用标记，不是原始附件/工具实参全集。",
+    "旧证据hash失配可表示文件正常演进；本扩展不洗旧hash。"
+  ],
+  "events": [
+    {
+      "id": "E01",
+      "date": "2026-10-02",
+      "kind": "initial_contact",
+      "source": "user-request-in-current-conversation",
+      "claim": "用户要求了解项目、平台与经济本地协作",
+      "action": "只读项目入口与公开管理资料、核实OpenRouter文档",
+      "result": "识别已有四线及上下文膨胀，不需要另建体系",
+      "evidence": [
+        {
+          "path": "../20261002_止观AI_Desktop与OpenRouter协作诊断_讨论稿.md",
+          "version": "git:c2e2c7b"
+        }
+      ],
+      "uncertainty": "当时未完成代理登记，日期为报告标注，不是完整会话时间戳"
+    },
+    {
+      "id": "E02",
+      "date": "2026-10-03",
+      "kind": "role_authorization",
+      "parent": "E01",
+      "claim": "法师选择并明确本窗口执行W3",
+      "action": "从顾问诊断转入架构协作，保留W1在途写入面",
+      "evidence": [
+        {
+          "path": "登记分片/D-1003-W3a.md",
+          "version": "git:c2e2c7b"
+        }
+      ],
+      "uncertainty": "授权不等于远端受理或其他窗口接管"
+    },
+    {
+      "id": "E03",
+      "date": "2026-10-03",
+      "kind": "user_correction",
+      "parent": "E02",
+      "claim": "先登记再落盘、正式交付须D盘",
+      "action": "补登AI-014、记录流程遗漏、原稿追加订正",
+      "result": "不倒填、不改历史",
+      "evidence": [
+        {
+          "path": "登记分片/KZ-1003-W3a.md",
+          "version": "git:c2e2c7b"
+        }
+      ],
+      "uncertainty": "补救不消除此前发生的流程错误"
+    },
+    {
+      "id": "E04",
+      "date": "2026-10-03",
+      "kind": "interpretation_difference",
+      "parent": "E02",
+      "claim": "W1转述扩大P2范围与独立立件形式",
+      "action": "对照用户原话与D-1003-W1a，报告歧义而不静默择一",
+      "evidence": [
+        {
+          "path": "20261003_W3首轮协同审计_裁定承接与反馈闭环_v0.md",
+          "version": "git:c2e2c7b"
+        }
+      ],
+      "uncertainty": "具体范围和文件形式未被本窗裁定"
+    },
+    {
+      "id": "E05",
+      "date": "2026-10-03",
+      "kind": "independent_review",
+      "parent": "E04",
+      "claim": "P0实现与其承诺、测试覆盖需要分开",
+      "action": "源码复核与5项合成检查，排除代理超时删除误读",
+      "result": "恢复承诺过强、事件覆盖欠账、条件性重入风险与计量口径待核",
+      "evidence": [
+        {
+          "path": "20261003_W3_P0至P1独立架构复核_任务与结果_v1.md",
+          "version": "git:63489fd"
+        },
+        {
+          "path": "测试台验收工具/20261003_W3_snapshot_contract_test.py",
+          "version": "git:63489fd"
+        }
+      ],
+      "uncertainty": "未真机验收、W1未回应；合成反例不等于生产故障"
+    },
+    {
+      "id": "E06",
+      "date": "2026-10-03",
+      "kind": "asset_verification",
+      "parent": "E05",
+      "claim": "现有图谱甘特可复用但任务依赖数据有限",
+      "action": "核对快照、生成器和测试，排除原则字段未建误报",
+      "result": "62任务、62原则非空、0依赖、1排期；实现只读结构检查器",
+      "evidence": [
+        {
+          "path": "20261003_W3任务链梳理与内外双线增量_执行稿_v0.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "ba8e4cd3e82a396aad7fcd53c81adfd30411cd9a3a7dc8c29114b8276bea547d"
+        }
+      ],
+      "uncertainty": "本地快照不是远端实时状态，尚未补齐真实依赖"
+    },
+    {
+      "id": "E07",
+      "date": "2026-10-03",
+      "kind": "operational_revision",
+      "parent": "E05",
+      "claim": "Git锁可能是己方失败提交残留，非飞书或持续他窗占用",
+      "action": "查mtime，用户确认宿主无写进程后备份清理两锁",
+      "result": "第二批入库63489fd；另发现同段旧next-index-10.lock未清",
+      "evidence": [
+        {
+          "path": "20261003_W3最小任务契约对照与通道恢复_执行记录_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "9a94c3efc7c3dfafae7676e432bfa8ed2b993dbc020cfd20c6abd777dc806785"
+        }
+      ],
+      "uncertainty": "锁残留完整根因未证实，额外锁未获清理授权"
+    },
+    {
+      "id": "E08",
+      "date": "2026-10-03",
+      "kind": "interface_prototype",
+      "parent": "E06",
+      "claim": "先规范导出与分页再让已有视图消费",
+      "action": "建立显式离线适配原型，合成结果经过两旧读取函数验证",
+      "result": "只读原型兼容，不冒称真实飞书连接器",
+      "evidence": [
+        {
+          "path": "测试台验收工具/20261003_W3_task_export_adapter.py",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "27a12cf50ba92a74d4406e430541aa1653f9862dcb4043ca7d4abf4432ed0e87"
+        }
+      ],
+      "uncertainty": "实际导出样例未收到"
+    },
+    {
+      "id": "E09",
+      "date": "2026-10-03",
+      "observed_time": "15:10 Asia/Shanghai (C3日志标注)",
+      "kind": "cross_client_discovery",
+      "parent": "E08",
+      "claim": "C3能观察AI-014文件，却在其会话注册表辨识不出本窗",
+      "action": "读取C3最新记录，对比本APP可用工具/任务空间",
+      "result": "问题从缺工具推进到跨客户端发现域与寻址不一致",
+      "evidence": [
+        {
+          "path": "信箱/engine/巡检日志-C3.txt",
+          "version": "working-tree-line-31",
+          "working_tree_sha256_at_index_verification": "eb9ba9908f6dcf5cd5e44899cb4ea10bbad5f67133785eeb75d8543c0e182224"
+        }
+      ],
+      "uncertainty": "未直接查询C3运行环境或联系目标窗"
+    },
+    {
+      "id": "E10",
+      "date": "2026-10-03",
+      "kind": "method_trial",
+      "parent": "E09",
+      "claim": "协同与参与过程应可回看并分支再建构",
+      "action": "形成寻址请求、回放索引与方法试件",
+      "result": "提出三种复现及跨窗验收，不自行升格规则",
+      "evidence": [
+        {
+          "path": "20261003_W3协同寻址与参与过程回放_方法试件_v0.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "c069d88683ac79e29641adcc4269162a689a98035c89c9cedb6743f62b24ca8f"
+        }
+      ],
+      "uncertainty": "真实受理、样例验证及第二协作者回放尚未发生"
+    },
+    {
+      "id": "E11",
+      "date": "2026-10-04",
+      "parent": "E10",
+      "kind": "window_handoff",
+      "claim": "自动新窗检索不等于正式交接。",
+      "action": "用户补正式交接，本窗对照并回执接管。",
+      "result": "原窗主任务停写；新窗工具不重复造，待办/授权边界明确。",
+      "evidence": [
+        {
+          "path": "20261004_AI014_W3窗口交接单_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "b8741a964eeb47391a46b6fd2f9b5a09dd981659a7b5e182e06b748366a5e0db"
+        },
+        {
+          "path": "信箱/engine/20261004-W3-AI014-窗口交接接管回执_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "5bd5208dafc220c2bd74d7893932f1ee4f940b8e8ca32f434062acf0a4bb6e73"
+        }
+      ],
+      "uncertainty": "任务接管不等于五文件已入库；Session未长期双实例授权。",
+      "authority_class": "原授权下执行；非新增项目规则"
+    },
+    {
+      "id": "E12",
+      "date": "2026-10-04",
+      "parent": "E11",
+      "kind": "connector_capability_change",
+      "claim": "飞书进程连接成功不等于业务读取权限。",
+      "action": "用户本机安装Node并开通应用权限；本窗只读字段/记录验证。",
+      "result": "真实任务表读取成立；未验证写权限或UAT恢复。",
+      "evidence": [
+        {
+          "path": "信箱/engine/20261004-W3-AI014-飞书现势只读核验与C3布尔订正_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "1af05f47a76f2295b85fc774be05d7966c75727262bf1390f0dd41f658f4455f"
+        }
+      ],
+      "uncertainty": "不收录App Secret、凭据配置或隐私内容；旧卡业务仍滞后。",
+      "authority_class": "原授权下执行；非新增项目规则"
+    },
+    {
+      "id": "E13",
+      "date": "2026-10-04",
+      "parent": "E12",
+      "kind": "evidence_counterexample",
+      "claim": "旧42非完成/40开放计算错误；非空不等于checkbox true。",
+      "action": "逐行算术复算并与远端显式bool比对。",
+      "result": "44非完成/42开放；旧C3导出true6对当前APItrue3，反馈待修。",
+      "evidence": [
+        {
+          "path": "登记分片/KZ-1004-W3b.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "f4c99fdfdd361c4e0f28a399975e4baa8012ed99e6aea295701428bd369e4d10"
+        },
+        {
+          "path": "信箱/engine/20261004-W3-AI014-飞书现势只读核验与C3布尔订正_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "1af05f47a76f2295b85fc774be05d7966c75727262bf1390f0dd41f658f4455f"
+        }
+      ],
+      "uncertainty": "导出转换根因未读取证明，不能把猜测写成确定原因。",
+      "authority_class": "原授权下执行；非新增项目规则"
+    },
+    {
+      "id": "E14",
+      "date": "2026-10-04",
+      "parent": "E13",
+      "kind": "priority_calibration",
+      "claim": "工具连通后将067/068抬成主线，是优先级偏移。",
+      "action": "用户提醒后检索旧窗转录，核双线/并行/回放要求。",
+      "result": "恢复真实工具适配与过程回放双执行位，等待独立列示。",
+      "evidence": [
+        {
+          "path": "20261004_W3交接主线回顾与接续校准_v1.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "8666f97f70f93bda2f4d9686c6feb32fab7fb9bffd28364fb44ff618185ecab0"
+        }
+      ],
+      "uncertainty": "回执维护不是方向成果；自主规划不等于自行扩权。",
+      "authority_class": "原授权下执行；非新增项目规则"
+    },
+    {
+      "id": "E15",
+      "date": "2026-10-06",
+      "parent": "E14",
+      "kind": "collaborator_response_and_authority_change",
+      "claim": "昨日候批判断不能覆盖今日授权与施工事实。",
+      "action": "消费AI017三回执与AI018接力登记。",
+      "result": "评审被修订/采用；七项批准与C0实现已发生，但授权不证明实现安全。",
+      "evidence": [
+        {
+          "path": "信箱/engine/20261005-W1-AI017-消费回执_从此优先轨评审.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "27290bf1c29b3e07c02bd95d403af90bc2849f4a45e7f61035f5152ae860def5"
+        },
+        {
+          "path": "信箱/engine/20261005-W1-AI017-消费回执_共享登记合成交错验证.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "142ed5f59868973af4be7f1ea5c812c1492f04562f34f656b46809aec7f82eac"
+        },
+        {
+          "path": "登记分片/D-1006-W1a.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "e769765c6fe2023494d5fc10f039e5520d1ee59ca06b2df5b0ecac016d8a6688"
+        }
+      ],
+      "uncertainty": "登记由W1转述金口；不等于W3验收完整工程。"
+    },
+    {
+      "id": "E16",
+      "date": "2026-10-06",
+      "parent": "E15",
+      "kind": "implementation_counterexample",
+      "claim": "互斥设计回应不等于候选锁实现满足说明。",
+      "action": "核C0接管条件，用AST隔离合成锁复现活PID旧锁可被删。",
+      "result": "原反例回函与建议验收基线留证；当前安全建议5项3项不满足，exit2不是测试程序异常。",
+      "evidence": [
+        {
+          "path": "信箱/engine/20261006-W3-AI014-C0锁接管反例_致W1接力窗.md",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "06be1253d4cb4ddfed5f8e563d55ad6631897b871612a7f631907f9aec7700c9"
+        },
+        {
+          "path": "测试台验收工具/20261006_W3_registry_lock_takeover_result.json",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "b9c669ff9e27e60605e0867c38068617b0ed47950a58cda49b6ee0efdc71e40f"
+        },
+        {
+          "path": "测试台验收工具/20261006_W3_registry_lock_acceptance_baseline.json",
+          "version": "working-tree-not-committed",
+          "working_tree_sha256_at_index_verification": "874c593b0ff47e830da1f9e3652865246fb6c6e0ecbacbdc49e3d0c38f862442"
+        }
+      ],
+      "uncertainty": "不证明真实损坏；未测全部owner/TOCTOU/Windows权限，修复未回。"
+    }
+  ],
+  "branch_trials": [
+    {
+      "id": "B01",
+      "parent_event": "E05",
+      "goal": "复核快照恢复承诺并提出替代解释",
+      "state": "proposed",
+      "acceptance": "区分源码事实、合成反例、真实运行欠账，保留原判断与新证据"
+    },
+    {
+      "id": "B02",
+      "parent_event": "E09",
+      "goal": "经现有调度验明导出对象并完成实际样例三层核验",
+      "state": "awaiting-routing",
+      "acceptance": "有对象自证、合法投递或拉取、受理回执、来源/结构/语义核验，非只有落盘"
+    },
+    {
+      "id": "B03",
+      "parent_event": "E14",
+      "goal": "从新窗恢复长期目标/授权/双线任务组合，验证接续非摘要复述",
+      "state": "prepared-not-independently-accepted",
+      "acceptance": "读者能区分已交付/未入库、已接通/只读权限、等待/可执行和主线/看板杂项"
+    },
+    {
+      "id": "B04",
+      "parent_event": "E16",
+      "goal": "候选锁修复对同建议用例复跑，保留旧缺口基线，不以5项通过称全部锁安全",
+      "state": "awaiting-candidate-change",
+      "acceptance": "活/unknown/不完整owner不被年龄自动夺锁；原owner释放与多进程竞态另核"
+    }
+  ],
+  "extends": {
+    "path": "20261004_W3参与过程回放索引_v1.json",
+    "sha256": "65760deb0ca846851bb2c5f36254081f7ed6f1fe3083fa5b9720a15a89639c26",
+    "preserved_event_ids": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05",
+      "E06",
+      "E07",
+      "E08",
+      "E09",
+      "E10",
+      "E11",
+      "E12",
+      "E13",
+      "E14"
+    ]
+  }
+}
