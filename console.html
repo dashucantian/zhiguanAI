@@ -727,6 +727,8 @@
       <button class="btn ghost" id="congciLoad">观这一坐</button>
     </div>
     <div id="congciBanner" class="hint"></div>
+    <div id="congciVoiceLine" class="hint" style="color:var(--accent);margin-top:6px;"></div>
+    <div id="congciVoiceLog" class="hint" style="max-height:96px;overflow:auto;margin-top:4px;"></div>
     <div id="congciOut" class="outbox" style="display:none;">
       <iframe id="congciIframe" src="/cadence-mandala" style="display:none;width:100%;height:540px;border:1px solid var(--border);border-radius:8px;background:#0b0e14;"></iframe>
     </div>
@@ -3321,6 +3323,34 @@ $("congciLoad").onclick = async () => {
   _congciSend(payload);
 };
 
+// ── 从此声带上屏（2026-10-06 批 C3·金口#4）：SSE 消费行 ──
+// /api/congci/stream 事件 {type:"congci_said", status, text, session_key, ts}；
+// text＝voice_cue 五态句式原文（与脑档案/声带逐字一致）；卡内声带行＋
+// 最近 6 条日志。EventSource 原生自动重连。
+let congciEs = null;
+function connectCongciStream() {
+  if (congciEs) { try { congciEs.close(); } catch (e) {} }
+  congciEs = new EventSource("/api/congci/stream");
+  congciEs.onmessage = e => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch (_e) { return; }
+    if (!ev || ev.type !== "congci_said") return;
+    const line = $("congciVoiceLine");
+    if (line) {
+      line.textContent = "🎙 " + (ev.text || "") +
+        (ev.ts ? "  " + String(ev.ts).slice(11, 19) : "");
+    }
+    const log = $("congciVoiceLog");
+    if (log && ev.text) {
+      const d = document.createElement("div");
+      d.textContent = "[" + String(ev.ts || "").slice(11, 19) + "] " + ev.text;
+      log.insertBefore(d, log.firstChild);
+      while (log.children.length > 6) log.removeChild(log.lastChild);
+    }
+  };
+  congciEs.onerror = () => { /* EventSource 断线自行重连，如实静默 */ };
+}
+
 // ── 引导体验（他山之石）──
 const GUIDE_URL = "https://www.yunzhongstudio.com/vr-the-journey/";
 $("btnLoadGuide").onclick = () => {
@@ -3372,6 +3402,7 @@ resizeChart();
 redrawMonitor();
 connectStream();
 connectMonitorStream();
+connectCongciStream();   // 批 C3：从此声带上屏（金口#4）
 // ═══ NeuraDock 接入卡（2026-10-01 W1·AI-005·DeepSeek）═══════════════════════
 // 只调 /api/nd/*；不改任何既有数据流。布局＝一条链（①厂商程序→②数据口→③中转→④本舱两路）。
 // 设计依据＝真机实测七条（《乙案探索方案》§十）＋法师 10-01「把相互之间的关系说清楚」。

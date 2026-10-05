@@ -686,6 +686,10 @@ class MonitorSession:
                 _vr_events_flush(events_path_for(data_path))
             except Exception:
                 pass
+            # ── 批 C3（金口#3/#4）：主数据已存 → 声带 data_saved（单点）──
+            # 与「学习成功」不再混称；附属物纪律，失败不影响保存。
+            _congci_say_data_saved(
+                os.path.splitext(os.path.basename(data_path))[0])
             # ── 批 C1（2026-10-06·金口七项#2 学习用途）：会话收口→从此养脑入队 ──
             # 只入队（append 任务行＋queued 事件），单 worker 线程串行消化；
             # 准入在入队前（QC recommend=ingest＋非 test/smoke/replay＋撤回者
@@ -1089,6 +1093,9 @@ class ExperimentSession:
                             contact_quality=info.get("contact_quality", "")),
                         "again": False, "qc": qc,
                     })
+                    # 批 C3：闭环保存成功 → 声带 data_saved（单点，附属物）
+                    _congci_say_data_saved(
+                        os.path.splitext(os.path.basename(data_path))[0])
                     # P1a 会话契约（2026-09-18）：闭环路径在 end 时刻追加
                     # qc_done + closed（本函数只在实验结束事件时被调用）。
                     try:
@@ -1176,6 +1183,45 @@ class ExperimentSession:
 
 
 SESSION = ExperimentSession()
+
+
+# ── 批 C3（2026-10-06·金口#3 语音开启/#4 声带上屏）：从此声带＋上屏 SSE ──
+# 服务端单点（方案稿 v2 §四）：voice_cue 五态句式（纯函数）→ 单飞 TTS
+# （忙时丢弃不堆积）→ SSE 上屏（/api/congci/stream）。附属物纪律：声带/
+# 上屏失败不影响管线与保存主流程。语音验收（真机一听/声源）须法师在场。
+CONGCI_BROADCASTER = EventBroadcaster(maxlen=50)
+
+
+def _congci_ui_cb(payload: dict) -> None:
+    """管线/保存路径 UI 回调：五态句式发声＋SSE 上屏（data_saved 同走此点）。
+    SSE 事件型＝congci_said（声带说出的句子，含 status 溯源——契约 v0.3
+    schema：congci_brain 状态事件落会话流（C1 已建），congci_said 上屏）。"""
+    try:
+        from congci_voice import CongciVoice, get_voice
+        text = CongciVoice.voice_cue(payload)
+        get_voice().say_async(text)
+        CONGCI_BROADCASTER.publish({
+            "type": "congci_said", "status": payload.get("status"), "text": text,
+            "session_key": payload.get("session_key"),
+            "unit_id": payload.get("unit_id"), "reason": payload.get("reason"),
+            "ts": datetime.now().astimezone().isoformat(timespec="seconds")})
+    except Exception:
+        pass
+
+
+def _congci_say_data_saved(session_key: str = "") -> None:
+    """保存成功即发声（主数据已存，与「学习成功」不再混称——方案稿 v2 §四）。"""
+    try:
+        _congci_ui_cb({"status": "data_saved", "session_key": session_key})
+    except Exception:
+        pass
+
+
+try:
+    import congci_pipeline
+    congci_pipeline.set_ui_callback(_congci_ui_cb)
+except Exception:
+    pass
 
 
 # ── VR 桥接（2026-09-05 A4：脑电指标 → Pico 头显 WebSocket 出口） ──────────
@@ -2966,6 +3012,33 @@ def get_congci_brain_record(session_key: str, include_trace: bool = True):
             resp["trace"] = None
             resp["trace_missing"] = True
     return resp
+
+
+@app.get("/api/congci/stream")
+async def congci_stream():
+    """从此声带上屏 SSE（批 C3·金口#4）：每连接独立订阅（EventBroadcaster
+    同款），事件 {type:"congci_said", status, text, session_key, unit_id,
+    reason, ts}——text＝voice_cue 五态句式原文（与脑档案/声带逐字一致）。
+    契约 v0.3 记 schema（congci_brain 状态事件落会话流；congci_said 上屏）。
+    断线自动重连（EventSource 原生）。"""
+    loop = asyncio.get_running_loop()
+    q = CONGCI_BROADCASTER.subscribe(loop)
+
+    async def gen():
+        try:
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    yield ": ping\n\n"
+                    continue
+                yield f"data: {json.dumps(ev, ensure_ascii=False, default=str)}\n\n"
+        finally:
+            CONGCI_BROADCASTER.unsubscribe(q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache",
+                                      "X-Accel-Buffering": "no"})
 
 
 def _dashboard_data():

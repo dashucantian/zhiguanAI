@@ -235,6 +235,17 @@ def _session_events_path(npz_path: str) -> str:
     return os.path.join(d, stem + ".session_events.jsonl")
 
 
+_UI_CALLBACK = None          # 批 C3：console_server 注册的 UI/声带回调（附属物）
+
+
+def set_ui_callback(fn) -> None:
+    """注册 UI 回调：console_server 启动时挂声带＋上屏 SSE（金口#3/#4）。
+    fn(payload_dict) 在每次状态事件（queued/committed/failed/duplicate/
+    abstained）时被调；回调抛错不影响管线主流程（契约是附属物纪律）。"""
+    global _UI_CALLBACK
+    _UI_CALLBACK = fn
+
+
 def _emit_event(npz_path, status: str, row: dict, note: str = "") -> bool:
     """congci_brain 事件（单 kind＋status 字段）入会话事件流。
     契约是附属物：文件缺失/写失败一律返回 False，不影响管线。"""
@@ -251,11 +262,23 @@ def _emit_event(npz_path, status: str, row: dict, note: str = "") -> bool:
                    "duplicate_of": row.get("duplicate_of"),
                    "epochs": row.get("epochs"),
                    "reason": row.get("reason")}
-        return append_event(_session_events_path(npz_path),
-                            "experience", "pipeline", "congci_brain",
-                            payload, note or f"从此脑收口：{status}")
+        ok = append_event(_session_events_path(npz_path),
+                          "experience", "pipeline", "congci_brain",
+                          payload, note or f"从此脑收口：{status}")
     except Exception:
-        return False
+        ok = False
+    # 批 C3：UI/声带回调（附属物，失败静默；上屏与发声不阻断管线）
+    if _UI_CALLBACK is not None:
+        try:
+            _UI_CALLBACK({"status": status,
+                          "session_key": row.get("session_key"),
+                          "unit_id": row.get("unit_id"),
+                          "reason": row.get("reason"),
+                          "brain_version": row.get("result_brain_version")
+                          or row.get("brain_base_version")})
+        except Exception:
+            pass
+    return ok
 
 
 # ── npz 解析（暂存→入库移动的兜底）──────────────────────────────────────
