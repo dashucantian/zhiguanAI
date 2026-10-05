@@ -129,3 +129,12 @@ python zhiguan_cadence_bridge.py --selftest
    - 验收：Python312 跑＝出指引不闪退（exit 2）；harness 跑＝自检＋演示全绿（exit 0）。
 2. **时钟不动**：根因＝**索引映射恒零**——`idx(floor(k))` 在 k∈[0,1] 上恒为 0，整条时间线只读第 0 个采样点（时钟永停 00:01；环的着色/残差也只画第 0 点状态，此前"几秒扫完"扫的只是位置不是状态）。修复：`x = k*(len-1)` 连续映射（val 插值＋draw 读出同步改）。留证：步长 0.04 按 40ms 设计，rAF≈16.7ms 下速度虚标 2.4×，已改真实 dt 推进。
    - 验收：**node 虚拟帧测试**（桩 DOM/Canvas，60fps 帧距推 130 虚拟秒）＝`已坐 02:10 · 第 130 拍`，与真实打坐 1:1——PASS；`node --check` 过；无头 Edge DOM 实测 clock 正常渲染。
+
+### 8.9 三轮订正（bat 编码事故）——根因与修复
+
+- 现象：双击 bat 报 `'Y' 不是内部或外部命令`／`'释器:'`／`'an_cadence_bridge.py'` 等——行被从多字节中间咬碎。
+- 根因：bat 内含中文（echo 行），PS 写盘编码与 cmd 解析码页错配，cmd 按字节流切行导致命令碎裂。
+- 修复：**bat 全 ASCII 化**（CRLF、无 BOM、287B，echo 改英文）——对任何码页免疫。
+- 顺手根治：**给系统 Python3.12 也装上 cadence-net==0.74.0**（numpy 单依赖）。至此 Python3.14(harness) 与 Python3.12 双解释器均可直接跑桥——**直接双击 .py 即可**，bat 仅作保险。
+- 验收：bat 端到端实测（解释器行＋自检 9 项＋40 拍演示＋停窗，exit 0）；Python3.12 直跑 .py exit 0（自检＋演示全绿）。
+- 留证：Python3.12＝安装目录 Python312，同一解释器（用户口径 Python3.12）。
