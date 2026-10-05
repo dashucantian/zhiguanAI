@@ -50,6 +50,13 @@ from pathlib import Path
 
 import numpy as np
 
+# 批 C0（2026-10-05，法师「七项通过，继续施工」）：登记表跨进程事务原语
+# （单一实现，W3 合成五反例修复；消费回执在案）。
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+import registry_tx
+
 ZEN_ROOT = Path(r"D:\Project\Zen-EEG")  # 2026-09-19 随项目迁 D 盘同步改址（与 console_server.py 同源）
 REGISTRY = ZEN_ROOT / "01_registry" / "session_registry.csv"
 RAW_ROOT = ZEN_ROOT / "02_raw"
@@ -159,8 +166,7 @@ def main():
 
     with open(REGISTRY, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
-    fieldnames = ["session_id", "participant_id", "date", "session_type",
-                  "duration_seconds", "status", "manifest_path"]
+    # 列契约（批 C0 起）＝registry_tx.FIELDNAMES 单一实现，此处不再另列
 
     pre_row = None
     if args.sid:
@@ -441,29 +447,42 @@ def main():
     # ---- 更新登记表：隔离数据记 quarantined；--sid 模式回填预登记行 ----
     # 2026-09-19 裁定（P1 §八-1 乙方案）：新增 manifest_path 指针列；
     # 契约随档成功才填，未随档如实留空
+    # 批 C0（2026-10-05）：改 registry_tx 跨进程临界区——**写时锁内重读
+    # 最新表合并**（读表在数分钟前的旧快照不再回写：丢更新/状态回退/
+    # 编号复用反例机制消除，W3 合成验证回执在案）；os.replace 原子替换
+    # （中断不截空）。失败=数据已落盘但登记未回填，走对账指引退出。
     rel_manifest = ""
     if contract_carried:
         rel_manifest = (("03_quality_control/quarantine/" if quarantine
                          else "02_raw/") + session_id + "/session_manifest.json")
     final_status = "quarantined" if quarantine else "finished"
-    if args.sid:
-        pre_row["duration_seconds"] = int(round(duration))
-        pre_row["status"] = final_status
-        pre_row["manifest_path"] = rel_manifest
-    else:
-        rows.append({
-            "session_id": session_id,
-            "participant_id": args.participant,
-            "date": date_fmt,
-            "session_type": args.type,
-            "duration_seconds": int(round(duration)),
-            "status": final_status,
-            "manifest_path": rel_manifest,
-        })
-    with open(REGISTRY, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
+    try:
+        if args.sid:
+            # --sid 模式：锁内重读该行，校验 planned 后回填三列
+            # （pre_row 系数分钟前旧快照，不直接采用——重读为准）
+            registry_tx.ingest_backfill_locked(
+                session_id, int(round(duration)), final_status, rel_manifest)
+        else:
+            # 补登记模式：锁内重读按 Zen-ID 查重后 append（永不复用；
+            # 若期间他人已插入同号，此处 409 中止=已落数据对账路径）
+            registry_tx.ingest_append_locked({
+                "session_id": session_id,
+                "participant_id": args.participant,
+                "date": date_fmt,
+                "session_type": args.type,
+                "duration_seconds": int(round(duration)),
+                "status": final_status,
+                "manifest_path": rel_manifest,
+            })
+    except (ValueError, LookupError, TimeoutError) as ex:
+        print(f"登记表事务失败：{ex}")
+        print("对账指引（已落数据/未回填状态）：")
+        print(f"  ① 02_raw 数据已落盘于 {dest}（勿重复入库、勿改 02_raw）；")
+        print("  ② 登记表该行未回填/未新增——在 registry_tx 锁内人工核补：")
+        print(f"     sid={session_id}, status={final_status}, "
+              f"duration={int(round(duration))}s, manifest={rel_manifest or '(空)'}；")
+        print("  ③ 冲突类失败（Zen-ID 已存在/状态非 planned）先核登记表现势再定。")
+        sys.exit(1)
 
     dest_label = "隔离区落盘" if quarantine else "入库完成"
     # eff 与 clean 取自 qc_pipeline 的结果（P0-1 后判定唯一源；不再本地另算）

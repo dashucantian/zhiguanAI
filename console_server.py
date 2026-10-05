@@ -122,36 +122,30 @@ def save_profiles(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
+import registry_tx  # 批 C0（2026-10-05）：登记表跨进程事务原语，单一实现（W3 五反例修复；D-1005-W1a）
+
+
 def _read_registry_rows():
-    """读登记表（不存在返回空行列表）。"""
-    if not os.path.exists(REGISTRY_CSV):
-        return []
-    with open(REGISTRY_CSV, "r", newline="", encoding="utf-8-sig") as f:
-        return list(csv.DictReader(f))
+    """读登记表（不存在返回空行列表）。
+    批 C0（2026-10-05，W3 五反例修复）：薄委托 registry_tx 单一实现；
+    原子替换保证读方见旧/新完整版，无需读锁。"""
+    return registry_tx.read_rows(REGISTRY_CSV)
 
 
 def _write_registry_rows(rows):
     # 2026-09-19 法师裁定（P1 设计稿 §八-1 乙方案）：registry 维持原 6 列、
     # 仅新增 manifest_path 指针列（聚合查询走 manifest，不在 CSV 扩数据列）
-    fieldnames = ["session_id", "participant_id", "date", "session_type",
-                  "duration_seconds", "status", "manifest_path"]
-    with open(REGISTRY_CSV, "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
+    # 批 C0：改为 registry_tx 原子替换（临时件+读回校验+os.replace）——
+    # 中断不再截空；**并发安全须在 registry_tx.locked() 临界区内调用**，
+    # S 号分配/查重/append 请走 registry_tx 临界区操作（写时锁内重读合并）。
+    registry_tx.write_rows_atomic(rows, REGISTRY_CSV)
 
 
 def _next_session_number(rows, participant_id):
-    """该受试者的下一个 S 序号（跨日期递增）。"""
-    max_n = 0
-    for row in rows:
-        sid = row.get("session_id", "")
-        if f"-{participant_id}-S" in sid:
-            try:
-                max_n = max(max_n, int(sid.split("-S")[-1]))
-            except ValueError:
-                pass
-    return f"S{max_n + 1:02d}"
+    """该受试者的下一个 S 序号（跨日期递增）。
+    批 C0：口径委托 registry_tx 同一实现；**须在 locked() 临界区内以
+    锁内新读 rows 调用**（锁外旧快照=编号复用反例复现）。"""
+    return registry_tx.next_session_number(rows, participant_id)
 
 
 def _extract_report_metrics(report_path):
@@ -2537,17 +2531,15 @@ def preregister(payload: PreregisterPayload):
     date = payload.date or datetime.now().strftime("%Y-%m-%d")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
         raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
-    rows = _read_registry_rows()
-    date_compact = date.replace("-", "")
-    s_num = _next_session_number(rows, p)
-    sid = f"ZEN-{date_compact}-{p}-{s_num}"
-    if any(r["session_id"] == sid for r in rows):
-        raise HTTPException(status_code=409,
-                            detail=f"{sid} 已存在，Zen-ID 永不复用")
-    rows.append({"session_id": sid, "participant_id": p, "date": date,
-                 "session_type": payload.session_type,
-                 "duration_seconds": "", "status": "planned"})
-    _write_registry_rows(rows)
+    # 批 C0（2026-10-05）：读→分配 S 号→查重→append→原子写整段收进
+    # registry_tx 跨进程临界区（写时锁内重读最新表合并）——W3 合成五反例
+    # （丢更新/编号复用/截空/状态回退）机制上消除；消费回执在案。
+    try:
+        sid = registry_tx.preregister_locked(p, payload.session_type, date)
+    except ValueError as ex:
+        raise HTTPException(status_code=409, detail=str(ex))
+    except TimeoutError as ex:
+        raise HTTPException(status_code=503, detail=f"登记表忙，稍后重试：{ex}")
     return {"ok": True, "session_id": sid}
 
 
