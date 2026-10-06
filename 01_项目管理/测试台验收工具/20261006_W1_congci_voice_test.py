@@ -53,11 +53,20 @@ def main() -> int:
         # ── 1. voice_cue 五态句式确定性（纯函数）────────────────────
         five = {"data_saved", "brain_queued", "brain_committed",
                 "brain_failed", "brain_duplicate", "brain_abstained"}
+        zen = "ZEN-20261006-P001-S99"
         for st in five:
-            a = CongciVoice.voice_cue({"status": st, "session_key": "SK-1"})
-            b = CongciVoice.voice_cue({"status": st, "session_key": "SK-1"})
+            a = CongciVoice.voice_cue({"status": st, "session_key": zen})
+            b = CongciVoice.voice_cue({"status": st, "session_key": zen})
             assert a == b, f"五态句式不确定：{st}"
-            assert "SK-1" in a, f"句末缺会话标注：{st}"
+            assert zen in a, f"Zen-ID 应念出：{st}"
+        # 真机一听修订（2026-10-06）：hash/暂存名不念（原样念 7–10 秒且无义）
+        h64 = "c6ed561d" + "b" * 56
+        assert "（" not in CongciVoice.voice_cue({"status": "brain_committed",
+                                                  "session_key": h64}), \
+            "hash 不应念出"
+        assert CongciVoice.voice_cue(
+            {"status": "data_saved", "session_key": "local_20261006_034637"}) == \
+            "这一坐的数据已存好。", "暂存名不应念出"
         assert CongciVoice.voice_cue({"status": "brain_queued"}) != \
             CongciVoice.voice_cue({"status": "brain_committed"}), "queued/committed 句式混淆"
         assert "已存好" in CongciVoice.voice_cue({"status": "data_saved"})
