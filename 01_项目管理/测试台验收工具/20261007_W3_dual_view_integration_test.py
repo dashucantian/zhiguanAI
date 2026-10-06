@@ -1,4 +1,4 @@
-﻿"""Synthetic only; imports reviewed local modules; outputs into TemporaryDirectory."""
+"""Synthetic only; imports reviewed local modules; outputs into TemporaryDirectory."""
 import importlib.util, json, tempfile, re, hashlib, time
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
