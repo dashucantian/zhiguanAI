@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "title": "止观AI · 任务看板与 MCP 只读通道",
+    "subtitle": "看板进程内：AI 窗口群经手写 JSON-RPC 只读取数，法师经 .bat 看版面",
+    "sourceRef": "zhiguanAI@master(0299859)",
+    "scope": "L2/L3：只画 board_server 进程与其两个外部调用方，驾驶舱闭环主链另见 zhiguan-console-architecture",
+    "diagramType": "architecture",
+    "locale": "zh-CN"
+  },
+  "groups": [],
+  "nodes": [
+    {
+      "id": "fashi",
+      "label": "宗国法师",
+      "kind": "external",
+      "subtitle": "唯一决策人：看看板、放行提交、裁定候裁项",
+      "facts": [
+        "由法师本人双击仓库根 任务看板.bat 启动，无自动守护。"
+      ]
+    },
+    {
+      "id": "qoder",
+      "label": "Qoder AI 窗口群",
+      "kind": "external",
+      "subtitle": "多窗协作载体，元数据落在 ~/.qoder-cn",
+      "facts": [
+        "只能只读看板，无权代发消息或代改他窗状态。",
+        "连接器名只认 ASCII，故注册名为 zhiguan_board。"
+      ]
+    },
+    {
+      "id": "board",
+      "label": "board_server",
+      "kind": "service",
+      "module": "看板",
+      "tags": [
+        "core"
+      ],
+      "subtitle": "可视化任务看板：窗口活跃度、任务进度、维那积压、系统资源",
+      "facts": [
+        "HOST/PORT 默认 127.0.0.1:8848，只绑本机。",
+        "SSE /api/stream 2 秒一轮；后台 JobQueue 采样（资源 5s、会话 20s、积压 300s）。",
+        "窗口 running/cold 来源是磁盘 mtime 推断，不是活体。",
+        "出网前过 board_privacy 四道闸。"
+      ],
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/任务看板/board_server.py",
+        "lineStart": 39,
+        "lineEnd": 42,
+        "symbol": "app"
+      }
+    },
+    {
+      "id": "board_mcp",
+      "label": "POST /mcp",
+      "kind": "component",
+      "module": "看板",
+      "subtitle": "手写 JSON-RPC over streamable-HTTP，只读两工具",
+      "facts": [
+        "支持 initialize / ping / tools/list / tools/call；GET 与 DELETE 返回 405。",
+        "仅暴露 board_overview、board_windows，不回对话正文。",
+        "2026-10-07 端到端实测通，亚秒级。"
+      ],
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/任务看板/board_server.py",
+        "lineStart": 718,
+        "lineEnd": 785,
+        "symbol": "mcp_post"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e_fashi_board",
+      "source": "fashi",
+      "target": "board",
+      "kind": "request",
+      "label": "任务看板.bat → :8848",
+      "evidence": "source"
+    },
+    {
+      "id": "e_qoder_mcp",
+      "source": "qoder",
+      "target": "board_mcp",
+      "kind": "request",
+      "label": "tools/call board_overview·board_windows",
+      "evidence": "source"
+    },
+    {
+      "id": "e_mcp_board",
+      "source": "board_mcp",
+      "target": "board",
+      "kind": "call",
+      "label": "复用看板取数与快照",
+      "evidence": "source"
+    }
+  ]
+}

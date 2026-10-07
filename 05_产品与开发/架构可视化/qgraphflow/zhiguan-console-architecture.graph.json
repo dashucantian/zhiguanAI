@@ -1,0 +1,139 @@
+{
+  "meta": {
+    "title": "止观AI · 驾驶舱闭环主链",
+    "subtitle": "实践驾驶舱进程内：采集 → 闭环 → 阈值决策 → 等时节拍，以及质检与落盘",
+    "sourceRef": "zhiguanAI@master(0299859)",
+    "scope": "L2/L3：只画 console_server 进程内的闭环主链，看板进程另见 zhiguan-board-architecture",
+    "diagramType": "architecture",
+    "locale": "zh-CN"
+  },
+  "groups": [
+    { "id": "g_console", "label": "实践驾驶舱进程 · FastAPI :8777", "kind": "runtime" }
+  ],
+  "nodes": [
+    {
+      "id": "fashi",
+      "label": "宗国法师",
+      "kind": "external",
+      "subtitle": "唯一决策人：驾驶实验、放行提交、裁定候裁项",
+      "facts": [
+        "由法师本人双击 实践驾驶舱.bat 启动，无自动守护。"
+      ]
+    },
+    {
+      "id": "console",
+      "label": "console_server",
+      "kind": "service",
+      "groupId": "g_console",
+      "module": "驾驶舱",
+      "tags": ["core"],
+      "subtitle": "统一入口：监测采集、闭环控制、SSE 推流、会话质检与档案注册",
+      "facts": [
+        "app = FastAPI(title=\"实践驾驶舱\")，默认 :8777，HTTPS :8778。",
+        "前端页面（console.html / focus.html / vr_feedback.html / vr_mandala.html）由本进程 FileResponse 直接给出。",
+        "通过 sys.path 注入 muse2 子仓后导入 muse_local_server。"
+      ],
+      "source": { "kind": "source", "file": "console_server.py", "lineStart": 174, "lineEnd": 174, "symbol": "app" }
+    },
+    {
+      "id": "closedloop",
+      "label": "run_closed_loop",
+      "kind": "business",
+      "groupId": "g_console",
+      "module": "闭环",
+      "subtitle": "闭环实验主体：采频段 → 阈值决策 → 调节等时节拍",
+      "facts": [
+        "这是止观AI 的业务中心：实时闭环神经反馈。",
+        "录制输出目录 EXP_DIR = experiments/。",
+        "开环对照由 openloop_experiment.py 提供，本图未展开。"
+      ],
+      "source": { "kind": "source", "file": "closedloop_experiment.py", "lineStart": 250, "lineEnd": 262, "symbol": "run_closed_loop" }
+    },
+    {
+      "id": "controller",
+      "label": "ClosedLoopController",
+      "kind": "component",
+      "groupId": "g_console",
+      "module": "闭环",
+      "subtitle": "阈值决策层：按 Alpha/Theta/Beta 决定下一步节拍",
+      "facts": [
+        "由 console_server 直接导入，与 closedloop_experiment 分文件。"
+      ],
+      "source": { "kind": "source", "file": "closedloop_controller.py", "lineStart": 28, "lineEnd": 40, "symbol": "ClosedLoopController" }
+    },
+    {
+      "id": "bridge",
+      "label": "ZhiGuanCadenceBridge",
+      "kind": "component",
+      "groupId": "g_console",
+      "module": "节拍",
+      "subtitle": "等时节拍桥：把决策结果落成节拍频率与音量",
+      "facts": [
+        "自带 --selftest；暖缓存完整自测实测 3.8 秒。",
+        "名义「≥74 分钟」实为 numba 冷缓存首编译，不得当判据。"
+      ],
+      "source": { "kind": "source", "file": "zhiguan_cadence_bridge.py", "lineStart": 69, "lineEnd": 82, "symbol": "ZhiGuanCadenceBridge" }
+    },
+    {
+      "id": "qc",
+      "label": "qc_pipeline",
+      "kind": "component",
+      "groupId": "g_console",
+      "module": "质检",
+      "subtitle": "质检唯一实现：通道质量与干净度比例判定",
+      "facts": [
+        "P0-1（2026-09-20）：判定一律走 qc_pipeline，不从 report.html 取数。"
+      ],
+      "source": { "kind": "source", "file": "qc_pipeline.py", "lineStart": 76, "lineEnd": 101, "symbol": "_psd" }
+    },
+    {
+      "id": "muse_local",
+      "label": "muse_local_server",
+      "kind": "component",
+      "groupId": "g_console",
+      "module": "采集",
+      "subtitle": "Muse BLE/UDP 接收与帧解码，位于 muse2 子仓",
+      "facts": [
+        "提供 decode_osc / decode_raw_frame 两条解码路径。",
+        "硬件本体是 Muse 头环（BLE），属外部设备，本图未单列。"
+      ],
+      "source": { "kind": "source", "file": "muse2-repo/muse2-master/muse_local_server.py", "lineStart": 82, "lineEnd": 130, "symbol": "decode_osc" }
+    },
+    {
+      "id": "nd_routes",
+      "label": "nd_routes",
+      "kind": "component",
+      "groupId": "g_console",
+      "module": "采集",
+      "subtitle": "NeuraDock 注册式接入：端口发现／单例拉起／扇出中转",
+      "facts": [
+        "做成注册式模块是为把 console_server 的改动面压到两行——该文件常有他窗在途改动。",
+        "NeuraDock 工作站走 TCP :9600，端口不随会话自开。"
+      ],
+      "source": { "kind": "source", "file": "muse2-repo/muse2-master/nd_routes.py", "lineStart": 26, "lineEnd": 43, "symbol": "hub" }
+    },
+    {
+      "id": "experiments",
+      "label": "experiments/",
+      "kind": "database",
+      "groupId": "g_console",
+      "module": "闭环",
+      "subtitle": "会话录制落盘目录",
+      "facts": [
+        "EXP_DIR 由 closedloop_experiment 定义，无数据库，纯文件。"
+      ],
+      "source": { "kind": "source", "file": "closedloop_experiment.py", "lineStart": 43, "lineEnd": 43, "symbol": "EXP_DIR" }
+    }
+  ],
+  "edges": [
+    { "id": "e_fashi_console", "source": "fashi", "target": "console", "kind": "request", "label": "驾驶实验 · HTTPS :8777/:8778", "evidence": "source" },
+    { "id": "e_console_loop", "source": "console", "target": "closedloop", "kind": "call", "label": "run_closed_loop 启动与控制", "evidence": "source" },
+    { "id": "e_loop_ctrl", "source": "closedloop", "target": "controller", "kind": "call", "label": "阈值决策", "evidence": "source" },
+    { "id": "e_ctrl_bridge", "source": "controller", "target": "bridge", "kind": "call", "label": "调节节拍频率与音量", "evidence": "inference" },
+    { "id": "e_loop_muse", "source": "closedloop", "target": "muse_local", "kind": "call", "label": "取频段特征", "evidence": "source" },
+    { "id": "e_loop_qc", "source": "closedloop", "target": "qc", "kind": "call", "label": "会话质检", "evidence": "source" },
+    { "id": "e_console_qc", "source": "console", "target": "qc", "kind": "call", "label": "质检判定（唯一实现）", "evidence": "source" },
+    { "id": "e_console_nd", "source": "console", "target": "nd_routes", "kind": "framework", "label": "注册式挂载路由（两行改动面）", "evidence": "source" },
+    { "id": "e_loop_exp", "source": "closedloop", "target": "experiments", "kind": "data", "label": "录制落盘 EXP_DIR", "evidence": "source" }
+  ]
+}

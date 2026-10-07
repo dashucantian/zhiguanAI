@@ -1,0 +1,425 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "title": "止观AI 架构证据模型 v1",
+    "viewState": "current",
+    "generatedBy": "system-modeler + c4model + graphviz (Qoder architecture-visualization 0.1.0)",
+    "generatedAt": "2026-10-07",
+    "sourceRefPolicy": "resolvable",
+    "sourceRefBase": "D:/Project/zhiguanAI",
+    "notes": "所有 sourceRefs 为仓库内可解析路径；未经代码直接证实的一律降级为 low 并在 description 标明 inferred/assumed。"
+  },
+  "nodes": [
+    {
+      "id": "actor.fashi",
+      "label": "宗国法师",
+      "type": "actor",
+      "state": "current",
+      "description": "唯一决策人：驾驶实验、放行提交、裁定候裁项。",
+      "sourceRefs": ["AI-开工入口.md"],
+      "confidence": "medium"
+    },
+    {
+      "id": "service.console-server",
+      "label": "实践驾驶舱 console_server",
+      "type": "service",
+      "state": "current",
+      "description": "FastAPI 统一入口，默认 :8777（HTTPS :8778），负责监测采集、闭环控制、SSE 推流、会话质检与档案注册，并直接 FileResponse 出前端页面。",
+      "sourceRefs": ["console_server.py:174", "console_server.py:3174", "console_server.py:3234"],
+      "confidence": "high"
+    },
+    {
+      "id": "service.board-server",
+      "label": "可视化任务看板 board_server",
+      "type": "service",
+      "state": "current",
+      "description": "FastAPI，绑定 127.0.0.1:8848；含 SSE /api/stream、后台 JobQueue 采样器与手写 JSON-RPC 的 POST /mcp。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:39", "05_产品与开发/任务看板/board_server.py:42", "05_产品与开发/任务看板/board_server.py:700", "05_产品与开发/任务看板/board_server.py:754"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.board-mcp",
+      "label": "看板 MCP 端点",
+      "type": "module",
+      "state": "current",
+      "description": "streamable-HTTP 上的 JSON-RPC：initialize/ping/tools/list/tools/call；仅暴露 board_overview、board_windows 两个只读工具；GET/DELETE 返回 405。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:718", "05_产品与开发/任务看板/board_server.py:736", "05_产品与开发/任务看板/board_server.py:788"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.board-sources",
+      "label": "board_sources 取数层",
+      "type": "module",
+      "state": "current",
+      "description": "扫描 ~/.qoder-cn 会话与任务元数据（按磁盘 mtime 推断活跃/静默），并 rglob 维那快照 _records_raw.json。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19", "05_产品与开发/任务看板/board_sources.py:25", "05_产品与开发/任务看板/board_sources.py:264"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.board-privacy",
+      "label": "board_privacy 四道隐私闸",
+      "type": "module",
+      "state": "current",
+      "description": "出网判定／一级整段拒发／标识脱敏／图像脱敏，服务端强制。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_privacy.py", "05_产品与开发/任务看板/board_server.py:29"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.closedloop",
+      "label": "闭环实验链",
+      "type": "module",
+      "state": "current",
+      "description": "closedloop_experiment + closedloop_controller：采 Alpha/Theta/Beta，经阈值决策调节等时节拍。",
+      "sourceRefs": ["closedloop_experiment.py:38", "closedloop_experiment.py:43", "console_server.py:71", "console_server.py:72"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.cadence-bridge",
+      "label": "zhiguan_cadence_bridge",
+      "type": "module",
+      "state": "current",
+      "description": "等时节拍桥，带 --selftest；依赖 cadence 生成节拍。",
+      "sourceRefs": ["zhiguan_cadence_bridge.py:34", "zhiguan_cadence_bridge.py:45", "zhiguan_cadence_bridge.py:509"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.qc-pipeline",
+      "label": "qc_pipeline 质检唯一实现",
+      "type": "module",
+      "state": "current",
+      "description": "判定一律走 qc_pipeline，不从 report.html 取数（P0-1，2026-09-20）。",
+      "sourceRefs": ["console_server.py:76", "qc_pipeline.py"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.muse-local-server",
+      "label": "muse_local_server",
+      "type": "module",
+      "state": "current",
+      "description": "BLE/UDP 接收与分析，位于 muse2 子仓，由 console_server 通过 sys.path 注入后导入。",
+      "sourceRefs": ["console_server.py:60", "console_server.py:193", "closedloop_experiment.py:38"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.nd-routes",
+      "label": "nd_routes / nd_hub",
+      "type": "module",
+      "state": "current",
+      "description": "NeuraDock 注册式接入：端口发现／单例拉起／扇出中转／数据源切换。做成注册式模块是为把 console_server 改动面压到两行（他窗在途改动风险）。",
+      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:20"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.registry",
+      "label": "registry_tx / session_contract",
+      "type": "module",
+      "state": "current",
+      "description": "会话档案事务与事件流（session_events.jsonl）。",
+      "sourceRefs": ["console_server.py:125", "console_server.py:666", "session_contract.py:201"],
+      "confidence": "high"
+    },
+    {
+      "id": "ui.vr",
+      "label": "VR 视觉场景（WebXR）",
+      "type": "module",
+      "state": "current",
+      "description": "vr_feedback.html / vr_mandala.html，由 console_server FileResponse 提供。",
+      "sourceRefs": ["console_server.py:2224", "console_server.py:2236"],
+      "confidence": "high"
+    },
+    {
+      "id": "database.experiments",
+      "label": "experiments/ 会话录制",
+      "type": "database",
+      "state": "current",
+      "description": "闭环实验录制输出目录（EXP_DIR）。",
+      "sourceRefs": ["closedloop_experiment.py:43"],
+      "confidence": "high"
+    },
+    {
+      "id": "database.board-state",
+      "label": "看板 state/ 快照",
+      "type": "database",
+      "state": "current",
+      "description": "live_sessions.json、model_probe.json、screen 等运行态快照。",
+      "sourceRefs": ["05_产品与开发/任务看板/state"],
+      "confidence": "high"
+    },
+    {
+      "id": "external.muse",
+      "label": "Muse 头环",
+      "type": "external-system",
+      "state": "current",
+      "description": "消费级脑电硬件，BLE 出流。",
+      "sourceRefs": ["muse2-repo/muse2-master/muse_local_server.py"],
+      "confidence": "high"
+    },
+    {
+      "id": "external.neuradock",
+      "label": "NeuraDock 工作站",
+      "type": "external-system",
+      "state": "current",
+      "description": "七通道头环 250Hz，TCP :9600；端口不随会话自开。",
+      "sourceRefs": ["neuradock_simulator.py", "muse2-repo/muse2-master/neuradock_receiver.py:54"],
+      "confidence": "high"
+    },
+    {
+      "id": "external.qianwen",
+      "label": "千问 LLM API",
+      "type": "external-system",
+      "state": "current",
+      "description": "出网服务，受零出网三级制管辖。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_config.py:29", "05_产品与开发/任务看板/board_server.py:234"],
+      "confidence": "high"
+    },
+    {
+      "id": "external.qoder",
+      "label": "Qoder AI 窗口群",
+      "type": "external-system",
+      "state": "current",
+      "description": "多窗协作载体；会话与任务元数据落在 ~/.qoder-cn，被看板只读扫描。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "external.zeneeg",
+      "label": "Zen-EEG 会话登记册",
+      "type": "external-system",
+      "state": "current",
+      "description": "跨盘 CSV：D:/Project/Zen-EEG/01_registry/session_registry.csv。",
+      "sourceRefs": ["registry_tx.py"],
+      "confidence": "medium"
+    },
+    {
+      "id": "risk.dense-graph-layout",
+      "label": "风险：稠密带环大图渲染不可用",
+      "type": "risk",
+      "state": "current",
+      "description": "实测：分层/DAG 图 500 节点仅 344ms，但 200 节点×3 边的稠密带环图 >60s 超时。依赖图一旦成环且密集，插件内置 graphviz 布局会超线性劣化。缓解：拆子图、控环、rankdir=TB。",
+      "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md"],
+      "confidence": "high"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge.muse-to-muse-local",
+      "from": "external.muse",
+      "to": "module.muse-local-server",
+      "type": "publishes",
+      "sync": "async",
+      "protocol": "BLE",
+      "description": "脑电原始流。",
+      "sourceRefs": ["muse2-repo/muse2-master/muse_local_server.py"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.muse-local-to-closedloop",
+      "from": "module.muse-local-server",
+      "to": "module.closedloop",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "闭环实验导入 muse_local_server 取频段特征。",
+      "sourceRefs": ["closedloop_experiment.py:38"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.console-to-closedloop",
+      "from": "service.console-server",
+      "to": "module.closedloop",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "启动与控制闭环。",
+      "sourceRefs": ["console_server.py:71"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.closedloop-to-bridge",
+      "from": "module.closedloop",
+      "to": "module.cadence-bridge",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "阈值决策结果驱动节拍桥。inferred：由 congci_pipeline 同时导入 cadence 与 bridge 推得，闭环到桥的直接调用点未逐行确认。",
+      "sourceRefs": ["zhiguan_cadence_bridge.py:45", "congci_pipeline.py:564", "congci_pipeline.py:642"],
+      "confidence": "medium"
+    },
+    {
+      "id": "edge.console-to-ndroutes",
+      "from": "service.console-server",
+      "to": "module.nd-routes",
+      "type": "depends-on",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "注册式挂载 NeuraDock 路由。",
+      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:20"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.neuradock-to-ndroutes",
+      "from": "external.neuradock",
+      "to": "module.nd-routes",
+      "type": "publishes",
+      "sync": "async",
+      "protocol": "TCP",
+      "description": "头环数据扇入。",
+      "sourceRefs": ["muse2-repo/muse2-master/neuradock_receiver.py:54"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.console-to-qc",
+      "from": "service.console-server",
+      "to": "module.qc-pipeline",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "会话质检判定。",
+      "sourceRefs": ["console_server.py:76"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.console-to-registry",
+      "from": "service.console-server",
+      "to": "module.registry",
+      "type": "writes",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "写会话档案与事件流。",
+      "sourceRefs": ["console_server.py:125", "console_server.py:666"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.registry-to-zeneeg",
+      "from": "module.registry",
+      "to": "external.zeneeg",
+      "type": "writes",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "跨盘读写 CSV 登记册。",
+      "sourceRefs": ["registry_tx.py"],
+      "confidence": "medium"
+    },
+    {
+      "id": "edge.console-to-vr",
+      "from": "service.console-server",
+      "to": "ui.vr",
+      "type": "routes-to",
+      "sync": "sync",
+      "protocol": "HTTP",
+      "description": "FileResponse 提供 VR 页面。",
+      "sourceRefs": ["console_server.py:2224", "console_server.py:2236"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.closedloop-to-experiments",
+      "from": "module.closedloop",
+      "to": "database.experiments",
+      "type": "writes",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "录制落盘 EXP_DIR。",
+      "sourceRefs": ["closedloop_experiment.py:43"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.qoder-to-boardmcp",
+      "from": "external.qoder",
+      "to": "module.board-mcp",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "HTTP",
+      "description": "MCP tools/call：board_overview、board_windows（只读）。2026-10-07 实测通。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:718", "05_产品与开发/任务看板/board_server.py:754"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.boardmcp-to-board",
+      "from": "module.board-mcp",
+      "to": "service.board-server",
+      "type": "depends-on",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "MCP 端点复用看板内部取数。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:736"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.board-to-sources",
+      "from": "service.board-server",
+      "to": "module.board-sources",
+      "type": "reads",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "窗口/任务/维那取数。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:30", "05_产品与开发/任务看板/board_sources.py:25"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.board-to-privacy",
+      "from": "service.board-server",
+      "to": "module.board-privacy",
+      "type": "validates",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "出网前四道闸过滤。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:29"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.board-to-qianwen",
+      "from": "service.board-server",
+      "to": "external.qianwen",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "HTTPS",
+      "description": "模型探活（出网）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_config.py:29", "05_产品与开发/任务看板/board_server.py:234"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.board-to-state",
+      "from": "service.board-server",
+      "to": "database.board-state",
+      "type": "writes",
+      "sync": "async",
+      "protocol": "file",
+      "description": "JobQueue 采样器周期写快照（资源 5s、会话 20s、积压 300s）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:81", "05_产品与开发/任务看板/board_server.py:184"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sources-to-qoder",
+      "from": "module.board-sources",
+      "to": "external.qoder",
+      "type": "reads",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "扫描 ~/.qoder-cn 元数据，按 mtime 推断活跃/静默。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.fashi-to-console",
+      "from": "actor.fashi",
+      "to": "service.console-server",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "HTTPS",
+      "description": "驾驶实验、查看监测。",
+      "sourceRefs": ["console_server.py:3178"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.fashi-to-board",
+      "from": "actor.fashi",
+      "to": "service.board-server",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "HTTP",
+      "description": "任务看板.bat → 127.0.0.1:8848。",
+      "sourceRefs": ["任务看板.bat", "05_产品与开发/任务看板/board_server.py:39"],
+      "confidence": "high"
+    }
+  ]
+}

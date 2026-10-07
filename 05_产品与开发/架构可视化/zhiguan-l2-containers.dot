@@ -1,0 +1,105 @@
+digraph zhiguan_l2_containers {
+  rankdir=TB;
+  fontname="Microsoft YaHei";
+  node [fontname="Microsoft YaHei", shape=box, style="rounded,filled", fillcolor="#f5f5f5", fontsize=11];
+  edge [fontname="Microsoft YaHei", fontsize=9];
+  labelloc="t";
+  label="止观AI 系统容器图 (L2) — 现状 / 证据来源见 architecture-model.json";
+
+  // ---- 参与者 ----
+  fashi [label="宗国法师\n(唯一决策人)", shape=ellipse, fillcolor="#ffe0b2"];
+  subject [label="修行者 / 受试者", shape=ellipse, fillcolor="#ffe0b2"];
+
+  // ---- 外部系统 ----
+  subgraph cluster_ext {
+    label="外部边界 (出网 / 硬件)";
+    style=dashed;
+    color="#999999";
+    muse [label="Muse 头环\nBLE", shape=box3d, fillcolor="#e1f5fe"];
+    neuradock [label="NeuraDock 工作站\nTCP :9600", shape=box3d, fillcolor="#e1f5fe"];
+    qianwen [label="千问 LLM API\n(出网)", shape=cylinder, fillcolor="#fce4ec"];
+    feishu [label="飞书 API\n(出网)", shape=cylinder, fillcolor="#fce4ec"];
+    lmstudio [label="LM Studio\nlocalhost:1234", shape=cylinder, fillcolor="#e8f5e9"];
+    zenregistry [label="Zen-EEG 会话登记册\nsession_registry.csv", shape=note, fillcolor="#fff9c4"];
+  }
+
+  // ---- 止观AI 系统边界 ----
+  subgraph cluster_zhiguan {
+    label="止观AI 系统边界";
+    style=solid;
+    color="#1976d2";
+
+    subgraph cluster_console {
+      label="实践驾驶舱 (console_server.py :8777)";
+      style=rounded;
+      color="#64b5f6";
+      console [label="console_server\nFastAPI 统一入口", fillcolor="#bbdefb"];
+      webui [label="UI: console.html\nfocus.html", fillcolor="#e3f2fd"];
+      vrui [label="UI: vr_feedback.html\nvr_mandala.html (WebXR)", fillcolor="#e3f2fd"];
+      nd_routes [label="nd_routes\nNeuraDock 注册式接入", fillcolor="#bbdefb"];
+      qc [label="qc_pipeline\n质检唯一实现", fillcolor="#bbdefb"];
+      registry [label="registry_tx / session_contract\n会话档案与事件流", fillcolor="#bbdefb"];
+    }
+
+    subgraph cluster_loop {
+      label="闭环实验链";
+      style=rounded;
+      color="#81c784";
+      closedloop [label="closedloop_experiment\n+ closedloop_controller", fillcolor="#c8e6c9"];
+      bridge [label="zhiguan_cadence_bridge\n(等时节拍桥)", fillcolor="#c8e6c9"];
+      cadence [label="cadence\n节拍生成", fillcolor="#c8e6c9"];
+      muse_local [label="muse_local_server\nBLE/UDP 接收 :5000", fillcolor="#c8e6c9"];
+    }
+
+    subgraph cluster_board {
+      label="可视化任务看板 (board_server.py 127.0.0.1:8848)";
+      style=rounded;
+      color="#ba68c8";
+      board [label="board_server\nFastAPI + SSE /api/stream", fillcolor="#e1bee7"];
+      board_mcp [label="POST /mcp\nJSON-RPC streamable-HTTP", fillcolor="#ce93d8"];
+      board_src [label="board_sources\n会话扫描 / 维那快照", fillcolor="#e1bee7"];
+      board_priv [label="board_privacy\n四道隐私闸", fillcolor="#e1bee7"];
+      qoder [label="Qoder AI 窗口\n(~/.qoder-cn 元数据)", shape=folder, fillcolor="#f3e5f5"];
+    }
+
+    nd_sim [label="neuradock_simulator\n假 NeuraDock :9600", fillcolor="#eeeeee", style="rounded,filled,dashed"];
+    congci [label="congci_pipeline\n从词/语音链", fillcolor="#eeeeee"];
+    gates [label="闸门与自检\n收口检查.ps1 / vr_闸总跑.py / selftest.py", shape=component, fillcolor="#ffecb3"];
+  }
+
+  // ---- 关系 ----
+  fashi -> console [label="驾驶/查看"];
+  fashi -> board [label="看看板"];
+  subject -> muse [label="佩戴"];
+  qoder -> board_mcp [label="tools/call\nboard_overview·board_windows"];
+
+  muse -> muse_local [label="BLE 流", style=bold];
+  muse_local -> closedloop [label="频段特征"];
+  neuradock -> nd_routes [label="TCP 头环数据"];
+  nd_sim -> nd_routes [label="模拟数据(测试)", style=dashed];
+  nd_routes -> console [label="挂载路由"];
+
+  closedloop -> bridge [label="阈值决策"];
+  bridge -> cadence [label="节拍频率/音量"];
+  cadence -> vrui [label="等时节拍视觉反馈"];
+  closedloop -> qc [label="会话质检"];
+  console -> closedloop [label="启动/控制"];
+  console -> registry [label="写档案"];
+  console -> vrui [label="FileResponse"];
+  console -> webui [label="FileResponse"];
+  registry -> zenregistry [label="读写 CSV(跨盘)"];
+
+  congci -> registry [label="会话契约"];
+  congci -> qc [label="质检"];
+  congci -> bridge [label="节拍"];
+
+  board -> board_src [label="取数"];
+  board -> board_priv [label="出网前过滤"];
+  board_src -> qoder [label="扫描 mtime/任务"];
+  board -> qianwen [label="模型探活(出网)"];
+  board_src -> feishu [label="维那快照来源", style=dashed];
+  board -> lmstudio [label="本机大模型通道", style=dashed];
+  fashi -> gates [label="放行"];
+  gates -> console [label="验收", style=dotted];
+  gates -> board [label="验收", style=dotted];
+}
