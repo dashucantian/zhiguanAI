@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>止观AI 可视化任务看板</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#262b36;
+  --tx:#e6e8ec; --mut:#98a0ad; --acc:#4da3ff; --ok:#3ecf8e; --warn:#f5a623; --bad:#ff6b6b;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+  font:14px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+header{padding:18px 24px 14px;border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:14px;align-items:baseline}
+h1{font-size:19px;margin:0;font-weight:600;letter-spacing:.5px}
+.sub{color:var(--mut);font-size:12px}
+main{display:grid;grid-template-columns:380px 1fr 320px;gap:16px;padding:16px 24px 40px;align-items:start}
+@media(max-width:1280px){main{grid-template-columns:1fr 1fr}}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.card>h2{margin:0;padding:12px 16px;font-size:13px;font-weight:600;color:var(--mut);
+  border-bottom:1px solid var(--line);letter-spacing:1px;display:flex;justify-content:space-between;align-items:center}
+.card>.body{padding:14px 16px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:20px;
+  padding:3px 12px;font-size:12px;color:var(--mut);white-space:nowrap}
+.chip b{color:var(--tx);font-weight:600}
+.chip.ok b{color:var(--ok)} .chip.warn b{color:var(--warn)} .chip.bad b{color:var(--bad)}
+button{background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+  border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer;font-family:inherit}
+button:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--acc);border-color:var(--acc);color:#08111f;font-weight:600}
+button.pri:hover:not(:disabled){color:#08111f;filter:brightness(1.1)}
+button.rec{background:#3a1d22;border-color:#6d2b34;color:#ff9aa6}
+button.rec.on{background:var(--bad);border-color:var(--bad);color:#20060a;animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.6}}
+input,select,textarea{background:#12151b;color:var(--tx);border:1px solid var(--line);
+  border-radius:6px;padding:7px 10px;font-size:13px;font-family:inherit}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
+.row{display:flex;gap:8px;align-items:center}
+.bar{height:6px;background:#12151b;border-radius:3px;overflow:hidden;flex:1}
+.bar>i{display:block;height:100%;background:var(--acc);border-radius:3px;transition:width .4s}
+.bar>i.ok{background:var(--ok)} .bar>i.warn{background:var(--warn)} .bar>i.bad{background:var(--bad)}
+.mut{color:var(--mut);font-size:12px}
+.tiny{font-size:11px;color:var(--mut)}
+#chat{height:330px;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:9px 13px;border-radius:10px;white-space:pre-wrap;word-break:break-word}
+.msg.me{align-self:flex-end;background:#1d3350;border:1px solid #2b4a70}
+.msg.ai{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
+.msg.err{align-self:flex-start;background:#33201f;border:1px solid #5c3130;color:#ffb3ab}
+.msg .who{display:block;font-size:10px;color:var(--mut);margin-bottom:3px;letter-spacing:1px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:var(--mut);font-weight:500;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.5px}
+td{padding:7px 8px;border-bottom:1px solid #1c2029;vertical-align:middle}
+tr:hover td{background:#1a1e26}
+.tag{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11px;border:1px solid var(--line)}
+.tag.run{background:#12331f;border-color:#1f5c37;color:var(--ok)}
+.tag.cold{background:#22262e;color:var(--mut)}
+.tag.act{background:#12283c;border-color:#1f4568;color:var(--acc)}
+.tag.pause{background:#33290f;border-color:#5c481f;color:var(--warn)}
+.tag.bad{background:#33201f;border-color:#5c3130;color:var(--bad)}
+.warnbox{background:#2b2410;border:1px solid #5c481f;color:#f5d08a;
+  padding:9px 13px;border-radius:8px;font-size:12px;margin:0 16px 14px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:12.5px}
+.kv span:first-child{color:var(--mut)}
+pre#draft{background:#12151b;border:1px solid var(--line);border-radius:8px;padding:11px;
+  font-size:11.5px;white-space:pre-wrap;color:#c8ced8;max-height:190px;overflow:auto;margin:0}
+.tasks{margin:6px 0 0;padding:0;list-style:none}
+.tasks li{font-size:12px;padding:2px 0;color:var(--mut)}
+.tasks li.done{text-decoration:line-through;opacity:.55}
+.tasks li.prog{color:var(--acc)}
+details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
+.foot{padding:0 24px 26px;color:var(--mut);font-size:11.5px;line-height:1.9}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>止观AI 可视化任务看板</h1>
+  <span class="sub" id="clock">—</span>
+  <div class="chips" id="chips"></div>
+</header>
+
+<main>
+  <!-- ══════════ 左：语音／文字交互 ══════════ -->
+  <section>
+    <div class="card">
+      <h2>对话窗 <span class="tiny" id="chatModel">—</span></h2>
+      <div class="warnbox" id="voiceWarn">
+        语音识别经浏览器厂商云端（<b>属出网</b>）。一级内容——修道班资料／学员信息／录音转写——<b>禁止</b>输入本窗与云端模型。
+      </div>
+      <div id="chat"></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div class="row" style="margin-bottom:9px">
+          <select id="modelSel" style="flex:1"></select>
+          <label class="tiny row" style="gap:4px"><input type="checkbox" id="sumChk"> 带看板摘要</label>
+          <label class="tiny row" style="gap:4px"><input type="checkbox" id="ttsChk" checked> 朗读</label>
+        </div>
+        <textarea id="inp" rows="2" placeholder="输入内容，Enter 发送，Shift+Enter 换行" style="width:100%;resize:vertical"></textarea>
+        <div class="row" style="margin-top:9px">
+          <button class="pri" id="sendBtn" style="flex:1">发送</button>
+          <button class="rec" id="micBtn">🎤 语音</button>
+          <button id="clearBtn">清空</button>
+        </div>
+        <div class="tiny" id="micState" style="margin-top:7px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>跨窗投递单</h2>
+      <div class="body">
+        <div class="mut" style="margin-bottom:9px">看板<b>不代发消息</b>。此处只生成文本，由法师粘贴或明示授权某窗投递。</div>
+        <div class="row" style="margin-bottom:9px">
+          <select id="dispSel" style="flex:1"></select>
+          <select id="dispAct">
+            <option>加速</option><option>暂停</option><option>优先级</option>
+          </select>
+        </div>
+        <input id="dispNote" placeholder="补充一句（可空）" style="width:100%;margin-bottom:9px">
+        <div class="row">
+          <button id="dispBtn" style="flex:1">生成投递单</button>
+          <button id="copyBtn">复制</button>
+        </div>
+        <div style="margin-top:11px"><pre id="draft">（尚未生成）</pre></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 中：任务队列与窗口 ══════════ -->
+  <section>
+    <div class="card">
+      <h2>看板作业队列 <span class="tiny">优先级小者先跑</span></h2>
+      <div class="body" style="padding:0">
+        <table id="jobTbl">
+          <thead><tr><th style="width:34%">作业</th><th>状态</th><th style="width:14%">优先级</th>
+            <th style="width:15%">上次耗时</th><th style="width:23%">控制</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>AI 窗口与任务进度 <span class="tiny" id="snapNote">—</span></h2>
+      <div class="body" style="padding:0">
+        <table id="winTbl">
+          <thead><tr><th style="width:38%">窗口</th><th style="width:13%">状态</th><th style="width:26%">进度</th>
+            <th style="width:12%">模型</th><th style="width:11%">静默</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>维那看板积压 <span class="tiny" id="blNote">—</span></h2>
+      <div class="body">
+        <div class="chips" id="blChips" style="margin:0 0 11px"></div>
+        <div class="mut" style="margin-bottom:7px">待承接裁决（含【裁决】且受理戳为空）：</div>
+        <div id="blList" class="tiny">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ 右：资源与模型 ══════════ -->
+  <section>
+    <div class="card">
+      <h2>隐私闸门 <span class="tiny">本机强制·绕过前端也拦得住</span></h2>
+      <div class="body" id="privBox"><div class="mut">读取中…</div></div>
+      <div class="body" style="border-top:1px solid var(--line)">
+        <div class="row">
+          <button id="shotBtn" style="flex:1">📷 屏幕共享（只存本机）</button>
+          <button id="shotSend">送给当前模型</button>
+        </div>
+        <div class="tiny" id="shotNote" style="margin-top:7px">截图落 <code>state/screen/</code>（整目录已 gitignore）；只经 127.0.0.1 显示，<b>不入库、不出网</b>。送云端模型会被闸1 拒。</div>
+        <div id="shotView" style="margin-top:9px"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>资源占用</h2>
+      <div class="body" id="resBox"><div class="mut">采样中…</div></div>
+    </div>
+
+    <div class="card">
+      <h2>多模型接入 <button id="probeAll" style="padding:2px 9px">全部探活</button></h2>
+      <div class="body" style="padding:0">
+        <table id="mdlTbl"><tbody></tbody></table>
+      </div>
+      <div class="body tiny" style="border-top:1px solid var(--line);padding-top:10px">
+        密钥只从环境变量读（<code>QIANWEN_API_KEY</code>），看板不存、不显示、不上传。
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="foot">
+  <b>边界说明</b>：① 看板只读——不改任何他窗文件、不代提交、不代发消息；
+  ② 「加速／暂停／优先级」对看板自有作业队列真实生效，对 AI 窗口只生成投递单；
+  ③ <code>runtimeState</code> 需 AI 窗口经 MCP 刷新到 <code>state/live_sessions.json</code>，过期时按磁盘 mtime 推断，界面会标明来源；
+  ④ 只听 <code>127.0.0.1</code>，不对局域网开放。
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function ago(ms){ if(!ms) return '—'; const s=Math.max(0,(Date.now()-ms)/1000);
+  if(s<60) return Math.round(s)+'秒前'; if(s<3600) return Math.round(s/60)+'分前';
+  if(s<86400) return Math.round(s/3600)+'小时前'; return Math.round(s/86400)+'天前'; }
+function bar(pct,cls){ return `<div class="row" style="gap:8px"><div class="bar"><i class="${cls||''}" style="width:${Math.min(100,Math.max(0,pct||0))}%"></i></div><span class="tiny" style="width:34px;text-align:right">${pct==null?'—':Math.round(pct)+'%'}</span></div>`; }
+function lvl(p){ return p>=85?'bad':p>=60?'warn':'ok'; }
+
+/* ── 对话 ── */
+const chat=$('#chat');
+function addMsg(who,text,cls){
+  const d=document.createElement('div'); d.className='msg '+(cls||who);
+  d.innerHTML=`<span class="who">${esc(who)}</span><span class="txt">${esc(text)}</span>`;
+  chat.appendChild(d); chat.scrollTop=chat.scrollHeight; return d.querySelector('.txt');
+}
+let busy=false;
+async function send(){
+  if(busy) return;
+  const text=$('#inp').value.trim(); if(!text) return;
+  $('#inp').value=''; addMsg('法师',text,'me'); busy=true; $('#sendBtn').disabled=true;
+  const node=addMsg('看板助手','','ai'); let full='';
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text,modelId:$('#modelSel').value,includeSummary:$('#sumChk').checked})});
+    const rd=r.body.getReader(); const dec=new TextDecoder(); let buf='';
+    while(true){
+      const {done,value}=await rd.read(); if(done) break; buf+=dec.decode(value,{stream:true});
+      const parts=buf.split('\n\n'); buf=parts.pop();
+      for(const p of parts){
+        if(!p.startsWith('data: ')) continue;
+        let o; try{o=JSON.parse(p.slice(6))}catch(e){continue}
+        if(o.error){ node.parentElement.className='msg err'; node.textContent=(o.blocked?'【隐私闸门拦截】':'')+o.error; }
+        else if(o.notice){ addMsg('闸门',o.notice,'err'); }
+        else if(o.delta){ full+=o.delta; node.textContent=full; chat.scrollTop=chat.scrollHeight; }
+        else if(o.label){ node.parentElement.querySelector('.who').textContent='看板助手 · '+o.label; }
+      }
+    }
+  }catch(e){ node.parentElement.className='msg err'; node.textContent='连接失败：'+e.message; }
+  if(full && $('#ttsChk').checked) speak(full);
+  busy=false; $('#sendBtn').disabled=false;
+}
+$('#sendBtn').onclick=send;
+$('#inp').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+$('#clearBtn').onclick=()=>chat.innerHTML='';
+
+/* ── 语音 ── */
+function speak(t){ try{ const u=new SpeechSynthesisUtterance(t.slice(0,600)); u.lang='zh-CN'; u.rate=1.05; speechSynthesis.cancel(); speechSynthesis.speak(u);}catch(e){} }
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition; let rec=null,recOn=false;
+if(!SR){ $('#micBtn').disabled=true; $('#micState').textContent='本浏览器不支持 Web Speech 识别（Edge／Chrome 可用）；文字输入不受影响。'; }
+else{
+  rec=new SR(); rec.lang='zh-CN'; rec.continuous=false; rec.interimResults=true;
+  rec.onresult=e=>{ let t=''; for(const r of e.results) t+=r[0].transcript;
+    $('#inp').value=t; if(e.results[e.results.length-1].isFinal) stopRec(); };
+  rec.onerror=e=>{ $('#micState').textContent='识别错误：'+e.error; stopRec(); };
+  rec.onend=()=>stopRec();
+}
+function stopRec(){ recOn=false; $('#micBtn').classList.remove('on'); $('#micBtn').textContent='🎤 语音';
+  if(!SR) return; $('#micState').textContent=''; }
+$('#micBtn').onclick=()=>{ if(!SR) return;
+  if(recOn){ rec.stop(); return; }
+  try{ rec.start(); recOn=true; $('#micBtn').classList.add('on'); $('#micBtn').textContent='⏹ 停止';
+    $('#micState').textContent='正在听…（音频送往浏览器厂商云端）'; }
+  catch(e){ $('#micState').textContent='无法启动麦克风：'+e.message; } };
+
+/* ── 模型 ── */
+async function loadModels(){
+  const d=await (await fetch('/api/models')).json();
+  $('#modelSel').innerHTML=d.models.filter(m=>m.kind==='chat'||m.kind==='local')
+    .map(m=>`<option value="${m.id}" ${m.isDefault?'selected':''}>${esc(m.label)}</option>`).join('');
+  $('#chatModel').textContent='当前 '+(d.models.find(m=>m.id===$('#modelSel').value)||{}).label||'';
+  $('#mdlTbl tbody').innerHTML=d.models.map(m=>{
+    const p=m.lastProbe;
+    const st=p? (p.ok? `<span class="tag run">通 ${p.ms||''}ms</span>` : `<span class="tag bad" title="${esc(p.reason||'')}">断</span>`) : `<span class="tag cold">未探</span>`;
+    return `<tr><td style="padding:9px 8px"><b>${esc(m.label)}</b><br>
+      <span class="tiny">${esc(m.model)} · ${esc(m.egress)}</span><br>
+      <span class="tiny">密钥 ${m.keyEnv? (m.keyPresent?'<span style="color:var(--ok)">已就位</span>':'<span style="color:var(--bad)">缺 '+esc(m.keyEnv)+'</span>'):'不需要'}</span></td>
+      <td style="text-align:right">${st}<br><button data-probe="${m.id}" style="margin-top:5px;padding:2px 8px">探活</button></td></tr>`;
+  }).join('');
+  $$('#mdlTbl [data-probe]').forEach(b=>b.onclick=async()=>{ b.disabled=true; b.textContent='探活中';
+    await fetch('/api/models/'+b.dataset.probe+'/probe',{method:'POST'}); loadModels(); });
+}
+$('#modelSel').onchange=()=>{ $('#chatModel').textContent='当前 '+$('#modelSel').selectedOptions[0].textContent; };
+$('#probeAll').onclick=async()=>{ $('#probeAll').disabled=true; $('#probeAll').textContent='探活中…';
+  const d=await (await fetch('/api/models')).json();
+  for(const m of d.models) await fetch('/api/models/'+m.id+'/probe',{method:'POST'});
+  loadModels(); $('#probeAll').disabled=false; $('#probeAll').textContent='全部探活'; };
+
+/* ── 作业队列 ── */
+function renderJobs(jobs){
+  $('#jobTbl tbody').innerHTML=jobs.map(j=>{
+    const st=j.paused?'<span class="tag pause">已暂停</span>': j.state==='running'?'<span class="tag run">运行中</span>':'<span class="tag cold">待命</span>';
+    const err=j.lastError?`<br><span class="tiny" style="color:var(--bad)">${esc(j.lastError.slice(0,60))}</span>`:'';
+    return `<tr><td><b>${esc(j.name)}</b><br><span class="tiny">${esc(j.note||'')}</span>
+        <br><span class="tiny">跑 ${j.runs} 次${j.kind==='agent'?' · 需 AI 窗口执行':''}</span></td>
+      <td>${st}${err}<br><span class="tiny">${j.lastRunAt?ago(j.lastRunAt):'未跑过'}${j.interval&&!j.paused?' · 每 '+j.interval+'秒':''}</span></td>
+      <td><div class="row"><button data-j="${j.id}" data-a="dec" style="padding:1px 7px">−</button>
+        <b style="width:20px;text-align:center">${j.priority}</b>
+        <button data-j="${j.id}" data-a="inc" style="padding:1px 7px">＋</button></div></td>
+      <td class="tiny">${j.lastDurMs||'—'} ms</td>
+      <td><div class="row" style="gap:5px">
+        <button data-j="${j.id}" data-a="run">立即跑</button>
+        <button data-j="${j.id}" data-a="${j.paused?'resume':'pause'}">${j.paused?'恢复':'暂停'}</button></div></td></tr>`;
+  }).join('');
+  $$('#jobTbl [data-j]').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.j; let action=b.dataset.a, value=null;
+    const cur=jobs.find(x=>x.id===id);
+    // 先定增量再改 action：早先写成 action='priority' 在前，导致 ==='inc' 恒假，＋/− 都变成 −5
+    if(action==='inc'||action==='dec'){ const d=(action==='inc')?5:-5; action='priority'; value=Math.min(99,Math.max(1,cur.priority+d)); }
+    const r=await fetch(`/api/jobs/${id}/control`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action,value})});
+    const d=await r.json(); if(!d.ok) alert(d.reason||d.detail||'失败'); refresh();
+  });
+}
+
+/* ── 窗口 ── */
+let WINS=[];
+async function renderWindows(){
+  const d=await (await fetch('/api/windows')).json();
+  WINS=d.windows||[];
+  const s=d.snapshot||{};
+  $('#snapNote').innerHTML=s.fresh? `<span style="color:var(--ok)">runtimeState 活体快照 ${ago(s.takenAt)}</span>`
+    : `<span style="color:var(--warn)">活体快照过期／缺失，状态按磁盘 mtime 推断</span>`;
+  $('#winTbl tbody').innerHTML=WINS.map(w=>{
+    const st=w.state==='running'?'<span class="tag run">running</span>'
+      : w.state==='活跃'?'<span class="tag act">活跃</span>'
+      : w.state==='cold'?'<span class="tag cold">cold</span>':`<span class="tag cold">${esc(w.state)}</span>`;
+    const tl=w.tasks&&w.tasks.length? `<details><summary>${w.taskDone}/${w.taskTotal} 项任务</summary><ul class="tasks">${
+      w.tasks.map(t=>`<li class="${t.status==='completed'?'done':t.status==='in_progress'?'prog':''}">· ${esc(t.subject)}</li>`).join('')}</ul></details>`
+      : '<span class="tiny">无任务记录</span>';
+    return `<tr><td><b>${esc(w.label)}</b><br>
+        <span class="tiny">${esc(w.window||'未归窗')} · ${esc(w.session||'')} · 执行类别 ${esc(w.execClass||'未验')}</span>${tl}</td>
+      <td>${st}<br><span class="tiny">${esc(w.stateSource||'')}</span>${w.pending?`<br><span class="tiny" style="color:var(--warn)">待交互 ${w.pending}</span>`:''}</td>
+      <td>${w.progress==null?'<span class="tiny">—</span>':bar(w.progress,'ok')}</td>
+      <td class="tiny">${esc(w.model||'—')}</td>
+      <td class="tiny">${ago(w.updatedAt)}</td></tr>`;
+  }).join('')||'<tr><td colspan="5" class="mut">无会话</td></tr>';
+  $('#dispSel').innerHTML=WINS.map(w=>`<option value="${w.sessionId}">${esc(w.label)}</option>`).join('');
+}
+
+/* ── 资源 ── */
+function renderRes(r){
+  if(!r||!r.cpuPercent&&r.cpuPercent!==0){ $('#resBox').innerHTML='<div class="mut">采样中…</div>'; return; }
+  $('#resBox').innerHTML=`
+    <div class="kv"><span>CPU（${r.cpuCores} 核）</span><span>${r.cpuPercent}%</span></div>${bar(r.cpuPercent,lvl(r.cpuPercent))}
+    <div class="kv" style="margin-top:9px"><span>内存 ${r.memUsedGB}/${r.memTotalGB} GB</span><span>${r.memPercent}%</span></div>${bar(r.memPercent,lvl(r.memPercent))}
+    ${(r.disks||[]).map(d=>`<div class="kv" style="margin-top:9px"><span>${d.mount} 盘 ${d.usedGB}/${d.totalGB} GB</span><span>${d.percent}%</span></div>${bar(d.percent,lvl(d.percent))}`).join('')}
+    <div class="kv" style="margin-top:11px"><span>网络</span><span class="tiny">↑${r.netUpKBs??'—'} ↓${r.netDownKBs??'—'} KB/s</span></div>
+    <div class="kv"><span>进程</span><span class="tiny">python ${r.pyProcs} · node ${r.nodeProcs}</span></div>
+    <div style="margin-top:11px" class="tiny">占用 Top：</div>
+    <table style="margin-top:4px"><tbody>${(r.procs||[]).map(p=>
+      `<tr><td class="tiny">${esc(p.name)}</td><td class="tiny" style="text-align:right">${p.cpu}%</td>
+       <td class="tiny" style="text-align:right">${p.memMB} MB</td></tr>`).join('')}</tbody></table>`;
+}
+
+/* ── 积压 ── */
+async function renderBacklog(){
+  const d=await (await fetch('/api/backlog')).json();
+  if(!d.ok){ $('#blNote').textContent=d.reason||''; return; }
+  $('#blNote').textContent=`${d.total} 行 · 快照 ${d.pulledAt||'?'}`;
+  $('#blChips').innerHTML=Object.entries(d.byStatus||{}).sort((a,b)=>b[1]-a[1])
+    .map(([k,v])=>`<span class="chip">${esc(k)} <b>${v}</b></span>`).join('');
+  $('#blList').innerHTML=(d.needAcceptRows||[]).length
+    ? d.needAcceptRows.map(r=>`<div>· <b>${esc(r.code||'—')}</b> ${esc(r.name)} <span class="mut">［${esc(r.status||'')}］</span></div>`).join('')
+    : '<span class="mut">无</span>';
+}
+
+/* ── 投递单 ── */
+$('#dispBtn').onclick=async()=>{
+  const r=await fetch('/api/dispatch',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sessionId:$('#dispSel').value,action:$('#dispAct').value,note:$('#dispNote').value})});
+  const d=await r.json(); $('#draft').textContent=d.text||d.detail||'失败';
+};
+$('#copyBtn').onclick=async()=>{ try{ await navigator.clipboard.writeText($('#draft').textContent);
+  $('#copyBtn').textContent='已复制'; setTimeout(()=>$('#copyBtn').textContent='复制',1200);}catch(e){ $('#copyBtn').textContent='复制失败'; } };
+
+/* ── 隐私闸门与屏幕共享 ── */
+async function loadPrivacy(){
+  try{
+    const d=await (await fetch('/api/privacy')).json();
+    const c=d.counters||{};
+    $('#privBox').innerHTML=`
+      <div class="mut" style="margin-bottom:8px">${esc(d.policy.principle)}</div>
+      ${d.policy.gates.map(g=>`<div class="tiny" style="margin-bottom:4px">· ${esc(g)}</div>`).join('')}
+      <div style="margin-top:10px">
+        <div class="kv"><span>一级内容拦截</span><b style="color:${c.blockedTier1?'var(--ok)':'var(--mut)'}">${c.blockedTier1||0} 次</b></div>
+        <div class="kv"><span>个人标识脱敏</span><b>${c.redacted||0} 处</b></div>
+        <div class="kv"><span>截图拒送云端</span><b>${c.screenRefusedCloud||0} 次</b></div>
+        <div class="kv"><span>本机截屏</span><b>${c.screenCaptured||0} 张</b></div>
+        <div class="kv"><span>出网／本机调用</span><b>${c.cloudCalls||0} ／ ${c.localCalls||0}</b></div>
+      </div>
+      <div class="tiny" style="margin-top:9px">模型出网判定：${d.models.map(m=>`${esc(m.label.split('（')[0])}=<b style="color:${m.local?'var(--ok)':'var(--warn)'}">${m.local?'不出网':'出网'}</b>`).join('｜')}</div>`;
+  }catch(e){ $('#privBox').innerHTML='<div class="mut">读取失败</div>'; }
+}
+async function capture(modelId){
+  const r=await fetch('/api/screen/capture',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({modelId:modelId||null})});
+  const d=await r.json();
+  if(!d.ok){ $('#shotNote').innerHTML=`<span style="color:var(--bad)">${esc(d.reason||'截屏失败')}</span>`; loadPrivacy(); return; }
+  $('#shotNote').innerHTML=`<span style="color:var(--ok)">已截 ${d.width}×${d.height}｜${d.sizeKB} KB｜${esc(d.note)}</span>`;
+  $('#shotView').innerHTML=`<img src="/api/screen/latest?t=${Date.now()}" style="width:100%;border:1px solid var(--line);border-radius:6px">`;
+  loadPrivacy();
+}
+$('#shotBtn').onclick=()=>capture(null);
+$('#shotSend').onclick=()=>capture($('#modelSel').value);
+
+/* ── 头部与实时流 ── */
+function renderChips(o){
+  $('#chips').innerHTML=[
+    ['窗口',`${o.windowRunning}/${o.windowTotal}`,o.windowRunning>0?'ok':'warn'],
+    ['任务',`${o.taskDone}/${o.taskTotal}`,''],
+    ['进行中',o.taskInProgress,o.taskInProgress?'ok':''],
+    ['积压',o.backlogTotal,''],
+    ['待承接裁决',o.backlogNeedAccept,o.backlogNeedAccept?'warn':'ok'],
+    ['CPU',o.cpuPercent+'%',lvl(o.cpuPercent||0)],
+    ['内存',o.memPercent+'%',lvl(o.memPercent||0)],
+    ['作业暂停',o.jobPaused,o.jobPaused?'warn':'ok'],
+  ].map(([k,v,c])=>`<span class="chip ${c}">${k} <b>${esc(v)}</b></span>`).join('');
+}
+async function refresh(){
+  try{ const [o,j]=await Promise.all([fetch('/api/overview').then(r=>r.json()),fetch('/api/jobs').then(r=>r.json())]);
+    renderChips(o); renderJobs(j.jobs); }catch(e){}
+}
+setInterval(()=>{ $('#clock').textContent=new Date().toLocaleString('zh-CN'); },1000);
+setInterval(refresh,4000);
+setInterval(renderWindows,10000);
+setInterval(renderBacklog,60000);
+
+(async function boot(){
+  addMsg('看板助手','已就绪。可打字或点🎤说话。\n问「现在几个窗口在跑」「哪些裁决没人接」时，勾上「带看板摘要」——只送计数与任务标题，不送对话正文。','ai');
+  await Promise.all([loadModels(),renderWindows(),renderBacklog(),refresh(),loadPrivacy()]);
+  const es=new EventSource('/api/stream');
+  es.onmessage=e=>{ try{ const d=JSON.parse(e.data); renderChips(d.overview); renderRes(d.resources); renderJobs(d.jobs); }catch(err){} };
+  es.onerror=()=>{ $('#clock').textContent='连接中断，重连中…'; };
+})();
+</script>
+</body>
+</html>
