@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import base64
 import heapq
 import json
 import os
@@ -347,14 +348,37 @@ def local_answer(text: str) -> str:
     ])
 
 
-def chat_stream(text: str, model_id: str | None, include_summary: bool):
+def _screen_payload(name: str, model: dict) -> tuple[dict | None, str]:
+    """闸4 出网判定（图像）：只接受脱敏产物，其它文件名一律拒。
+
+    返回 (image_part, error)；error 非空即不发。
+    """
+    if not name:
+        return None, ""
+    p = (SCREEN_DIR / name).resolve()
+    if p.parent != SCREEN_DIR.resolve() or not p.is_file():
+        return None, "闸4 拦截：找不到该图（只接受 state/screen/ 内的脱敏产物）"
+    if ".masked." not in p.name:
+        return None, priv.guard_image_outbound(False, model)["reason"]
+    g = priv.guard_image_outbound(True, model)
+    if not g["allowed"]:
+        return None, g["reason"]
+    b64 = base64.b64encode(p.read_bytes()).decode()
+    return {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}, ""
+
+
+def chat_stream(text: str, model_id: str | None, include_summary: bool, screen_file: str | None = None):
     m = src.get_model(model_id)
     if not m:
         yield _sse({"error": "模型未注册"})
         return
     if m.get("kind") == "local":
         priv.guard_outbound(text, m)          # 本机路径也过闸，只计数不拦
+        if screen_file:
+            priv.guard_image_outbound(".masked." in screen_file, m)
         yield _sse({"model": m["id"], "label": m["label"]})
+        if screen_file:
+            yield _sse({"notice": "本机规则应答不看图（它不是大模型）。要看图请切 LM Studio 或云端模型。"})
         answer = local_answer(text)
         for i in range(0, len(answer), 24):
             yield _sse({"delta": answer[i:i + 24]})
@@ -362,7 +386,7 @@ def chat_stream(text: str, model_id: str | None, include_summary: bool):
         yield _sse({"done": True})
         return
 
-    # ── 闸2／闸3：外发前强制过隐私闸门（服务端，绕过前端也拦得住）──
+    # ── 闸2／闸3／闸4：外发前强制过隐私闸门（服务端，绕过前端也拦得住）──
     gate = priv.guard_outbound(text, m)
     if not gate["allowed"]:
         yield _sse({"blocked": True, "error": gate["reason"]})
@@ -370,6 +394,15 @@ def chat_stream(text: str, model_id: str | None, include_summary: bool):
     if gate.get("hits"):
         yield _sse({"notice": gate.get("note", "")})
     outbound = gate["text"]
+
+    parts = []
+    if screen_file:
+        img_part, err = _screen_payload(screen_file, m)
+        if err:
+            yield _sse({"blocked": True, "error": err})
+            return
+        parts.append(img_part)
+        yield _sse({"notice": "已附闸4 脱敏图（未打码原图不出网）。" + priv.POLICY["residual"]})
 
     key = os.environ.get(m.get("keyEnv") or "", "") if m.get("keyEnv") else ""
     if m.get("keyEnv") and not key:
@@ -386,7 +419,11 @@ def chat_stream(text: str, model_id: str | None, include_summary: bool):
             messages.append({"role": "system", "content": "以下是看板本地元数据摘要（仅计数与任务标题）：\n" + sg["text"]})
         else:
             yield _sse({"notice": "看板摘要含一级关键词，已按闸2 整段不外发"})
-    messages.append({"role": "user", "content": outbound})
+    if parts:
+        parts.insert(0, {"type": "text", "text": outbound})
+        messages.append({"role": "user", "content": parts})
+    else:
+        messages.append({"role": "user", "content": outbound})
     try:
         resp = requests.post(
             m["baseUrl"].rstrip("/") + "/chat/completions",
@@ -427,6 +464,7 @@ class ChatReq(BaseModel):
     text: str
     modelId: str | None = None
     includeSummary: bool = False
+    screenFile: str | None = None    # 只接受闸4 产出的 *.masked.png，原名一律拒
 
 
 class JobReq(BaseModel):
@@ -542,7 +580,7 @@ def api_chat(req: ChatReq):
         raise HTTPException(400, "单条消息过长（>4000 字）")
     from starlette.concurrency import iterate_in_threadpool
 
-    gen = chat_stream(text, req.modelId, req.includeSummary)
+    gen = chat_stream(text, req.modelId, req.includeSummary, req.screenFile)
     return StreamingResponse(iterate_in_threadpool(gen), media_type="text/event-stream")
 
 
@@ -614,9 +652,45 @@ def api_screen_list():
 
 @app.get("/api/screen/latest")
 def api_screen_latest():
-    shots = sorted(SCREEN_DIR.glob("*.png"), key=lambda x: x.stat().st_mtime, reverse=True)
+    shots = [p for p in sorted(SCREEN_DIR.glob("*.png"), key=lambda x: x.stat().st_mtime, reverse=True)
+             if ".masked." not in p.name]
     if not shots:
         raise HTTPException(404, "尚未截屏")
+    return FileResponse(str(shots[0]), media_type="image/png")
+
+
+@app.post("/api/screen/redact")
+def api_screen_redact():
+    """闸4 脱敏：本机截屏 → 本机 OCR 定位敏感行 → 整行实心遮盖 → 另存打码图。
+
+    未打码原图留在本机且永不出网；本端点只产出"可以送"的那一张。
+    """
+    try:
+        from PIL import ImageGrab
+        img = ImageGrab.grab(all_screens=True)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "reason": f"截屏失败：{type(exc).__name__}: {exc}"}, status_code=500)
+    name = f"shot-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.png"
+    raw = SCREEN_DIR / name
+    img.save(raw, "PNG")
+    priv._bump("screenCaptured")
+
+    out = priv.redact_image(raw, SCREEN_DIR)
+    if not out["allowed"]:
+        return JSONResponse({"ok": False, "reason": out["reason"], "rawFile": name,
+                             "residual": priv.POLICY["residual"]}, status_code=403)
+    return {"ok": True, "rawFile": name, "maskedFile": out["maskedName"],
+            "hitLines": out["hitLines"], "maskedWords": out["maskedWords"],
+            "categories": out["categories"], "ocrLines": out["ocrLines"], "engine": out["engine"],
+            "note": out["note"], "residual": priv.POLICY["residual"],
+            "width": img.width, "height": img.height, "at": int(time.time() * 1000)}
+
+
+@app.get("/api/screen/masked")
+def api_screen_masked():
+    shots = sorted(SCREEN_DIR.glob("*.masked.png"), key=lambda x: x.stat().st_mtime, reverse=True)
+    if not shots:
+        raise HTTPException(404, "尚未做脱敏")
     return FileResponse(str(shots[0]), media_type="image/png")
 
 

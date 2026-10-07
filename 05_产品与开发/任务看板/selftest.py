@@ -30,6 +30,23 @@ def check(name, cond, detail=""):
     print(("[PASS] " if cond else "[FAIL] ") + name + (f"｜{detail}" if detail else ""))
 
 
+FAKE_PHONE = "138" + "0013" + "8000"   # 拼接构造：仓库内不留 11 位字面号（含测试号）
+
+
+def _mk_synth(path: Path):
+    """造一张合成假截图来验闸4，绝用法师真实桌面做脱敏试验。"""
+    from PIL import Image, ImageDraw, ImageFont
+    lines = ["学员张三 手机 " + FAKE_PHONE,
+             "任务看板 v0.1 运行中 CPU 7.3%",
+             "修道班第 3 课 待启动 12 项"]
+    font = ImageFont.truetype(r"C:\Windows\Fonts\msyh.ttc", 28)
+    img = Image.new("RGB", (1280, 240), "white")
+    d = ImageDraw.Draw(img)
+    for i, ln in enumerate(lines):
+        d.text((30, 24 + i * 64), ln, fill="black", font=font)
+    img.save(path)
+
+
 def free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -241,6 +258,19 @@ def main() -> int:
     i_cmp, i_asg = blk.rfind("==='inc'"), blk.find("action='priority'")
     check("优先级 ＋/− 先判增量后改 action（曾错序致两键同向）",
           i_cmp != -1 and i_asg != -1 and i_cmp < i_asg, f"判位 {i_cmp}／改位 {i_asg}")
+    check("界面有闸4 脱敏入口", "redactBtn" in html and "脱敏" in html)
+    check("界面写明未打码一律不出网", "未打码原图一律不出网" in html)
+    check("界面写明盖不到的残余风险", "盖不到" in html or "遮不到" in html)
+    check("皮肤令牌照 NeuraDock 正源（宣纸＋仪表盘双色值齐备）",
+          "#FAF7F1" in html and "#0E1116" in html and "#2FD4C4" in html and "#B4463C" in html)
+    check("版面为大纲＋单栏（非左右三栏硬切）", ".nav" in html and ".app{" in html
+          and "grid-template-columns:380px 1fr 320px" not in html)
+    check("卡片可折叠（治「拉得太长」）", "ctgl" in html and "collapseAll" in html)
+    # 防回归：实测 background 简写末层放 var() 又叠 transition:background，会让 body 卡在上档肤色不随皮肤变
+    # 断言前先剥 CSS 注释——本仓已两次被注释里的字面量绊倒（KZ-1007-W3c §四）
+    css = re.sub(r"/\*.*?\*/", "", html, flags=re.S)
+    check("body 不用 background 简写叠 var()", not re.search(r"body\{[^}]*background:[^}]*var\(", css))
+    check("body 不设 transition:background（渐变无法插值）", "transition:background" not in css)
 
     # ── 4 隐私闸门（服务端强制） ──
     print("\n【4】隐私闸门：屏幕共享／权限控制／脱敏一律本机")
@@ -280,7 +310,10 @@ def main() -> int:
     check("HTTP：一级内容走云端被拦", '"blocked": true' in r.text and "闸2" in r.text, r.text[:90])
 
     r = requests.get(base + "/api/privacy", timeout=10).json()
-    check("/api/privacy 给出原则与三道闸", len(r["policy"]["gates"]) == 3 and "不上云端" in r["policy"]["principle"])
+    check("/api/privacy 给出原则与四道闸", len(r["policy"]["gates"]) == 4 and "不上云端" in r["policy"]["principle"],
+          str(len(r["policy"]["gates"])))
+    check("原则含闸4 图像脱敏与残余风险",
+          any("闸4" in g for g in r["policy"]["gates"]) and "遮不到" in r["policy"].get("residual", "").replace("盖不到", "遮不到"))
     check("/api/privacy 计数不含原文", all(isinstance(v, (int, str)) for v in r["counters"].values()))
 
     r = requests.post(base + "/api/screen/capture", json={}, timeout=30).json()
@@ -298,6 +331,53 @@ def main() -> int:
               f"{len(rk.content)} 字节")
         shot.unlink()                      # 自测产物，按显式文件名清理
         check("自测截图已按显式文件名清除", not shot.exists())
+
+    # ── 闸4 图像脱敏（法师 10-07 续令：先打码，才可出网） ──
+    check("闸4：未打码原图一律拒", priv.guard_image_outbound(False, cloud)["allowed"] is False)
+    g4 = priv.guard_image_outbound(True, cloud)
+    check("闸4：打码图可送云端（并记残余风险）",
+          g4["allowed"] is True and g4["scope"] == "cloud-masked" and "OCR" in g4["note"])
+    check("闸4：匹配前压平空白（OCR 实测「学 员」插空格）", priv.find_sensitive("学 员 张 三")[0] == ["学员"])
+    check("闸4：压平后仍能抓个人标识", "手机号" in priv.find_sensitive("手 机 " + FAKE_PHONE)[1])
+
+    synth = HERE / "state" / "screen" / "_selftest_synth.png"
+    masked = synth.parent / "_selftest_synth.masked.png"
+    _mk_synth(synth)
+    out4 = priv.redact_image(synth, synth.parent)
+    check("闸4：本机 OCR 真跑通（零安装）", out4.get("allowed") is True and out4.get("ocrLines", 0) >= 2,
+          f"读 {out4.get('ocrLines')} 行／命中 {out4.get('hitLines')} 行／盖 {out4.get('maskedWords')} 词")
+    check("闸4：命中一级行并整行实心遮盖", out4.get("hitLines", 0) >= 2 and out4.get("maskedWords", 0) > 0)
+    scan2 = priv.ocr_lines(out4.get("maskedPath", synth))
+    flat2 = priv._squash(" ".join(l["text"] for l in (scan2 or {}).get("lines", [])))
+    check("闸4：复扫确认敏感串已消失", all(k not in flat2 for k in ["学员", "修道班", FAKE_PHONE]), flat2[:50])
+    check("闸4：正常内容未被误伤（仍可指导）", any(x in flat2 for x in ["CPU", "v0", "看板"]))
+
+    saved_ps = priv._OCR_PS
+    priv._OCR_PS = HERE / "no_such_bridge.ps1"
+    fc = priv.redact_image(synth, synth.parent)
+    priv._OCR_PS = saved_ps
+    check("闸4：OCR 不可用即整图拒发（fail-closed）", fc.get("allowed") is False and "拒发" in fc.get("reason", ""),
+          fc.get("reason", "")[:48])
+
+    for p in (synth, masked):
+        if p.exists():
+            p.unlink()
+    check("闸4：自测产物按显式文件名清除", not synth.exists() and not masked.exists())
+
+    r = requests.post(base + "/api/chat",
+                      json={"text": "看这张图", "modelId": "qwen-flash",
+                            "screenFile": "shot-20260101-000000-abcdef.png"}, timeout=20)
+    check("HTTP：未打码图名走云端被闸4 拦", '"blocked": true' in r.text and "闸4" in r.text, r.text[:80])
+    r = requests.post(base + "/api/chat",
+                      json={"text": "看这张图", "modelId": "qwen-flash",
+                            "screenFile": "../../board_server.py"}, timeout=20)
+    check("HTTP：路径穿越被闸4 拒（只认脱敏产物）", '"blocked": true' in r.text and "找不到" in r.text, r.text[:80])
+    r = requests.get(base + "/api/privacy", timeout=10).json()
+    check("闸4 计数入面板", all(k in r["counters"] for k in ("imageRedacted", "imageRefusedRaw", "imageRefusedNoOcr")))
+
+    leaks = [p.name for p in HERE.glob("*.py")
+             if re.search(rb"(?<!\d)1[3-9]\d{9}(?!\d)", p.read_bytes())]
+    check("源码无 11 位号码字面量（测试号一律拼接）", not leaks, str(leaks))
 
     server.should_exit = True
     time.sleep(0.4)
