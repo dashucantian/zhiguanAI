@@ -52,7 +52,7 @@ MODELS = [
         "model": "local-model",
         "keyEnv": "",
         "egress": "一级可用（本机不出网）",
-        "note": "2026-10-07 实测 1234 端口无服务。启动 LM Studio 本地服务并装载模型后，把 model 改成实际模型名即可用；探活即知通断。",
+        "note": "2026-10-07 复测：1234 已起，/v1/models 列 qwen3.8-27b 等四个，本看板探活 200 通。model 用 local-model 别名即指向当前装载的模型，不必改名。⚠ max_tokens 预算含 reasoning_tokens——qwen3.8-27b 一句短答实吃 43~78，预算给小了会 HTTP 200 而 content 空（别误判成模型不可用）；本文件的探活用 max_tokens=4 只判通断。",
     },
 ]
 

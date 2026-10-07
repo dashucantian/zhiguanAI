@@ -379,6 +379,68 @@ def main() -> int:
              if re.search(rb"(?<!\d)1[3-9]\d{9}(?!\d)", p.read_bytes())]
     check("源码无 11 位号码字面量（测试号一律拼接）", not leaks, str(leaks))
 
+    # ── 5 上游 SSE 回包编码（中文应答通路，本机与云端共用同一段码）──
+    print("\n【5】SSE 回包编码（上游不带 charset）")
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    CN_SENT = "看板已就绪，正在跟踪任务与裁决。"
+    sse_body = ("data: " + json.dumps({"choices": [{"delta": {"content": CN_SENT}}]}, ensure_ascii=False)
+                + "\n\ndata: [DONE]\n\n").encode("utf-8")
+
+    class _SSEHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")   # 刻意不带 charset：照 10-07 LM Studio 实测头
+            self.send_header("Content-Length", str(len(sse_body)))
+            self.end_headers()
+            self.wfile.write(sse_body)
+
+        def log_message(self, *a):
+            pass
+
+    up_port = free_port()
+    up = ThreadingHTTPServer(("127.0.0.1", up_port), _SSEHandler)
+    threading.Thread(target=up.serve_forever, daemon=True).start()
+    fake_model = {"id": "sse-fake", "label": "自测假上游", "kind": "chat",
+                  "baseUrl": f"http://127.0.0.1:{up_port}/v1", "model": "fake",
+                  "keyEnv": "", "egress": "一级可用（本机回环）"}
+    saved_get_model = src.get_model
+    src.get_model = lambda mid: fake_model
+    deltas = []
+    try:
+        for ev in bs.chat_stream("今天几个窗口在跑", "sse-fake", False):
+            ev = ev.strip()
+            if not ev.startswith("data:"):
+                continue
+            payload = ev[5:].strip()
+            if payload == "[DONE]":
+                break
+            try:
+                obj = json.loads(payload)
+            except Exception:
+                continue
+            if "delta" in obj:
+                deltas.append(obj["delta"])
+            elif "error" in obj:
+                deltas.append("[ERR]" + str(obj["error"]))
+    finally:
+        src.get_model = saved_get_model
+        up.shutdown()
+    got = "".join(deltas)
+    check("SSE：上游无 charset 时中文照原样回传", got == CN_SENT, got[:40])
+    as_latin1 = sse_body.decode("iso-8859-1")
+    check("反证：同一批字节按 ISO-8859-1 解则不成句（此测确有区分力）",
+          CN_SENT not in as_latin1 and "看板" not in as_latin1,
+          "negative-control=True｜乱码样例 " + as_latin1[as_latin1.find("content"):][:28])
+
+    code = (HERE / "board_server.py").read_text(encoding="utf-8")
+    code_nc = "\n".join(l for l in code.splitlines() if not l.strip().startswith("#"))
+    pat = r'resp\.encoding\s*=\s*"utf-8"'
+    hits = len(re.findall(pat, code_nc))
+    check("源码：应答与探活两处回包均显式设 utf-8（已剥注释）", hits == 2, f"命中 {hits} 处")
+    check("反证：删掉该行则计数归零（断言不是恒真）",
+          len(re.findall(pat, code_nc.replace('resp.encoding = "utf-8"', ""))) == 0)
+
     server.should_exit = True
     time.sleep(0.4)
     return finish()

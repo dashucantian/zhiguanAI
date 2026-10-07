@@ -237,6 +237,7 @@ def _probe_remote(m: dict) -> dict:
             json={"model": m["model"], "messages": [{"role": "user", "content": "ping"}], "max_tokens": 4},
             timeout=20,
         )
+        resp.encoding = "utf-8"
         ms = round((time.perf_counter() - t0) * 1000)
         if resp.status_code == 200:
             return {"ok": True, "ms": ms, "httpStatus": 200, "at": int(time.time() * 1000)}
@@ -431,6 +432,8 @@ def chat_stream(text: str, model_id: str | None, include_summary: bool, screen_f
             json={"model": m["model"], "messages": messages, "stream": True},
             stream=True, timeout=90,
         )
+        # LM Studio 的 SSE 头是 text/event-stream 且不带 charset，requests 会退回 ISO-8859-1 把中文解成乱码
+        resp.encoding = "utf-8"
     except Exception as exc:
         yield _sse({"error": f"请求失败：{type(exc).__name__}: {exc}"})
         return
