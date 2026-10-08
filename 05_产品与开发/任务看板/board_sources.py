@@ -22,7 +22,10 @@ PROJ_DIR = QODER_HOME / "projects" / PROJ_KEY
 TASKS_DIR = QODER_HOME / "tasks"
 CONFIG_DIR = HERE / "config"
 STATE_DIR = HERE / "state"
-WEINA_DIRS = [REPO / "01_项目管理" / "任务关系图"]
+# 维那快照正源＝生产根件单一路径（协调正本 §16：rglob 按 mtime 取最新会把联调／隔离
+# 目录误选为生产候选，10-07 起生产看板实取过联调件）。禁「目录变新即改变生产候选」；
+# 如日后须多目录，改显式白名单＋非递归，须先提请裁定。
+WEINA_SOURCE = REPO / "01_项目管理" / "任务关系图" / "_records_raw.json"
 
 TAIL_BYTES = 96 * 1024
 META_TYPES = {"runtime-config", "last-prompt", "workspace-directories", "worktree-state"}
@@ -262,14 +265,7 @@ def resources(top_n: int = 8) -> dict:
 # ─────────────────────────── 维那看板快照 ───────────────────────────
 
 def _find_weina_snapshot() -> Path | None:
-    best = None
-    for root in WEINA_DIRS:
-        if not root.is_dir():
-            continue
-        for p in root.rglob("_records_raw.json"):
-            if best is None or p.stat().st_mtime > best.stat().st_mtime:
-                best = p
-    return best
+    return WEINA_SOURCE if WEINA_SOURCE.is_file() else None
 
 
 def _cell_text(value) -> str:
@@ -303,7 +299,11 @@ def _pick(fields: list[str], *keywords) -> int | None:
 def backlog() -> dict:
     path = _find_weina_snapshot()
     if path is None:
-        return {"ok": False, "reason": "未找到 _records_raw.json 快照", "rows": []}
+        return {"ok": False, "reason": f"维那正源缺失：{WEINA_SOURCE}", "rows": []}
+    try:
+        mtime_ms = int(path.stat().st_mtime * 1000)
+    except OSError:
+        mtime_ms = None
     obj = _read_json(path)
     if not obj:
         return {"ok": False, "reason": "快照解析失败", "rows": [], "path": str(path)}
@@ -350,8 +350,9 @@ def backlog() -> dict:
     return {
         "ok": True,
         "path": str(path.relative_to(REPO)) if path.is_relative_to(REPO) else str(path),
+        "mtimeMs": mtime_ms,
         "pulledAt": qc.get("pulled_at"),
-        "total": data.get("total"),
+        "total": data.get("total") if isinstance(data.get("total"), int) else len(rows),
         "fields": fields,
         "rows": rows,
         "byStatus": by_status,
