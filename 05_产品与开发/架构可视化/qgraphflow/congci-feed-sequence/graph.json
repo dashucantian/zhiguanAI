@@ -1,0 +1,834 @@
+{
+  "meta": {
+    "title": "止观AI · 一坐数据入脑（收口 → 晋升 → 消化）",
+    "subtitle": "监测路径 _do_save 同步收口并入队；人工 /api/ingest 与后台 worker 消化并发，无固定先后",
+    "sourceRef": "zhiguanAI@master(433ad7f)",
+    "scope": "只画「一坐数据入脑」这条流的调用顺序。闭环路径同挂点（console_server.py:1145-1160）未单列；VR、SSE 前端、registry_tx 锁内部实现不在本图",
+    "diagramType": "sequence",
+    "locale": "zh-CN"
+  },
+  "nodes": [
+    {
+      "id": "fashi",
+      "label": "宗国法师",
+      "subtitle": "点保存、下入库令的人",
+      "kind": "actor",
+      "facts": [
+        "入库是手动命令：118 件积压即因此（10-08 归因）"
+      ],
+      "size": {
+        "width": 212,
+        "height": 3314
+      },
+      "position": {
+        "x": 274,
+        "y": 48
+      }
+    },
+    {
+      "id": "console",
+      "label": "MonitorSession._do_save",
+      "subtitle": "驾驶舱收口：落 npz → 质检 → 推卡片 → 入队",
+      "kind": "service",
+      "module": "驾驶舱",
+      "source": {
+        "kind": "source",
+        "file": "console_server.py",
+        "lineStart": 584,
+        "lineEnd": 708,
+        "symbol": "_do_save"
+      },
+      "facts": [
+        "npz 落盘与质检、入队在同一个调用栈内",
+        "入队失败只 warn，不打断保存主流程（附属物纪律）"
+      ],
+      "size": {
+        "width": 446,
+        "height": 3314
+      },
+      "position": {
+        "x": 550,
+        "y": 48
+      }
+    },
+    {
+      "id": "qc",
+      "label": "qc_pipeline.assess_cached",
+      "subtitle": "质检唯一实现：判据链 → recommend",
+      "kind": "service",
+      "module": "质检",
+      "source": {
+        "kind": "source",
+        "file": "qc_pipeline.py",
+        "lineStart": 482,
+        "lineEnd": 516,
+        "symbol": "assess_cached"
+      },
+      "facts": [
+        "缓存键＝(路径, mtime, size, QC_VERSION, THRESHOLD_VERSION)",
+        "判据链在 assess（qc_pipeline.py:269）：时长／丢包／干净度／单点幅值 1800µV 一票否决",
+        "mains 工频污染只 warn 不拒 ⇒ QC 全绿≠数据干净"
+      ],
+      "size": {
+        "width": 362,
+        "height": 3314
+      },
+      "position": {
+        "x": 1060,
+        "y": 48
+      }
+    },
+    {
+      "id": "ingest",
+      "label": "ingest_session.main",
+      "subtitle": "02_raw 唯一合法写入入口（子进程）",
+      "kind": "service",
+      "module": "入库",
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/muse-direct/tools/ingest_session.py",
+        "lineStart": 106,
+        "lineEnd": 200,
+        "symbol": "main"
+      },
+      "facts": [
+        "由 /api/ingest 以 subprocess 调起，timeout=120 秒",
+        "隔离判定＝显式 --quarantine 或 --type test（ingest_session.py:151），与 QC 结论无关"
+      ],
+      "size": {
+        "width": 349,
+        "height": 3314
+      },
+      "position": {
+        "x": 3700.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "disk",
+      "label": "数据盘（02_raw／隔离区／qc.json／事件流／登记表）",
+      "subtitle": "会话定稿与事件流的落点",
+      "kind": "database",
+      "module": "入库",
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/muse-direct/tools/ingest_session.py",
+        "lineStart": 60,
+        "lineEnd": 66,
+        "symbol": "RAW_ROOT"
+      },
+      "facts": [
+        "02_raw 落盘后只读",
+        "人工隔离标志只存在于 qc.json 定稿，现算无从得知"
+      ],
+      "size": {
+        "width": 622,
+        "height": 3314
+      },
+      "position": {
+        "x": 2533.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "enqueue",
+      "label": "congci_pipeline.enqueue",
+      "subtitle": "会话收口→只入队，不学习不写脑",
+      "kind": "service",
+      "module": "养脑",
+      "source": {
+        "kind": "source",
+        "file": "congci_pipeline.py",
+        "lineStart": 409,
+        "lineEnd": 483,
+        "symbol": "enqueue"
+      },
+      "facts": [
+        "幂等键＝(source_hash16, algo_version, lineage_id)",
+        "未入库期 session_key 回落内容 hash（congci_pipeline.py:430）",
+        "准入三闸：recommend=ingest 且非隔离、类型非 test/smoke/replay、非撤回者（congci_pipeline.py:374）",
+        "未过即返回 {queued:false, status:rejected}，不入队、不写脑"
+      ],
+      "size": {
+        "width": 329,
+        "height": 3314
+      },
+      "position": {
+        "x": 1506.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "index",
+      "label": "processed_index.json",
+      "subtitle": "养脑任务台账（pending／committed／abstained／failed）",
+      "kind": "database",
+      "module": "养脑",
+      "source": {
+        "kind": "source",
+        "file": "congci_pipeline.py",
+        "lineStart": 148,
+        "lineEnd": 150,
+        "symbol": "index_path"
+      },
+      "facts": [
+        "读写全在 registry_tx.locked 临界区内：锁内重读→写时合并→原子替换"
+      ],
+      "size": {
+        "width": 570,
+        "height": 3314
+      },
+      "position": {
+        "x": 1899.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "worker",
+      "label": "congci_pipeline._process_row",
+      "subtitle": "单 worker 线程串行消化一个 pending 单元",
+      "kind": "service",
+      "module": "养脑",
+      "source": {
+        "kind": "source",
+        "file": "congci_pipeline.py",
+        "lineStart": 611,
+        "lineEnd": 741,
+        "symbol": "_process_row"
+      },
+      "facts": [
+        "_worker_loop 每 2 秒轮询（congci_pipeline.py:845，poll_s=2.0）",
+        "认领件 .claim 防两进程同 npz 竞处理；锁争用超时保持 pending 重试，不改判 failed",
+        "脑锁内重读索引，状态已非 pending 即放弃"
+      ],
+      "size": {
+        "width": 417,
+        "height": 3314
+      },
+      "position": {
+        "x": 3219.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "bridge",
+      "label": "zhiguan_cadence_bridge.process_session",
+      "subtitle": "把一坐回放进脑：逐拍观测 → 奖励 → step",
+      "kind": "service",
+      "module": "节拍",
+      "source": {
+        "kind": "source",
+        "file": "zhiguan_cadence_bridge.py",
+        "lineStart": 223,
+        "lineEnd": 383,
+        "symbol": "process_session"
+      },
+      "facts": [
+        "sfreq 取源优先级：meta.sfreq → 端点跨度推断 → 假定 256",
+        "零有效 epoch／npz 不可解析 → abstained，不动脑不落候选"
+      ],
+      "size": {
+        "width": 524,
+        "height": 3314
+      },
+      "position": {
+        "x": 4113.5,
+        "y": 48
+      }
+    },
+    {
+      "id": "brain",
+      "label": "congci.brain.npz（持久脑）",
+      "subtitle": "跨坐续修的唯一持久态",
+      "kind": "database",
+      "module": "养脑",
+      "source": {
+        "kind": "source",
+        "file": "congci_pipeline.py",
+        "lineStart": 144,
+        "lineEnd": 146,
+        "symbol": "brain_path"
+      },
+      "facts": [
+        "提升＝os.replace(候选, 正式)，字节级替换（事务②）",
+        "失败只删残候选，正式脑字节不变"
+      ],
+      "size": {
+        "width": 353,
+        "height": 3314
+      },
+      "position": {
+        "x": 4701.5,
+        "y": 48
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "admit",
+      "label": "admit()",
+      "kind": "opt",
+      "operands": [
+        {
+          "id": "admitted",
+          "guard": "admitted",
+          "edgeIds": [
+            "m9",
+            "m10",
+            "m11"
+          ]
+        }
+      ],
+      "position": {
+        "x": 1537,
+        "y": 938
+      },
+      "size": {
+        "width": 1923,
+        "height": 412
+      }
+    },
+    {
+      "id": "concurrent",
+      "label": "晋升与消化并发：同一 npz，两把不同的锁",
+      "kind": "par",
+      "operands": [
+        {
+          "id": "promote",
+          "label": "人工晋升（法师手打命令，可延后数日）",
+          "edgeIds": [
+            "m13",
+            "m14",
+            "m15",
+            "m16",
+            "m17"
+          ]
+        },
+        {
+          "id": "feed",
+          "label": "后台消化（worker 轮询，与晋升无固定先后）",
+          "edgeIds": [
+            "m18",
+            "m19",
+            "m20",
+            "m21",
+            "m22",
+            "m24",
+            "m25",
+            "m26",
+            "m27",
+            "m28",
+            "m29"
+          ]
+        }
+      ],
+      "position": {
+        "x": 32,
+        "y": 1464
+      },
+      "size": {
+        "width": 4910,
+        "height": 1842
+      }
+    },
+    {
+      "id": "ticks",
+      "label": "逐拍回放",
+      "kind": "loop",
+      "loop": {
+        "min": 1,
+        "max": "*"
+      },
+      "parentId": "concurrent",
+      "parentOperandId": "feed",
+      "operands": [
+        {
+          "id": "tick",
+          "guard": "t < T（valid[t] 才计入）",
+          "edgeIds": [
+            "m23"
+          ]
+        }
+      ],
+      "position": {
+        "x": 4087.5,
+        "y": 2502
+      },
+      "size": {
+        "width": 665,
+        "height": 224
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "m1",
+      "source": "fashi",
+      "target": "console",
+      "kind": "sync",
+      "label": "停止采集 → save_bin(extra_meta) 落 npz",
+      "order": 1,
+      "evidence": "source",
+      "route": {
+        "messageY": 262
+      }
+    },
+    {
+      "id": "m2",
+      "source": "console",
+      "target": "qc",
+      "kind": "sync",
+      "label": "qc_assess(data_path, report_path)",
+      "order": 2,
+      "evidence": "source",
+      "route": {
+        "messageY": 352
+      }
+    },
+    {
+      "id": "m3",
+      "source": "qc",
+      "target": "qc",
+      "kind": "sync",
+      "label": "assess(npz)：时长／丢包／干净度／单点幅值 → recommend",
+      "order": 3,
+      "evidence": "source",
+      "route": {
+        "messageY": 398
+      }
+    },
+    {
+      "id": "m4",
+      "source": "qc",
+      "target": "console",
+      "kind": "return",
+      "label": "{recommend, reasons, metrics}",
+      "order": 4,
+      "replyTo": "m2",
+      "evidence": "source",
+      "route": {
+        "messageY": 524
+      }
+    },
+    {
+      "id": "m5",
+      "source": "console",
+      "target": "fashi",
+      "kind": "async",
+      "label": "SSE 推 saved 卡片（含 ingest_cmd 入库命令）",
+      "order": 5,
+      "evidence": "source",
+      "route": {
+        "messageY": 614
+      }
+    },
+    {
+      "id": "m6",
+      "source": "console",
+      "target": "enqueue",
+      "kind": "sync",
+      "label": "enqueue(npz, qc, session_type, participant, scene='monitor')",
+      "order": 6,
+      "evidence": "source",
+      "route": {
+        "messageY": 728
+      }
+    },
+    {
+      "id": "m7",
+      "source": "enqueue",
+      "target": "qc",
+      "kind": "sync",
+      "label": "admit → _qc_verdict：定稿 qc.json 优先，否则现算",
+      "order": 7,
+      "evidence": "source",
+      "route": {
+        "messageY": 818
+      }
+    },
+    {
+      "id": "m8",
+      "source": "qc",
+      "target": "enqueue",
+      "kind": "return",
+      "label": "{recommend, quarantined, source}",
+      "order": 8,
+      "replyTo": "m7",
+      "evidence": "source",
+      "route": {
+        "messageY": 908
+      }
+    },
+    {
+      "id": "m9",
+      "source": "enqueue",
+      "target": "index",
+      "kind": "sync",
+      "label": "锁内重读 → append pending 行 → 原子写",
+      "order": 9,
+      "evidence": "source",
+      "route": {
+        "messageY": 1100
+      }
+    },
+    {
+      "id": "m10",
+      "source": "enqueue",
+      "target": "disk",
+      "kind": "async",
+      "label": "_emit_event(queued) 追加会话事件流",
+      "order": 10,
+      "evidence": "source",
+      "route": {
+        "messageY": 1190
+      }
+    },
+    {
+      "id": "m11",
+      "source": "enqueue",
+      "target": "worker",
+      "kind": "async",
+      "label": "ensure_worker() 懒启动 daemon 线程",
+      "order": 11,
+      "evidence": "source",
+      "route": {
+        "messageY": 1280
+      }
+    },
+    {
+      "id": "m12",
+      "source": "enqueue",
+      "target": "console",
+      "kind": "return",
+      "label": "{queued, unit_id} | rejected",
+      "order": 12,
+      "replyTo": "m6",
+      "evidence": "source",
+      "route": {
+        "messageY": 1434
+      }
+    },
+    {
+      "id": "m13",
+      "source": "fashi",
+      "target": "console",
+      "kind": "sync",
+      "label": "POST /api/ingest{npz, participant, type, scene}",
+      "order": 13,
+      "evidence": "source",
+      "route": {
+        "messageY": 1626
+      }
+    },
+    {
+      "id": "m14",
+      "source": "console",
+      "target": "ingest",
+      "kind": "sync",
+      "label": "subprocess.run([python, ingest_session.py, --npz …], timeout=120)",
+      "order": 14,
+      "evidence": "source",
+      "route": {
+        "messageY": 1740
+      }
+    },
+    {
+      "id": "m15",
+      "source": "ingest",
+      "target": "disk",
+      "kind": "sync",
+      "label": "02_raw/<SID>/ 或 隔离区/ ＋ qc.json 定稿 ＋ 登记表 status",
+      "order": 15,
+      "evidence": "source",
+      "route": {
+        "messageY": 1830
+      }
+    },
+    {
+      "id": "m16",
+      "source": "ingest",
+      "target": "console",
+      "kind": "return",
+      "label": "{returncode, stdout, stderr}",
+      "order": 16,
+      "replyTo": "m14",
+      "evidence": "source",
+      "route": {
+        "messageY": 1920
+      }
+    },
+    {
+      "id": "m17",
+      "source": "console",
+      "target": "fashi",
+      "kind": "return",
+      "label": "{ok, output}（入库回执）",
+      "order": 17,
+      "replyTo": "m13",
+      "evidence": "source",
+      "route": {
+        "messageY": 1986
+      }
+    },
+    {
+      "id": "m18",
+      "source": "worker",
+      "target": "index",
+      "kind": "sync",
+      "label": "_pick_pending()：锁内取 queued_at 最早的 pending",
+      "order": 18,
+      "evidence": "source",
+      "route": {
+        "messageY": 2136
+      }
+    },
+    {
+      "id": "m19",
+      "source": "worker",
+      "target": "disk",
+      "kind": "sync",
+      "label": "_resolve_npz(row)：暂存池／02_raw／隔离区 三处探路径",
+      "order": 19,
+      "evidence": "source",
+      "route": {
+        "messageY": 2226
+      }
+    },
+    {
+      "id": "m20",
+      "source": "worker",
+      "target": "bridge",
+      "kind": "sync",
+      "label": "process_session(npz, brain_path, out_dir)（脑锁内）",
+      "order": 20,
+      "evidence": "source",
+      "route": {
+        "messageY": 2316
+      }
+    },
+    {
+      "id": "m21",
+      "source": "bridge",
+      "target": "brain",
+      "kind": "sync",
+      "label": "ZhiGuanCadenceBridge(brain_path)：有则续修，无则 seed=42 新生",
+      "order": 21,
+      "evidence": "source",
+      "route": {
+        "messageY": 2406
+      }
+    },
+    {
+      "id": "m22",
+      "source": "brain",
+      "target": "bridge",
+      "kind": "return",
+      "label": "既有脑参数（首坐为空）",
+      "order": 22,
+      "replyTo": "m21",
+      "evidence": "source",
+      "route": {
+        "messageY": 2472
+      }
+    },
+    {
+      "id": "m23",
+      "source": "bridge",
+      "target": "bridge",
+      "kind": "sync",
+      "label": "build_observation → observe_reward → step（一拍）",
+      "order": 23,
+      "evidence": "source",
+      "route": {
+        "messageY": 2620
+      }
+    },
+    {
+      "id": "m24",
+      "source": "bridge",
+      "target": "disk",
+      "kind": "sync",
+      "label": "写 out_dir/trace.json ＋ brain.candidate.npz（候选先落盘）",
+      "order": 24,
+      "evidence": "source",
+      "route": {
+        "messageY": 2810
+      }
+    },
+    {
+      "id": "m25",
+      "source": "bridge",
+      "target": "worker",
+      "kind": "return",
+      "label": "{summary, trace_path, candidate_path} | abstained",
+      "order": 25,
+      "replyTo": "m20",
+      "evidence": "source",
+      "route": {
+        "messageY": 2900
+      }
+    },
+    {
+      "id": "m26",
+      "source": "worker",
+      "target": "disk",
+      "kind": "sync",
+      "label": "_brain_loads(cand)：候选可载入校验，写坏不提升",
+      "order": 26,
+      "evidence": "source",
+      "route": {
+        "messageY": 2990
+      }
+    },
+    {
+      "id": "m27",
+      "source": "worker",
+      "target": "brain",
+      "kind": "sync",
+      "label": "os.replace(cand, brain_path)：候选提升为正式脑（事务②）",
+      "order": 27,
+      "evidence": "source",
+      "route": {
+        "messageY": 3080
+      }
+    },
+    {
+      "id": "m28",
+      "source": "worker",
+      "target": "index",
+      "kind": "sync",
+      "label": "_commit_row(committed, result_brain_sha16)",
+      "order": 28,
+      "evidence": "source",
+      "route": {
+        "messageY": 3170
+      }
+    },
+    {
+      "id": "m29",
+      "source": "worker",
+      "target": "disk",
+      "kind": "async",
+      "label": "_emit_event(committed v<n>)",
+      "order": 29,
+      "evidence": "source",
+      "route": {
+        "messageY": 3236
+      }
+    }
+  ],
+  "executions": [
+    {
+      "id": "x-console-save",
+      "participantId": "console",
+      "start": {
+        "edgeId": "m1",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m5",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-console-ingest",
+      "participantId": "console",
+      "start": {
+        "edgeId": "m13",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m17",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-qc-assess",
+      "participantId": "qc",
+      "start": {
+        "edgeId": "m2",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m4",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-qc-verdict",
+      "participantId": "qc",
+      "start": {
+        "edgeId": "m7",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m8",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-enqueue",
+      "participantId": "enqueue",
+      "start": {
+        "edgeId": "m6",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m12",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-ingest-tool",
+      "participantId": "ingest",
+      "start": {
+        "edgeId": "m14",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m16",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-worker",
+      "participantId": "worker",
+      "start": {
+        "edgeId": "m18",
+        "at": "send"
+      },
+      "end": {
+        "edgeId": "m29",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-bridge",
+      "participantId": "bridge",
+      "start": {
+        "edgeId": "m20",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m25",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-brain-load",
+      "participantId": "brain",
+      "start": {
+        "edgeId": "m21",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m22",
+        "at": "send"
+      }
+    }
+  ],
+  "layout": {
+    "version": "adaptive-v2-elkjs-0.11.0",
+    "strategy": "sequence-0"
+  }
+}
