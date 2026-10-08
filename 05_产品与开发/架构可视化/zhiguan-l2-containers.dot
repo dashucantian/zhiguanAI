@@ -79,7 +79,9 @@ digraph zhiguan_l2_containers {
   nd_sim -> nd_routes [label="模拟数据(测试)", style=dashed];
   nd_routes -> console [label="挂载路由"];
 
-  closedloop -> bridge [label="阈值决策"];
+  // 2026-10-08 行级复核撤线：closedloop_controller/experiment/engine 三件对 cadence|bridge|Bridge 零命中，
+  // controller 自持 beat_*/volume（closedloop_controller.py:35-60）⇒ 无「闭环→桥」直接调用点。
+  // 原线：closedloop -> bridge [label="阈值决策"];   有据的那条见下方 congci -> bridge。详见 evidence.md §三。
   bridge -> cadence [label="节拍频率/音量"];
   cadence -> vrui [label="等时节拍视觉反馈"];
   closedloop -> qc [label="会话质检"];
@@ -89,6 +91,7 @@ digraph zhiguan_l2_containers {
   console -> webui [label="FileResponse"];
   registry -> zenregistry [label="读写 CSV(跨盘)"];
 
+  console -> congci [label="收口入队 enqueue"];
   congci -> registry [label="会话契约"];
   congci -> qc [label="质检"];
   congci -> bridge [label="节拍"];

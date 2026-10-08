@@ -60,6 +60,9 @@ const report = {
   confidence_high: tally('high'),
   confidence_medium: tally('medium'),
   confidence_low: tally('low'),
+  // 行号级 sourceRef 会随文件插行漂移，而本闸只验文件存在（checkRefs 剥掉 `:行号`）
+  // ⇒ 把上次全量回核的日期顶到这里，MISSING／过旧即视为待复核。
+  refs_verified_at: model.metadata?.refsVerifiedAt?.at ?? 'MISSING',
   errors,
 };
 console.log(JSON.stringify(report, null, 2));

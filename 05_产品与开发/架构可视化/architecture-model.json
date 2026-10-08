@@ -7,6 +7,7 @@
     "generatedAt": "2026-10-07",
     "sourceRefPolicy": "resolvable",
     "sourceRefBase": "D:/Project/zhiguanAI",
+    "refsVerifiedAt": { "at": "2026-10-08", "by": "W3-AI-014", "tree": "working-tree", "baseCommit": "7a553b5", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
     "notes": "所有 sourceRefs 为仓库内可解析路径；未经代码直接证实的一律降级为 low 并在 description 标明 inferred/assumed。"
   },
   "nodes": [
@@ -79,7 +80,7 @@
       "type": "module",
       "state": "current",
       "description": "等时节拍桥，带 --selftest；依赖 cadence 生成节拍。",
-      "sourceRefs": ["zhiguan_cadence_bridge.py:34", "zhiguan_cadence_bridge.py:45", "zhiguan_cadence_bridge.py:509"],
+      "sourceRefs": ["zhiguan_cadence_bridge.py:69", "zhiguan_cadence_bridge.py:46", "zhiguan_cadence_bridge.py:509"],
       "confidence": "high"
     },
     {
@@ -106,7 +107,7 @@
       "type": "module",
       "state": "current",
       "description": "NeuraDock 注册式接入：端口发现／单例拉起／扇出中转／数据源切换。做成注册式模块是为把 console_server 改动面压到两行（他窗在途改动风险）。",
-      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:20"],
+      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:30"],
       "confidence": "high"
     },
     {
@@ -235,17 +236,6 @@
       "confidence": "high"
     },
     {
-      "id": "edge.closedloop-to-bridge",
-      "from": "module.closedloop",
-      "to": "module.cadence-bridge",
-      "type": "calls",
-      "sync": "sync",
-      "protocol": "in-process",
-      "description": "阈值决策结果驱动节拍桥。inferred：由 congci_pipeline 同时导入 cadence 与 bridge 推得，闭环到桥的直接调用点未逐行确认。",
-      "sourceRefs": ["zhiguan_cadence_bridge.py:45", "congci_pipeline.py:564", "congci_pipeline.py:642"],
-      "confidence": "medium"
-    },
-    {
       "id": "edge.console-to-ndroutes",
       "from": "service.console-server",
       "to": "module.nd-routes",
@@ -253,7 +243,7 @@
       "sync": "sync",
       "protocol": "in-process",
       "description": "注册式挂载 NeuraDock 路由。",
-      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:20"],
+      "sourceRefs": ["console_server.py:80", "muse2-repo/muse2-master/nd_routes.py:30"],
       "confidence": "high"
     },
     {
@@ -385,7 +375,7 @@
       "sync": "async",
       "protocol": "file",
       "description": "JobQueue 采样器周期写快照（资源 5s、会话 20s、积压 300s）。",
-      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:81", "05_产品与开发/任务看板/board_server.py:184"],
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:81", "05_产品与开发/任务看板/board_server.py:184", "05_产品与开发/任务看板/board_server.py:35", "05_产品与开发/任务看板/board_server.py:221"],
       "confidence": "high"
     },
     {
@@ -407,7 +397,7 @@
       "sync": "sync",
       "protocol": "HTTPS",
       "description": "驾驶实验、查看监测。",
-      "sourceRefs": ["console_server.py:3178"],
+      "sourceRefs": ["console_server.py:584"],
       "confidence": "high"
     },
     {

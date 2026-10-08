@@ -23,11 +23,11 @@
 - `console_server.py:71,72,76,80,125,193,666`（导入 closedloop / controller / qc_pipeline / nd_routes / registry_tx / muse_local_server / session_contract）
 - `console_server.py:60-64`（sys.path 注入 muse2 子仓）
 - `console_server.py:2224,2236,2249,3167`（FileResponse 出 vr_feedback / vr_mandala / focus / console 页面）
-- `closedloop_experiment.py:38,43`、`zhiguan_cadence_bridge.py:34,45,509`、`qc_pipeline.py`
-- `muse2-repo/muse2-master/nd_routes.py:20`、`nd_hub.py`、`neuradock_receiver.py:54`、`muse_local_server.py`
+- `closedloop_experiment.py:38,43`、`zhiguan_cadence_bridge.py:69,46,509`（34→69 类声明、45→46 `from cadence import Brain`，2026-10-08 行级复核订正）、`qc_pipeline.py`
+- `muse2-repo/muse2-master/nd_routes.py:30`（原记 `:20` 是空行）、`nd_hub.py`、`neuradock_receiver.py:54`、`muse_local_server.py`
 
 看板子系统：
-- `05_产品与开发/任务看板/board_server.py:39`（HOST/PORT=127.0.0.1:8848）、`:42`（FastAPI）、`:81-147`（JobQueue）、`:184-192`（采样器注册）、`:700-711`（SSE /api/stream）、`:718-729`（MCP_TOOLS）、`:736-751`（分发）、`:754-785`（POST /mcp）、`:788-796`（GET/DELETE→405）
+- `05_产品与开发/任务看板/board_server.py:39`（HOST/PORT=127.0.0.1:8848）、`:42`（FastAPI）、`:81-147`（JobQueue）、`:184-192`（采样器注册）、`:35`（`SCREEN_DIR = STATE/"screen"`）、`:221`（`PROBE_FILE.write_text(...)`，state 唯一真实写盘点）、`:700-711`（SSE /api/stream）、`:718-729`（MCP_TOOLS）、`:736-751`（分发）、`:754-785`（POST /mcp）、`:788-796`（GET/DELETE→405）
 - `board_sources.py:19-22`（扫描 ~/.qoder-cn）、`:25`（WEINA_DIRS=01_项目管理/任务关系图）、`:264-272`（rglob `_records_raw.json`）
 - `board_privacy.py`、`board_config.py:29`（千问）
 
@@ -35,11 +35,11 @@
 
 | 项 | 状态 | 说明 |
 | --- | --- | --- |
-| `closedloop` → `cadence-bridge` 直接调用点 | **medium（inferred）** | 只确证 `congci_pipeline.py:564,642` 同时导入 cadence 与 bridge；闭环到桥的直接调用未逐行确认。补证办法：在 `closedloop_controller.py` 中搜 bridge/cadence 调用点 |
+| `closedloop` → `cadence-bridge` 直接调用点 | **撤边（原 medium/inferred；2026-10-08 行级复核）** | 复核结论＝**该边不成立**。原三条 refs 全在养脑侧（订正后 `congci_pipeline.py:574`／`652` 导入、`653` 调用），只证到 `congci._process_row → bridge.process_session`；`closedloop_controller.py`／`closedloop_experiment.py`／`closedloop_engine.py` 三件对 `cadence|bridge|Bridge` **零命中**，controller 自持 `beat_*`／`volume`（`closedloop_controller.py:35-60`），节拍是它自己算的。按本表下方纪律（模型 JSON 只收 high/medium）⇒ **模型删边、DOT 删线并留注释**；有据的那条是 `congci → bridge`（DOT 第 94 行）。轨二 `zhiguan-console-architecture` 里的 `e_ctrl_bridge` 当时已如实标 `inference`，非假边，但同样缺据，随下次重生成一并处理（丙案）。 |
 | `registry_tx` → Zen-EEG CSV 读写 | **medium** | 依据 docstring，未实测跨盘写入 |
 | `board_sources` → 飞书 | **low（未入模型）** | 证据在 `01_项目管理/任务关系图/20261007_W3_维那快照拉取_v1.py:45`，是**离线拉取脚本**而非看板进程内调用；DOT 图里画成虚线，模型 JSON 里**故意不建边**，避免把批处理伪装成运行时依赖 |
 | 看板 → LM Studio :1234 | **low（未入模型）** | 证据在 `01_项目管理/评测集黄金任务集_运行/run_eval.py:38`，同属评测脚本而非看板进程；DOT 里虚线，模型不建边 |
-| `congci_pipeline` 归属 | **unknown** | 与 console_server 的关系未确证，DOT 中只画到 registry/qc/bridge，未画与驾驶舱的边 |
+| `congci_pipeline` 归属 | **已确证（原 unknown）** | 2026-10-08 行级复核补上：`console_server.py:699`（在 `_do_save` 584-708 之内）直调 `congci_pipeline.enqueue`，闭环路径同挂点 `console_server.py:1152`（`ExperimentSession` 收口）。DOT 已补 `console -> congci` 一条。⚠ 模型 JSON 侧仍**没有从此线节点族**（`congci_pipeline` 函数级／`ingest_session.py`／`processed_index.json` 均未建节点），本条只确证"挂点"，不覆盖整条从此线 ⇒ 补节点＝`D-1008-W3b` §八.1 丙案，候裁。 |
 | arxiv 出网 | **not found** | 子代理未找到证据，未入图 |
 
 > 纪律说明：DOT 图里虚线＝「有文件证据但不是运行时进程内调用」。模型 JSON 只收 high/medium。两者故意不一致，是为了让图能表达「疑似」而模型不背书。
