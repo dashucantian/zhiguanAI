@@ -1,0 +1,334 @@
+{
+  "meta": {
+    "title": "止观AI · 六面正源映射（每类事实一个正源＋若干投影）",
+    "subtitle": "依协调正本 §16.2（法师 2026-10-08「1–4 的建议我同意」）；证据台账正本＝architecture-model.json 的 soT.*／proj.* 节点族＋evidence.md §二",
+    "sourceRef": "zhiguanAI@master(c5faeb5)+working-tree",
+    "scope": "只画「六类事实各自的正源在哪、投影有哪几份」。轨一同源图＝zhiguan-source-of-truth.dot（多画出飞书云端与显示名警示两处缝，本图把那两处折进 facts）。各正源内部的字段结构、看板进程其余模块、VR／闭环链不在本图",
+    "diagramType": "architecture",
+    "locale": "zh-CN"
+  },
+  "groups": [],
+  "nodes": [
+    {
+      "id": "sot-biz",
+      "label": "①业务任务正源 · 飞书多维表格",
+      "subtitle": "任务只此一处说了算，其余全是派生",
+      "kind": "business",
+      "module": "业务任务",
+      "source": {
+        "kind": "config",
+        "file": "05_产品与开发/任务看板/board_sources.py",
+        "lineStart": 25,
+        "lineEnd": 28,
+        "symbol": "WEINA_SOURCE"
+      },
+      "facts": [
+        "真身在飞书云端，本机只有快照 _records_raw.json（72 行 × 19 字段）⇒ 本机无法直证云端现势，未联网核验",
+        "出网取云端须另裁（零出网三级制）",
+        "投影随正源重生成，不单独维护"
+      ]
+    },
+    {
+      "id": "sot-identity",
+      "label": "②窗口身份与授权正源 · AI代理身份登记.md",
+      "subtitle": "§三 代理登记表＋§三bis 窗口分类与认领",
+      "kind": "data",
+      "module": "身份授权",
+      "source": {
+        "kind": "document",
+        "file": "01_项目管理/AI代理身份登记.md",
+        "lineStart": 31,
+        "lineEnd": 35
+      },
+      "facts": [
+        "§三bis（同文件 :97）＝四窗口分类的实测依据，非凭印象",
+        "§四 双键制（同文件 :156，2026-10-09 法师裁「修正之前的规则」）＝登记键＝完整 sessionId；Session 名一会话一个；AI 身份号只作内容署名、一号可挂多个并发会话",
+        "执行类别依 AI-开工入口.md §四bis ⑦ 一律先「未验」，各窗自证后方可改标"
+      ]
+    },
+    {
+      "id": "sot-arch",
+      "label": "③架构事实正源 · architecture-model.json＋evidence.md §二",
+      "subtitle": "每个节点／边带 sourceRefs 与 confidence",
+      "kind": "data",
+      "module": "架构事实",
+      "source": {
+        "kind": "schema",
+        "file": "05_产品与开发/架构可视化/architecture-model.json",
+        "lineStart": 1,
+        "lineEnd": 11
+      },
+      "facts": [
+        "回归闸 validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条",
+        "refsVerifiedAt 显式声明锚点基准（tree／baseCommit／inFlight）",
+        "QGraphFlow 的 graph.json 不另立台账，锚点必须与 evidence.md §二 同源"
+      ]
+    },
+    {
+      "id": "sot-admission",
+      "label": "④数据准入与判定正源 · qc.json 定稿＋processed_index 账本",
+      "subtitle": "准入结论只认这两件",
+      "kind": "data",
+      "module": "数据准入",
+      "source": {
+        "kind": "source",
+        "file": "qc_pipeline.py",
+        "lineStart": 432,
+        "lineEnd": 440,
+        "symbol": "write_qc_json"
+      },
+      "facts": [
+        "账本 processed_index.json 的路径在 congci_pipeline.py:149",
+        "02_raw 唯一合法写入入口＝ingest_session.py（同文件 :2 docstring）",
+        "权威性未定案（批B 只读设计候 W3 复核）⇒ 台账 confidence 记 medium",
+        "改判据＝升 THRESHOLD_VERSION，须候裁"
+      ]
+    },
+    {
+      "id": "sot-inspection",
+      "label": "⑤运行巡检正源 · C3 巡检线（暂停中）",
+      "subtitle": "现势只有文档态，无进程在跑",
+      "kind": "data",
+      "module": "运行巡检",
+      "source": {
+        "kind": "document",
+        "file": "AI-开工入口.md",
+        "lineStart": 98,
+        "lineEnd": 100
+      },
+      "facts": [
+        "2026-10-07 法师金口「先延期、置暂停、候改定方案」⇒ enabled=false／expiresAt 已清",
+        "调度通道不可用期间的替代动作①＝报告法师＋己档留痕",
+        "C3 cron 依附客户端进程，缺勤会整日隐身（10-06 复盘）"
+      ]
+    },
+    {
+      "id": "sot-runtime",
+      "label": "⑥会话运行态正源 · MCP list_chat_sessions 快照",
+      "subtitle": "窗口活跃态的唯一现势来源",
+      "kind": "data",
+      "module": "会话运行态",
+      "source": {
+        "kind": "document",
+        "file": "05_产品与开发/任务看板/需求与隐私原则_v1.md",
+        "lineStart": 53,
+        "lineEnd": 53
+      },
+      "facts": [
+        "快照 <180 秒＝实时；否则退化为磁盘 mtime 推断，界面须逐行标 stateSource",
+        "§16.1 已裁改单写方（建议看板窗），他窗只读——尚未落地 ⇒ 台账 confidence 记 medium"
+      ]
+    },
+    {
+      "id": "proj-mindmap",
+      "label": "投影 · 思维导图（任务关系图.html）",
+      "subtitle": "读同一份 _records_raw.json 重生成",
+      "kind": "component",
+      "module": "业务任务",
+      "source": {
+        "kind": "source",
+        "file": "01_项目管理/任务关系图/生成关系图.py",
+        "lineStart": 19,
+        "lineEnd": 19,
+        "symbol": "SRC"
+      },
+      "facts": ["字段名动态解析，不硬编码列序"]
+    },
+    {
+      "id": "proj-gantt",
+      "label": "投影 · 甘特流程图",
+      "subtitle": "与思维导图同源同快照",
+      "kind": "component",
+      "module": "业务任务",
+      "source": {
+        "kind": "source",
+        "file": "01_项目管理/任务关系图/生成甘特流程图.py",
+        "lineStart": 18,
+        "lineEnd": 18,
+        "symbol": "SRC"
+      },
+      "facts": ["无日期不画时间条"]
+    },
+    {
+      "id": "proj-boardsrc",
+      "label": "投影 · 看板取数层 board_sources",
+      "subtitle": "消费指定快照，正源缺失明确报错不回退",
+      "kind": "component",
+      "module": "业务任务",
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/任务看板/board_sources.py",
+        "lineStart": 267,
+        "lineEnd": 302,
+        "symbol": "_find_weina_snapshot"
+      },
+      "facts": [
+        "a006d32 已废 rglob 按 mtime 择源（隔离／联调目录变新即改变生产候选，10-07 生产看板实取过联调件）",
+        "正源缺失＝ {ok:false, reason:'维那正源缺失'} ，不静默回退"
+      ]
+    },
+    {
+      "id": "proj-name",
+      "label": "投影 · 看板窗口映射表 WINDOWS",
+      "subtitle": "只承载物理地址＋标准显示名",
+      "kind": "component",
+      "module": "身份授权",
+      "source": {
+        "kind": "config",
+        "file": "05_产品与开发/任务看板/board_config.py",
+        "lineStart": 74,
+        "lineEnd": 79,
+        "symbol": "WINDOWS"
+      },
+      "facts": [
+        "⚠ 显示名不得当授权依据：标准显示名正源＝本表（§15），身份与授权正源＝身份登记表（§16.2），两者不互为凭据",
+        "登记键＝完整 sessionId，不得以窗别作键（10-08 实测 W3 名下三会并存）",
+        "归属无据不推定，升为 W? 须法师裁定"
+      ]
+    },
+    {
+      "id": "proj-graph",
+      "label": "投影 · 图谱双轨（轨一文本源＋轨二离线 HTML）",
+      "subtitle": "先改台账，再重生成两侧",
+      "kind": "component",
+      "module": "架构事实",
+      "source": {
+        "kind": "document",
+        "file": "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md",
+        "lineStart": 137,
+        "lineEnd": 144
+      },
+      "facts": [
+        "轨一＝architecture-visualization 0.1.0：.dot／.structurizr.dsl／architecture-model.json，能进 git、能 diff",
+        "轨二＝QGraphFlow 0.0.5：自包含离线 HTML，双击即开、不出网、脱离 Qoder 也照开",
+        "本图即轨二一侧；轨一同源图＝zhiguan-source-of-truth.dot"
+      ]
+    },
+    {
+      "id": "proj-reports",
+      "label": "投影 · 从此线报告与筛查件",
+      "subtitle": "只读消费定稿与账本，不回写",
+      "kind": "component",
+      "module": "数据准入",
+      "source": {
+        "kind": "document",
+        "file": "01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md",
+        "lineStart": 153,
+        "lineEnd": 162
+      },
+      "facts": [
+        "回滚须连 processed_index.json 一起回滚，否则幂等键判 duplicate",
+        "报告结论不得反写正源；正源有缺陷只提请（congci_pipeline.py 在「不准修」名单）"
+      ]
+    },
+    {
+      "id": "proj-shards",
+      "label": "投影 · 各窗己档与登记分片",
+      "subtitle": "C3 暂停期的留痕面",
+      "kind": "component",
+      "module": "运行巡检",
+      "source": {
+        "kind": "document",
+        "file": "01_项目管理/信箱/engine/巡检日志-W3.txt",
+        "lineStart": 1,
+        "lineEnd": 35
+      },
+      "facts": [
+        "一事一片：KZ-MMDD-Wxa／D-MMDD-Wxa",
+        "催办／派单回执只写本窗己档，勿写 C3 或冻结共享档"
+      ]
+    },
+    {
+      "id": "proj-boardstate",
+      "label": "投影 · 看板运行态存储 state/live_sessions.json",
+      "subtitle": "界面显示层的直接数据面",
+      "kind": "database",
+      "module": "会话运行态",
+      "source": {
+        "kind": "source",
+        "file": "05_产品与开发/任务看板/board_sources.py",
+        "lineStart": 116,
+        "lineEnd": 120,
+        "symbol": "_live_snapshot"
+      },
+      "facts": [
+        "state 整目录 gitignored ⇒ 此处锚点落在读方，正源实体不入库",
+        "缺快照或过期即退回磁盘 mtime 推断，界面须标 stateSource"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-biz-mindmap",
+      "source": "sot-biz",
+      "target": "proj-mindmap",
+      "kind": "data",
+      "label": "读 _records_raw.json 重生成思维导图",
+      "evidence": "source"
+    },
+    {
+      "id": "e-biz-gantt",
+      "source": "sot-biz",
+      "target": "proj-gantt",
+      "kind": "data",
+      "label": "读同一份快照重生成甘特",
+      "evidence": "source"
+    },
+    {
+      "id": "e-biz-boardsrc",
+      "source": "sot-biz",
+      "target": "proj-boardsrc",
+      "kind": "data",
+      "label": "只认 WEINA_SOURCE 指定的那一份",
+      "evidence": "source"
+    },
+    {
+      "id": "e-identity-name",
+      "source": "sot-identity",
+      "target": "proj-name",
+      "kind": "data",
+      "label": "仅投影物理地址与标准显示名",
+      "evidence": "config"
+    },
+    {
+      "id": "e-arch-graph",
+      "source": "sot-arch",
+      "target": "proj-graph",
+      "kind": "data",
+      "label": "台账→两侧重生成（validate＋generate-viewer＋复验）",
+      "evidence": "document"
+    },
+    {
+      "id": "e-admission-reports",
+      "source": "sot-admission",
+      "target": "proj-reports",
+      "kind": "data",
+      "label": "只读消费 qc.json 定稿与 processed_index",
+      "evidence": "document"
+    },
+    {
+      "id": "e-inspection-shards",
+      "source": "sot-inspection",
+      "target": "proj-shards",
+      "kind": "data",
+      "label": "替代动作①：报告法师＋己档留痕",
+      "evidence": "document"
+    },
+    {
+      "id": "e-runtime-boardstate",
+      "source": "sot-runtime",
+      "target": "proj-boardstate",
+      "kind": "data",
+      "label": "窗口开场刷快照写入（180 秒新鲜度）",
+      "evidence": "document"
+    },
+    {
+      "id": "e-boardstate-boardsrc",
+      "source": "proj-boardstate",
+      "target": "proj-boardsrc",
+      "kind": "data",
+      "label": "_live_snapshot() 读 live_sessions.json",
+      "evidence": "source"
+    }
+  ]
+}

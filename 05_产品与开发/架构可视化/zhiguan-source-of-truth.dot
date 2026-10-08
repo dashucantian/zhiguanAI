@@ -1,0 +1,56 @@
+digraph zhiguan_source_of_truth {
+  rankdir=TB;
+  fontname="Microsoft YaHei";
+  node [fontname="Microsoft YaHei", shape=box, style="rounded,filled", fillcolor="#f5f5f5", fontsize=11];
+  edge [fontname="Microsoft YaHei", fontsize=9];
+  labelloc="t";
+  label="止观AI 六面正源映射 — 每类事实一个正源＋若干投影 / 依协调正本 §16.2（法师 2026-10-08「1–4 的建议我同意」）\n证据底账见 architecture-model.json 的 soT.*／proj.* 节点族";
+
+  // ---- 六个正源（谁说了算）----
+  subgraph cluster_sot {
+    label="正源（每类事实只有这一处说了算）";
+    style=solid;
+    color="#1976d2";
+
+    sot_biz [label="①业务任务\n飞书多维表格 (ZG Base)\n本机只有快照 _records_raw.json", shape=box3d, fillcolor="#ffe0b2"];
+    sot_identity [label="②窗口身份与授权\nAI代理身份登记.md §三／§三bis", shape=box3d, fillcolor="#ffe0b2"];
+    sot_arch [label="③架构事实\narchitecture-model.json\n＋ evidence.md §二", shape=box3d, fillcolor="#ffe0b2"];
+    sot_admission [label="④数据准入与判定\nqc.json 定稿＋processed_index 账本\n(权威性＝批B 候裁 ⇒ medium)", shape=box3d, fillcolor="#fff9c4"];
+    sot_inspection [label="⑤运行巡检\nC3 巡检线（暂停中）\n现势只有文档态 ⇒ medium", shape=box3d, fillcolor="#fff9c4"];
+    sot_runtime [label="⑥会话运行态\nMCP list_chat_sessions 快照\n180 秒新鲜度；单写方未落地 ⇒ medium", shape=box3d, fillcolor="#fff9c4"];
+  }
+
+  // ---- 投影（派生视图：随正源重生成，不单独维护）----
+  subgraph cluster_proj {
+    label="投影（派生视图，不另立事实库）";
+    style=dashed;
+    color="#999999";
+
+    mindmap [label="思维导图\n生成关系图.py:19\n→ 任务关系图.html", shape=note, fillcolor="#e3f2fd"];
+    gantt [label="甘特流程图\n生成甘特流程图.py:18\n无日期不画时间条", shape=note, fillcolor="#e3f2fd"];
+    boardsrc [label="看板取数层\nboard_sources.py:28／268\n单一正源常量（a006d32 已废 rglob）", shape=note, fillcolor="#e3f2fd"];
+    identity_map [label="看板窗口映射\nboard_config.py:74／79\n只承载物理地址＋标准显示名", shape=note, fillcolor="#e3f2fd"];
+    graph_t1 [label="图谱·轨一 文本源\n.dot／.structurizr.dsl\n／architecture-model.json", shape=note, fillcolor="#e8f5e9"];
+    graph_t2 [label="图谱·轨二 交付面\nqgraphflow\\*\\index.html\n双击即开、离线、不出网", shape=note, fillcolor="#e8f5e9"];
+    congci_reports [label="从此线报告与筛查件\n只读消费定稿与账本\n改判据＝升 THRESHOLD_VERSION 须候裁", shape=note, fillcolor="#e3f2fd"];
+    window_shards [label="各窗己档与登记分片\n信箱\\engine\\巡检日志-W<窗>.txt\nC3 暂停期的留痕面", shape=note, fillcolor="#e3f2fd"];
+    board_state [label="看板运行态存储\nstate/live_sessions.json\n(gitignored，界面须标 stateSource)", shape=cylinder, fillcolor="#e1f5fe"];
+  }
+
+  // ---- 正源 → 投影 ----
+  sot_biz -> mindmap [label="投影"];
+  sot_biz -> gantt [label="投影·同源同快照"];
+  sot_biz -> boardsrc [label="投影·看板消费同一份指定快照"];
+  sot_identity -> identity_map [label="投影·仅地址与显示名\n不互为授权依据"];
+  sot_arch -> graph_t1 [label="重生成"];
+  graph_t1 -> graph_t2 [label="先改台账再重生成两侧\n(evidence.md §六)", style=dashed];
+  sot_admission -> congci_reports [label="投影·只读"];
+  sot_inspection -> window_shards [label="替代动作①\n报告法师＋己档留痕"];
+  sot_runtime -> board_state [label="投影·过期退回 mtime 推断"];
+
+  // ---- 已知的两处缝（如实画出来，不藏；均不建回边，保持正源→投影单向）----
+  sot_biz -> feishu_cloud [label="真身在云端\n本机不可直证（未联网核验）", style=dotted, color="#c62828"];
+  feishu_cloud [label="飞书 Base（云端）\n出网须另裁", shape=cylinder, fillcolor="#fce4ec"];
+  identity_map -> warn_identity [style=dotted, color="#c62828", arrowhead=none];
+  warn_identity [label="⚠ 显示名不得当授权依据\n标准名正源＝board_config 表（§15）\n身份与授权正源＝身份登记表（§16.2）", shape=note, fillcolor="#ffcdd2"];
+}

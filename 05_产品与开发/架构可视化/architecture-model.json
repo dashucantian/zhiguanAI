@@ -7,7 +7,7 @@
     "generatedAt": "2026-10-07",
     "sourceRefPolicy": "resolvable",
     "sourceRefBase": "D:/Project/zhiguanAI",
-    "refsVerifiedAt": { "at": "2026-10-08", "by": "W3-AI-014", "tree": "working-tree", "baseCommit": "7a553b5", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
+    "refsVerifiedAt": { "at": "2026-10-09", "by": "W3-AI-014", "tree": "working-tree", "baseCommit": "c5faeb5", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。另：board_config.py 亦带他窗在途改动（标准名批次），本件 :68／:73／:78 按工作区记。〔2026-10-09 现势更新〕congci_pipeline.py 现为 HEAD 944 行／工作区 989 行（他窗在途 +45），本件所引 :149 已用 git show HEAD 对过、HEAD 与工作区同行同文；上句 574／652／653 系 10-08 工作区基准所记，本轮未重核，引用前先自核。board_config.py 标准名 40 行已随 c5faeb5 入库，看板窗另有在途注释插行 ⇒ 本件 :68 未动、WINDOWS 表头与本窗行由 :73／:78 顺延为 :74／:79（已改）。AI-开工入口.md 他窗在 §二bis 第 3 条下补一行 ⇒ §二.9 停催令注记由 :99 顺延为 :100（本件两处已改）。AI代理身份登记.md 协调窗 10-09 改 §四／§三bis（裁定 4 双键制）⇒ 本件 :31／:97 经核未动，§四 由 :141 移至 :143（本件不引）。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt。六面正源家族（soT.*／proj.* 共 12 节点＋8 边，10-08 依协调正本 §16.2 新增）逐条现势核对，所引文件除 board_config.py／congci_pipeline.py 外均 clean；congci_pipeline.py:149 已用 git show HEAD 对过，HEAD 与工作区同行同文。〔2026-10-09 复核〕六面家族所引的四件在途文件（AI-开工入口／board_config／AI代理身份登记／congci_pipeline）逐条重取现势行内容，查出并订正 3 处顺延（:99→:100、:73→:74、:78→:79），其余锚点未动；同步订正一处初记错锚（edge.sot-arch-to-graphdual 的 evidence.md:84→:115＋:144）。轨二 source-of-truth-map 的 source 锚点与本台账同源，改这里必须同步改那里并重跑三条命令。", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
     "notes": "所有 sourceRefs 为仓库内可解析路径；未经代码直接证实的一律降级为 low 并在 description 标明 inferred/assumed。"
   },
   "nodes": [
@@ -52,8 +52,8 @@
       "label": "board_sources 取数层",
       "type": "module",
       "state": "current",
-      "description": "扫描 ~/.qoder-cn 会话与任务元数据（按磁盘 mtime 推断活跃/静默），并 rglob 维那快照 _records_raw.json。",
-      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19", "05_产品与开发/任务看板/board_sources.py:25", "05_产品与开发/任务看板/board_sources.py:264"],
+      "description": "扫描 ~/.qoder-cn 会话与任务元数据（按磁盘 mtime 推断活跃/静默）；维那快照只认单一正源常量 WEINA_SOURCE，正源缺失明确报错不回退（2026-10-08 a006d32 已废 rglob 按 mtime 择源）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19", "05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:268"],
       "confidence": "high"
     },
     {
@@ -199,6 +199,114 @@
       "description": "实测：分层/DAG 图 500 节点仅 344ms，但 200 节点×3 边的稠密带环图 >60s 超时。依赖图一旦成环且密集，插件内置 graphviz 布局会超线性劣化。缓解：拆子图、控环、rankdir=TB。",
       "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md"],
       "confidence": "high"
+    },
+    {
+      "id": "soT.biz-tasks",
+      "label": "正源①业务任务：飞书多维表格",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "业务任务／依赖／授权的唯一正源＝飞书多维表格（ZG Base）。本机 `_records_raw.json` 只是其快照，不是正源；看板与双图一律消费同一份指定快照（2026-10-08 a006d32 已把递归 mtime 择源改为单一正源常量，隔离联调目录不再能改变生产候选）。裁定出处＝协调正本 §16.2（法师 10-08「1–4 的建议我同意」转生效）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:28", "01_项目管理/任务关系图/生成关系图.py:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "soT.window-identity",
+      "label": "正源②窗口身份与授权：AI代理身份登记.md",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "窗口身份、认领与授权的正源＝身份登记表 §三（AI 代理登记表）＋§三bis（窗口分类与认领）。看板映射只承载物理地址与显示名，不另立授权表。⚠ 两条正源不可混：『标准显示名』的正源在 board_config.py:68 注释所指的映射表（协调正本 §15 试点契约），『身份与授权』的正源在本表——显示名不得当授权依据。〔2026-10-09 法师裁「根据当前的实际情况，修正之前的规则」⇒ §四 双键制生效〕原「同一窗口同一天的多次提交共用一个 Session」一句已作废（:155）；现行＝登记键＝完整 sessionId（正源＝board_config.py WINDOWS 表，:156），Session 名一会话一个，AI 身份号只作内容署名不作登记键、一号可挂多个并发会话 ⇒ AI-014 与 c2f3267e 同报不再构成冲突。",
+      "sourceRefs": ["01_项目管理/AI代理身份登记.md:31", "01_项目管理/AI代理身份登记.md:97", "01_项目管理/AI代理身份登记.md:156"],
+      "confidence": "high"
+    },
+    {
+      "id": "soT.arch-facts",
+      "label": "正源③架构事实：architecture-model.json＋evidence.md",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "架构事实（节点／边／锚点／置信度）的正源＝本件＋evidence.md §二。双轨制（D-1008-W3a 法师裁「同意」）规定：改架构先改台账，再重生成轨一文本源与轨二交付面；QGraphFlow 的 graph.json 不另立台账。锚点须声明基准（refsVerifiedAt 的 tree／baseCommit／inFlight）。",
+      "sourceRefs": ["05_产品与开发/架构可视化/architecture-model.json:3", "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "soT.data-admission",
+      "label": "正源④数据准入与判定：qc.json 定稿＋processed_index 账本",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "数据准入与判定的正源＝每坐 `03_quality_control/<sid>/qc.json` 定稿（写手 qc_pipeline.write_qc_json；02_raw 唯一合法写入入口＝ingest_session.py）＋喂脑账本 processed_index.json（幂等键含 source_hash，回滚须连账本）。⚠ confidence 只给 medium：定稿与人工隔离／撤回状态谁优先（批B 语义）仍候裁，协调正本 §13.8 已列草案，故『正源身份已定、权威性未定』。",
+      "sourceRefs": ["qc_pipeline.py:432", "05_产品与开发/muse-direct/tools/ingest_session.py:2", "congci_pipeline.py:149"],
+      "confidence": "medium"
+    },
+    {
+      "id": "soT.inspection",
+      "label": "正源⑤运行巡检：C3（暂停中）",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "运行巡检的正源＝C3 巡检线。现势：cron 8e2925ab… enabled=false／pauseReason=manual（法师 10-07「先做延期，处于暂停的状态」），且 09-29 起有「停催令」⇒ 执行体不在岗，正源目前只有文档态（规约 §二.9 注记＋只读快照件）。替代动作＝报告法师＋各窗己档留痕，不得自行代催他窗。",
+      "sourceRefs": ["AI-开工入口.md:100", "01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md"],
+      "confidence": "medium"
+    },
+    {
+      "id": "soT.session-runtime",
+      "label": "正源⑥会话运行态：MCP list_chat_sessions 快照",
+      "type": "source-of-truth",
+      "state": "current",
+      "description": "会话运行态（runtimeState）的正源＝AI 窗口经 MCP list_chat_sessions 取得并写入 state/live_sessions.json 的快照，180 秒内算实时、过期退回磁盘 mtime 推断且界面须标来源。⚠ confidence 只给 medium：协调正本 §16.1 已裁『改为单写方（建议看板窗）、他窗只读』，但单写方尚未落地，现势仍多窗可写同一文件（无锁）；该文件本身 gitignored，正源是『那次真 MCP 调用』而非文件。",
+      "sourceRefs": ["05_产品与开发/任务看板/需求与隐私原则_v1.md:53", "05_产品与开发/任务看板/board_sources.py:118"],
+      "confidence": "medium"
+    },
+    {
+      "id": "proj.mindmap",
+      "label": "投影·思维导图（任务关系图）",
+      "type": "projection",
+      "state": "current",
+      "description": "生成关系图.py 读同目录 `_records_raw.json` 出 任务关系图.html。派生视图：随正源重生成，不单独维护、不另立任务事实库；关系分组不得冒充依赖。",
+      "sourceRefs": ["01_项目管理/任务关系图/生成关系图.py:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "proj.gantt",
+      "label": "投影·甘特流程图",
+      "type": "projection",
+      "state": "current",
+      "description": "生成甘特流程图.py 与思维导图同源同快照（SRC 同为 `_records_raw.json`）。无日期不画时间条；工期须实测后估，不从 mtime 或推测生成。",
+      "sourceRefs": ["01_项目管理/任务关系图/生成甘特流程图.py:18"],
+      "confidence": "high"
+    },
+    {
+      "id": "proj.identity-map",
+      "label": "投影·看板窗口映射表",
+      "type": "projection",
+      "state": "current",
+      "description": "board_config.py 的 WINDOWS 表：完整 sessionId → 标准名（窗别｜工作线｜会话短号）＋W 号＋项目 Session。只承载物理地址与显示名，未核归属不推定；本窗行＝:79「W3｜图谱双轨｜6c7d4751」（2026-10-09 由 :73／:78 顺延 1 行＝看板窗在途注释插行）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_config.py:74", "05_产品与开发/任务看板/board_config.py:79"],
+      "confidence": "high"
+    },
+    {
+      "id": "proj.graph-dual",
+      "label": "投影·图谱双轨（轨一文本源＋轨二离线 HTML）",
+      "type": "projection",
+      "state": "current",
+      "description": "轨一＝.dot／.structurizr.dsl／本模型（可 diff、随代码改）；轨二＝QGraphFlow 自包含离线 HTML（双击即开、不出网、四窗通用）。两侧都由台账重生成（evidence.md §六 命令），任一侧不得私自新增事实。",
+      "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.dot:1", "05_产品与开发/架构可视化/qgraphflow/congci-feed-sequence.graph.json:1"],
+      "confidence": "high"
+    },
+    {
+      "id": "proj.congci-reports",
+      "label": "投影·从此线报告与筛查件",
+      "type": "projection",
+      "state": "current",
+      "description": "QC／入库／喂脑类报告只消费 qc.json 定稿与 processed_index 账本，不回写、不另立判据。改判据＝升 THRESHOLD_VERSION，须候裁。",
+      "sourceRefs": ["01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:153", "01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:162"],
+      "confidence": "high"
+    },
+    {
+      "id": "proj.window-shards",
+      "label": "投影·各窗己档与登记分片",
+      "type": "projection",
+      "state": "current",
+      "description": "C3 暂停期间的巡检留痕面：各窗只写自己的 `信箱/engine/巡检日志-W<窗>.txt`，公共登记走 `登记分片/` 一事一片；冻结大文件（台账／决策日志／日志 README §七）归 W3／巡检线单写。",
+      "sourceRefs": ["01_项目管理/信箱/engine/巡检日志-W3.txt:1"],
+      "confidence": "high"
     }
   ],
   "edges": [
@@ -342,7 +450,7 @@
       "sync": "sync",
       "protocol": "in-process",
       "description": "窗口/任务/维那取数。",
-      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:30", "05_产品与开发/任务看板/board_sources.py:25"],
+      "sourceRefs": ["05_产品与开发/任务看板/board_server.py:30", "05_产品与开发/任务看板/board_sources.py:28"],
       "confidence": "high"
     },
     {
@@ -409,6 +517,94 @@
       "protocol": "HTTP",
       "description": "任务看板.bat → 127.0.0.1:8848。",
       "sourceRefs": ["任务看板.bat", "05_产品与开发/任务看板/board_server.py:39"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-biz-to-mindmap",
+      "from": "soT.biz-tasks",
+      "to": "proj.mindmap",
+      "type": "projects-to",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "生成关系图.py 的 SRC 固定读同目录 `_records_raw.json`（正源快照）。",
+      "sourceRefs": ["01_项目管理/任务关系图/生成关系图.py:19"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-biz-to-gantt",
+      "from": "soT.biz-tasks",
+      "to": "proj.gantt",
+      "type": "projects-to",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "生成甘特流程图.py 与思维导图同源同快照（同一 SRC 常量）。",
+      "sourceRefs": ["01_项目管理/任务关系图/生成甘特流程图.py:18"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-biz-to-boardsources",
+      "from": "soT.biz-tasks",
+      "to": "module.board-sources",
+      "type": "projects-to",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "看板取数层消费同一份指定快照：WEINA_SOURCE 单一常量（:28）→ `_find_weina_snapshot` 只认该路径（:268），正源缺失明确报错不回退（:302）。a006d32 已解除递归 mtime 择源。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:268"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-identity-to-map",
+      "from": "soT.window-identity",
+      "to": "proj.identity-map",
+      "type": "projects-to",
+      "sync": "manual",
+      "protocol": "file",
+      "description": "身份登记表定窗别与认领，看板映射表只投影出物理地址＋标准显示名；两表不互为授权依据（board_config.py:68 注释限定该表只管标准名）。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_config.py:68", "01_项目管理/AI代理身份登记.md:97"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-arch-to-graphdual",
+      "from": "soT.arch-facts",
+      "to": "proj.graph-dual",
+      "type": "projects-to",
+      "sync": "manual",
+      "protocol": "file",
+      "description": "evidence.md §六 的重生成命令：先改台账 → 轨一 DOT/DSL 渲染 → 轨二 validate-graph＋generate-viewer＋复验。（原记 `evidence.md:84` 系错锚：该处是 §四 插件性能表，与本边无关；2026-10-08 订正为 §六 命令行＋§八 双轨制条款。）",
+      "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md:115", "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md:144"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-admission-to-reports",
+      "from": "soT.data-admission",
+      "to": "proj.congci-reports",
+      "type": "projects-to",
+      "sync": "manual",
+      "protocol": "file",
+      "description": "筛查与裁定执行报告只读取 qc.json 定稿与 processed_index 账本；报告内明确『回滚须连账本』『_qc_verdict 路径缺陷』等结论均以正源为据。",
+      "sourceRefs": ["01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:153", "01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:162"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-inspection-to-shards",
+      "from": "soT.inspection",
+      "to": "proj.window-shards",
+      "type": "projects-to",
+      "sync": "manual",
+      "protocol": "file",
+      "description": "C3 暂停期的替代动作（规约 §二.9 注记①）：被挡窗口报告法师＋己档留痕，不挂账、不代催他窗。",
+      "sourceRefs": ["AI-开工入口.md:100"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.sot-runtime-to-boardstate",
+      "from": "soT.session-runtime",
+      "to": "database.board-state",
+      "type": "projects-to",
+      "sync": "batch",
+      "protocol": "file",
+      "description": "看板读 state/live_sessions.json 取 runtimeState；过期即退回 mtime 推断并在界面标 stateSource。",
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:118"],
       "confidence": "high"
     }
   ]
