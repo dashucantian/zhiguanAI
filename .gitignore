@@ -119,7 +119,7 @@ diagnostics/
 
 # 【L3】课程内容与产品开发区（体量大且非书稿溯源所需）
 03_课程内容/*
-05_产品与开发/
+05_产品与开发/*
 # 〔2026-09-22 D48 法师裁定：例外入库〕语音转写流水线的可复用资产放行（显式文件名，禁通配——
 # 实测 !*.py 通配会连带放行临时脚本）；转写稿／校对稿／定稿／对照表等含讲稿正文者仍全部排除
 !03_课程内容/开示转写/
@@ -127,6 +127,53 @@ diagnostics/
 !03_课程内容/开示转写/转写校对.py
 !03_课程内容/开示转写/佛教术语表.md
 !03_课程内容/开示转写/三模型对比结论与裁决.md
+# 〔2026-10-07 D-1007-W3c 法师裁定「开例外入库」〕可视化任务看板放行——照 D48 同法：显式文件名，禁通配。
+#   原行为目录式排除 `05_产品与开发/`，而 gitignore 无法在已排除目录内再包含文件，故改内容式
+#   `05_产品与开发/*`（上一行）。**其余内容仍一律排除**，只放行下列逐条列名者；
+#   ⚠ state/ 运行态与截图、__pycache__ 一律不在放行清单内（截图属 L3 风险，绝不入库）。
+!05_产品与开发/任务看板/
+05_产品与开发/任务看板/*
+!05_产品与开发/任务看板/board_server.py
+!05_产品与开发/任务看板/board_privacy.py
+!05_产品与开发/任务看板/board_sources.py
+!05_产品与开发/任务看板/board_config.py
+!05_产品与开发/任务看板/selftest.py
+!05_产品与开发/任务看板/README.md
+!05_产品与开发/任务看板/需求与隐私原则_v1.md
+!05_产品与开发/任务看板/启动任务看板.bat
+!05_产品与开发/任务看板/state/
+05_产品与开发/任务看板/state/*
+!05_产品与开发/任务看板/state/.gitignore
+!05_产品与开发/任务看板/static/
+05_产品与开发/任务看板/static/*
+!05_产品与开发/任务看板/static/index.html
+!05_产品与开发/任务看板/ocr_lines.ps1
+# 看板双击入口（根目录）： blanket `*.bat`（第 78 行）之定向例外，仅此一文件，禁通配
+!任务看板.bat
+# 〔2026-10-08 D-1008-W3a 法师裁「架构可视化目录入库·放行」〕架构可视化双轨制产物放行——照 D48／D-1007-W3c 同法：
+#   显式文件名逐条，禁通配。轨一＝架构可视化插件文本源（.dot/.dsl/json/md/mjs，可 diff 可再生）；
+#   轨二＝QGraphFlow 离线 HTML 交付面（双击即开、不出网）。
+#   ⚠ 两个 index.html 系**生成件**（各约 774 KB），重生成命令见 evidence.md §六；
+#   ⚠ 截图、备份件、临时脚本一律不在清单内（截图属 L3 风险，绝不入库）。
+!05_产品与开发/架构可视化/
+05_产品与开发/架构可视化/*
+!05_产品与开发/架构可视化/zhiguan-l2-containers.dot
+!05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md
+!05_产品与开发/架构可视化/zhiguan.structurizr.dsl
+!05_产品与开发/架构可视化/architecture-model.json
+!05_产品与开发/架构可视化/validate-model.mjs
+!05_产品与开发/架构可视化/qgraphflow/
+05_产品与开发/架构可视化/qgraphflow/*
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture.graph.json
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-board-architecture.graph.json
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture/
+05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture/*
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture/index.html
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture/graph.json
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-board-architecture/
+05_产品与开发/架构可视化/qgraphflow/zhiguan-board-architecture/*
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-board-architecture/index.html
+!05_产品与开发/架构可视化/qgraphflow/zhiguan-board-architecture/graph.json
 
 # 【L1 素材层原件】逐字稿与录音转写原件（法师裁定 D2＝不纳入）
 # 含全部成员真名与内部讨论；原件已在本地存档，纳入版本控制收益有限、暴露面大
@@ -249,6 +296,13 @@ _*.java
 !output/20260910_VR标准模板三重分析/
 output/20260910_VR标准模板三重分析/*
 !output/20260910_VR标准模板三重分析/*.py
+# 〔2026-10-04 法师裁 8「甲」〕放行报告 md 与 13 份量化 json：
+#   甄别方式＝逐件实读全文＋严格模式复检（手机号须前后非数字／邮箱／微信／身份证），
+#   结果：宽模式 379 次"11 位数字"命中经核**全为 EEG 高精度浮点数小数尾数**（如 0.013415652212161495），
+#   严格模式**零命中**，邮箱/微信零命中 ⇒ 无个人身份信息。
+#   ⚠️ png 截图与 npz 原始数据**仍排除**（截图可能含真机会话标识＝L3 风险；npz 系原始脑电＝红线①绝不出网）。
+!output/20260910_VR标准模板三重分析/*.md
+!output/20260910_VR标准模板三重分析/*.json
 !output/20260914_W1两项待裁定核查/
 output/20260914_W1两项待裁定核查/*
 !output/20260914_W1两项待裁定核查/*.py
