@@ -215,7 +215,9 @@ class ZhiGuanCadenceBridge:
 # 不写 processed_index、不发 congci_brain 事件——账本与事件单一出口在管线。
 # 确定性：固定 seed，同输入两次运行逐字一致（判语011；脑续修同命）。
 IN_STATE_Z = 0.8                     # in_state 代理阈值（承回放演示口径；非修行判据）
-ALGO_VERSION = "congci-feed-1.0.0"   # 特征/处理算法版本常量（幂等键第三元，随桥声明）
+ALGO_VERSION = "congci-feed-1.1.0"   # 特征/处理算法版本常量（幂等键第三元，随桥声明）
+                                     # 1.0.0→1.1.0（2026-10-08）：sfreq 取源改为
+                                     # meta.sfreq 优先，特征值随之变，故升版另立谱系单元
 
 
 def process_session(npz, *, brain_path=None, out_dir=None, session_key=None,
@@ -258,14 +260,33 @@ def process_session(npz, *, brain_path=None, out_dir=None, session_key=None,
     if eeg.ndim != 2 or eeg.shape[0] < 1 or eeg.shape[1] < 1:
         return _abstain("eeg 需为 (N,C) 二维数组，弃权")
 
-    if "timestamps" in d.files:
-        dt = np.diff(np.asarray(d["timestamps"], dtype=float))
-        dt = dt[dt > 0]
-        sfreq = float(np.round(1.0 / np.median(dt))) if len(dt) else 0.0
-        sfreq_src = "inferred_from_timestamps"
-    else:
-        sfreq = 256.0                       # muse2 report 标准率（未存时间戳）
-        sfreq_src = "assumed_muse256"
+    # sfreq 取源优先级：meta.sfreq（录制端权威声明）→ 端点跨度推断 → 假定 256。
+    # 2026-10-08 修（法师令"喂已入库数据"时捉）：原实现以 np.diff(timestamps) 的
+    # 中位数推率，但新格式 timestamps 存绝对 Unix 纪元（~1.79e9），float64 在该量级
+    # 精度仅 ~1e-6，逐样本间隔被压成量化噪声（实测中位 9.54e-7）→ 推得 1048576 Hz
+    # → win 大于样本总数 → n_epochs=0 → 整坐弃权。旧格式 timestamps 自 0.0 起（相对
+    # 时间）不受影响，故此缺陷只咬 10 月后的新录制。跨度法用首末差除以样本数，对
+    # 精度不敏感、两种格式均成立；但含丢包时算出的是平均率（S18 实测 255.33 对真值
+    # 256），会压频谱轴 0.4%，故仍居 meta 之后。
+    sfreq, sfreq_src = 0.0, "none"
+    try:
+        # meta 是 object 数组须走 pickle；此处只窄读 meta，上面 eeg 的
+        # allow_pickle=False 口径不动（大数组仍不走 pickle）。
+        _ms = float(np.load(npz, allow_pickle=True)["meta"].item().get("sfreq") or 0)
+        if _ms >= 50:
+            sfreq, sfreq_src = _ms, "meta.sfreq"
+    except Exception:
+        pass
+    if sfreq < 50:
+        if "timestamps" in d.files:
+            ts = np.asarray(d["timestamps"], dtype=float)
+            span = float(ts[-1] - ts[0]) if ts.size > 1 else 0.0
+            if span > 0:
+                sfreq = float(round((ts.size - 1) / span))
+                sfreq_src = "inferred_from_span"
+        else:
+            sfreq = 256.0                   # muse2 report 标准率（未存时间戳）
+            sfreq_src = "assumed_muse256"
     if sfreq < 50:
         return _abstain(f"sfreq 不可用（{sfreq}），弃权")
 

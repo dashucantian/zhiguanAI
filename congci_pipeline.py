@@ -316,8 +316,10 @@ def _resolve_npz(row: dict) -> str:
 # ── 准入（金口七项#2/#6；入队前现查）────────────────────────────────────
 
 def _qc_verdict(npz_path: str, qc=None) -> dict:
-    """QC 判定现查：归档位读 03_quality_control/<sid>/qc.json（定稿判定）；
-    暂存位/缺定稿走 qc_pipeline.assess_cached（同管线现算）。返回
+    """QC 判定现查：定稿判定按会话所在区取——归档位（02_raw/<sid>/）读
+    03_quality_control/<sid>/qc.json，隔离位（03_quality_control/quarantine/<sid>/）
+    读同目录 qc.json；暂存位/两处均无定稿走 qc_pipeline.assess_cached（同管线现算）。
+    定稿存在但读不进一律抛出，不静默回落现算。返回
     {recommend, quarantined, source, threshold_version} 或抛异常。"""
     if isinstance(qc, dict) and qc.get("recommend"):
         return {"recommend": qc.get("recommend"),
@@ -325,10 +327,18 @@ def _qc_verdict(npz_path: str, qc=None) -> dict:
                 "source": "fresh", "threshold_version": qc.get("threshold_version")}
     d = os.path.dirname(os.path.abspath(npz_path))
     if os.path.basename(d).startswith("ZEN-"):
-        qj = os.path.join(d, "..", "..", "03_quality_control",
-                          os.path.basename(d), "qc.json")
-        qj = os.path.normpath(qj)
-        if os.path.exists(qj):
+        sid = os.path.basename(d)
+        # 定稿落点随会话所在区不同：归档位在 03_quality_control/<sid>/，隔离位比它深
+        # 一级，定稿就在自己目录里。此处按序探两处，命中即读——隔离标志只存在于定稿，
+        # 现算无从得知人工隔离。归档位表达式保持第一位，其既有行为不变。
+        qj = None
+        for cand in (os.path.normpath(os.path.join(d, "..", "..",
+                                                   "03_quality_control", sid, "qc.json")),
+                     os.path.join(d, "qc.json")):
+            if os.path.exists(cand):
+                qj = cand
+                break
+        if qj is not None:
             with open(qj, "r", encoding="utf-8") as f:
                 q = json.load(f)
             return {"recommend": q.get("recommend"),
