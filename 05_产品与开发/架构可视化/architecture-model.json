@@ -7,7 +7,7 @@
     "generatedAt": "2026-10-07",
     "sourceRefPolicy": "resolvable",
     "sourceRefBase": "D:/Project/zhiguanAI",
-    "refsVerifiedAt": { "at": "2026-10-09", "by": "W3-AI-014", "tree": "working-tree", "baseCommit": "c5faeb5", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。另：board_config.py 亦带他窗在途改动（标准名批次），本件 :68／:73／:78 按工作区记。〔2026-10-09 现势更新〕congci_pipeline.py 现为 HEAD 944 行／工作区 989 行（他窗在途 +45），本件所引 :149 已用 git show HEAD 对过、HEAD 与工作区同行同文；上句 574／652／653 系 10-08 工作区基准所记，本轮未重核，引用前先自核。board_config.py 标准名 40 行已随 c5faeb5 入库，看板窗另有在途注释插行 ⇒ 本件 :68 未动、WINDOWS 表头与本窗行由 :73／:78 顺延为 :74／:79（已改）。AI-开工入口.md 他窗在 §二bis 第 3 条下补一行 ⇒ §二.9 停催令注记由 :99 顺延为 :100（本件两处已改）。AI代理身份登记.md 协调窗 10-09 改 §四／§三bis（裁定 4 双键制）⇒ 本件 :31／:97 经核未动，§四 由 :141 移至 :143（本件不引）。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt。六面正源家族（soT.*／proj.* 共 12 节点＋8 边，10-08 依协调正本 §16.2 新增）逐条现势核对，所引文件除 board_config.py／congci_pipeline.py 外均 clean；congci_pipeline.py:149 已用 git show HEAD 对过，HEAD 与工作区同行同文。〔2026-10-09 复核〕六面家族所引的四件在途文件（AI-开工入口／board_config／AI代理身份登记／congci_pipeline）逐条重取现势行内容，查出并订正 3 处顺延（:99→:100、:73→:74、:78→:79），其余锚点未动；同步订正一处初记错锚（edge.sot-arch-to-graphdual 的 evidence.md:84→:115＋:144）。轨二 source-of-truth-map 的 source 锚点与本台账同源，改这里必须同步改那里并重跑三条命令。", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
+    "refsVerifiedAt": { "at": "2026-10-09", "by": "W3-AI-014（本批＝W3 协调窗 0b5dfd98 接图谱双轨线）", "tree": "working-tree", "baseCommit": "8124cce", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。另：board_config.py 亦带他窗在途改动（标准名批次），本件 :68／:73／:78 按工作区记。〔2026-10-09 现势更新〕congci_pipeline.py 现为 HEAD 944 行／工作区 989 行（他窗在途 +45），本件所引 :149 已用 git show HEAD 对过、HEAD 与工作区同行同文；上句 574／652／653 系 10-08 工作区基准所记，本轮未重核，引用前先自核。board_config.py 标准名 40 行已随 c5faeb5 入库，看板窗另有在途注释插行 ⇒ 本件 :68 未动、WINDOWS 表头与本窗行由 :73／:78 顺延为 :74／:79（已改）。AI-开工入口.md 他窗在 §二bis 第 3 条下补一行 ⇒ §二.9 停催令注记由 :99 顺延为 :100（本件两处已改）。AI代理身份登记.md 协调窗 10-09 改 §四／§三bis（裁定 4 双键制）⇒ 本件 :31／:97 经核未动，§四 由 :141 移至 :143（本件不引）。〔2026-10-09 晚·闭环会话流视图批〕新增 service.experiment-session／module.closedloop-controller／module.closedloop-engine／database.muse-report 四节点＋7 边，并把两处既有边的 refs 补到调用点；本批所引七件文件（console_server／closedloop_experiment／closedloop_controller／closedloop_engine／qc_pipeline／registry_tx／muse_local_server）逐件 ast 现取区间，**工作区行数＝HEAD 行数全 SAME ⇒ 本批锚点无「工作区 vs HEAD」歧义**。congci_pipeline.py 仍带他窗在途 +45 ⇒ 本批一律不引其行号，闭环收口的入队那一跳只在节点 facts 里点名（console_server.py:1152），细节归 congci-feed-sequence 视图。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt。六面正源家族（soT.*／proj.* 共 12 节点＋8 边，10-08 依协调正本 §16.2 新增）逐条现势核对，所引文件除 board_config.py／congci_pipeline.py 外均 clean；congci_pipeline.py:149 已用 git show HEAD 对过，HEAD 与工作区同行同文。〔2026-10-09 复核〕六面家族所引的四件在途文件（AI-开工入口／board_config／AI代理身份登记／congci_pipeline）逐条重取现势行内容，查出并订正 3 处顺延（:99→:100、:73→:74、:78→:79），其余锚点未动；同步订正一处初记错锚（edge.sot-arch-to-graphdual 的 evidence.md:84→:115＋:144）。轨二 source-of-truth-map 的 source 锚点与本台账同源，改这里必须同步改那里并重跑三条命令。", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
     "notes": "所有 sourceRefs 为仓库内可解析路径；未经代码直接证实的一律降级为 low 并在 description 标明 inferred/assumed。"
   },
   "nodes": [
@@ -71,7 +71,7 @@
       "type": "module",
       "state": "current",
       "description": "closedloop_experiment + closedloop_controller：采 Alpha/Theta/Beta，经阈值决策调节等时节拍。",
-      "sourceRefs": ["closedloop_experiment.py:38", "closedloop_experiment.py:43", "console_server.py:71", "console_server.py:72"],
+      "sourceRefs": ["closedloop_experiment.py:38", "closedloop_experiment.py:43", "closedloop_experiment.py:250-634", "console_server.py:71", "console_server.py:72"],
       "confidence": "high"
     },
     {
@@ -89,7 +89,7 @@
       "type": "module",
       "state": "current",
       "description": "判定一律走 qc_pipeline，不从 report.html 取数（P0-1，2026-09-20）。",
-      "sourceRefs": ["console_server.py:76", "qc_pipeline.py"],
+      "sourceRefs": ["console_server.py:76", "console_server.py:161-172", "qc_pipeline.py", "qc_pipeline.py:482-512"],
       "confidence": "high"
     },
     {
@@ -98,7 +98,7 @@
       "type": "module",
       "state": "current",
       "description": "BLE/UDP 接收与分析，位于 muse2 子仓，由 console_server 通过 sys.path 注入后导入。",
-      "sourceRefs": ["console_server.py:60", "console_server.py:193", "closedloop_experiment.py:38"],
+      "sourceRefs": ["console_server.py:60", "console_server.py:193", "closedloop_experiment.py:38", "muse2-repo/muse2-master/muse_local_server.py:340-1189", "muse2-repo/muse2-master/muse_local_server.py:1115-1189"],
       "confidence": "high"
     },
     {
@@ -116,7 +116,7 @@
       "type": "module",
       "state": "current",
       "description": "会话档案事务与事件流（session_events.jsonl）。",
-      "sourceRefs": ["console_server.py:125", "console_server.py:666", "session_contract.py:201"],
+      "sourceRefs": ["console_server.py:125", "console_server.py:666", "registry_tx.py:46", "registry_tx.py:242-259", "session_contract.py:201"],
       "confidence": "high"
     },
     {
@@ -124,8 +124,8 @@
       "label": "VR 视觉场景（WebXR）",
       "type": "module",
       "state": "current",
-      "description": "vr_feedback.html / vr_mandala.html，由 console_server FileResponse 提供。",
-      "sourceRefs": ["console_server.py:2224", "console_server.py:2236"],
+      "description": "vr_feedback.html / vr_mandala.html，由 console_server FileResponse 提供；服务端推流面＝VRSession（:1238-1300）经 /ws/vr（:2202）。",
+      "sourceRefs": ["console_server.py:1238-1300", "console_server.py:2202", "console_server.py:2224", "console_server.py:2236"],
       "confidence": "high"
     },
     {
@@ -307,6 +307,42 @@
       "description": "C3 暂停期间的巡检留痕面：各窗只写自己的 `信箱/engine/巡检日志-W<窗>.txt`，公共登记走 `登记分片/` 一事一片；冻结大文件（台账／决策日志／日志 README §七）归 W3／巡检线单写。",
       "sourceRefs": ["01_项目管理/信箱/engine/巡检日志-W3.txt:1"],
       "confidence": "high"
+    },
+    {
+      "id": "service.experiment-session",
+      "label": "ExperimentSession 闭环会话编排",
+      "type": "service",
+      "state": "current",
+      "description": "驾驶舱内的闭环会话生命周期：起线程调 run_closed_loop、转发 tick／end 事件到 SSE 与 VR、收口时算质检并写会话契约。判定全在闭环三件与 qc_pipeline，本类不自建平行定义（红线5）。",
+      "sourceRefs": ["console_server.py:1025-1182"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.closedloop-controller",
+      "label": "ClosedLoopController 阈值决策层",
+      "type": "module",
+      "state": "current",
+      "description": "个人 Alpha 基线（statistics.median）＋阈值判奖励态，按 θ/β 比自适应目标节拍，输出 (beat_hz, volume, note)；每周期变化量受 vol_smooth_step／beat_step 限幅。",
+      "sourceRefs": ["closedloop_controller.py:28-145", "closedloop_controller.py:99-145"],
+      "confidence": "high"
+    },
+    {
+      "id": "module.closedloop-engine",
+      "label": "IsoEngine 等时节拍音频",
+      "type": "module",
+      "state": "current",
+      "description": "sounddevice OutputStream 回调线程内以「载波正弦 × 脉冲包络」合成等时节拍，运行期热更新 beat／volume／carrier 且无爆音；自身不做任何判定。",
+      "sourceRefs": ["closedloop_engine.py:27-109", "closedloop_engine.py:40"],
+      "confidence": "high"
+    },
+    {
+      "id": "database.muse-report",
+      "label": "report/ 会话落点（npz＋中文报告）",
+      "type": "database",
+      "state": "current",
+      "description": "DataBuffer.save_bin 的唯一落点＝muse2-repo/muse2-master/report/local_{ts}.npz ＋同名中文报告；监测与闭环两条路径共用，即此前所称「暂存池」。闭环另写 experiments/ 三张 CSV。",
+      "sourceRefs": ["muse2-repo/muse2-master/muse_local_server.py:38", "muse2-repo/muse2-master/muse_local_server.py:889", "closedloop_experiment.py:43"],
+      "confidence": "high"
     }
   ],
   "edges": [
@@ -328,8 +364,8 @@
       "type": "calls",
       "sync": "sync",
       "protocol": "in-process",
-      "description": "闭环实验导入 muse_local_server 取频段特征。",
-      "sourceRefs": ["closedloop_experiment.py:38"],
+      "description": "闭环实验导入 muse_local_server 取频段特征，并在每拍读 DataBuffer（compute_band_power → latest_bp）。",
+      "sourceRefs": ["closedloop_experiment.py:38", "closedloop_experiment.py:419-420", "muse2-repo/muse2-master/muse_local_server.py:1115-1189"],
       "confidence": "high"
     },
     {
@@ -383,8 +419,8 @@
       "type": "writes",
       "sync": "sync",
       "protocol": "in-process",
-      "description": "写会话档案与事件流。",
-      "sourceRefs": ["console_server.py:125", "console_server.py:666"],
+      "description": "写会话档案与事件流；登记册那条整段收在 registry_tx 跨进程临界区内（读→分配 S 号→查重→append→原子写）。",
+      "sourceRefs": ["console_server.py:125", "console_server.py:666", "console_server.py:2618", "registry_tx.py:242-259"],
       "confidence": "high"
     },
     {
@@ -605,6 +641,83 @@
       "protocol": "file",
       "description": "看板读 state/live_sessions.json 取 runtimeState；过期即退回 mtime 推断并在界面标 stateSource。",
       "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:118"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.fashi-to-experiment",
+      "from": "actor.fashi",
+      "to": "service.experiment-session",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "HTTP",
+      "description": "先登记后采集：POST /api/registry/preregister（:2603）取 S 号，再 POST /api/experiment/start（:2091）／stop（:2122）。",
+      "sourceRefs": ["console_server.py:2091-2119", "console_server.py:2123-2135", "console_server.py:2603-2623"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.experiment-to-closedloop",
+      "from": "service.experiment-session",
+      "to": "module.closedloop",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "后台线程内 run_closed_loop(cfg, callback=_exp_relay, stop_event, session_info)，逐拍与收口事件经回调回传。",
+      "sourceRefs": ["console_server.py:1136", "console_server.py:1131-1135"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.closedloop-to-controller",
+      "from": "module.closedloop",
+      "to": "module.closedloop-controller",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "每拍：基线期 add_baseline(alpha)（:433），闭环期 update(bp) 返 (beat, vol, note)（:457）。",
+      "sourceRefs": ["closedloop_experiment.py:433", "closedloop_experiment.py:457"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.closedloop-to-engine",
+      "from": "module.closedloop",
+      "to": "module.closedloop-engine",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "决策结果直接写进音频引擎：set_beat／set_volume（基线期 :434-435，闭环期 :458-459），收尾 engine.stop()。",
+      "sourceRefs": ["closedloop_experiment.py:434-435", "closedloop_experiment.py:458-459", "closedloop_engine.py:61-67"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.experiment-to-vr",
+      "from": "service.experiment-session",
+      "to": "ui.vr",
+      "type": "routes-to",
+      "sync": "async",
+      "protocol": "WebSocket",
+      "description": "每个闭环事件同时 broadcaster.publish（SSE）与 VR.push_from_experiment（:1135→:1288），只送指标包（含 beat／vol／bands），经 /ws/vr（:2202）到 WebXR 前端。",
+      "sourceRefs": ["console_server.py:1135", "console_server.py:1288-1300", "console_server.py:2202"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.experiment-to-qc",
+      "from": "service.experiment-session",
+      "to": "module.qc-pipeline",
+      "type": "calls",
+      "sync": "sync",
+      "protocol": "in-process",
+      "description": "end 事件在转发前插 _emit_saved_card：qc_assess(data_path)（:1079）薄委托 assess_cached（:171），随后写会话契约 qc_done＋closed＋vr_interaction（:1104-1120）。",
+      "sourceRefs": ["console_server.py:1079", "console_server.py:171", "console_server.py:1104-1120"],
+      "confidence": "high"
+    },
+    {
+      "id": "edge.closedloop-to-report",
+      "from": "module.closedloop",
+      "to": "database.muse-report",
+      "type": "writes",
+      "sync": "sync",
+      "protocol": "file",
+      "description": "收尾 buf.save_bin(extra_meta{scene, zx_phase, session_info})（:573→muse_local_server.py:889）落 npz＋中文报告；zx_phase 用实际运行证据派生（:566-569）。",
+      "sourceRefs": ["closedloop_experiment.py:573", "closedloop_experiment.py:566-569", "muse2-repo/muse2-master/muse_local_server.py:889"],
       "confidence": "high"
     }
   ]

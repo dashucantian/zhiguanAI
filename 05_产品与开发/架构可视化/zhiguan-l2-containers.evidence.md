@@ -17,6 +17,8 @@
 | `qgraphflow\zhiguan-board-architecture\index.html` | 任务看板那一张：法师↔看板↔MCP↔AI 窗口 | 同上 |
 | `qgraphflow\congci-feed-sequence\index.html` | 从此线那一张：一坐数据按什么顺序进脑（时序图） | 同上 |
 | `qgraphflow\source-of-truth-map\index.html` | 六面正源映射那一张：与上面 DOT 同源，交付面版本 | 同上 |
+| `zhiguan-closedloop-flow.dot` | 一次闭环会话的调用顺序（§七 建议 2·2026-10-09 落地）：登记→采集→阈值→节拍→VR→落盘→质检 | 在 Qoder 里直接打开该文件，插件自带 Graphviz 查看器出 SVG |
+| `qgraphflow\closedloop-session-sequence\index.html` | 同一事实的交付面版本：带 activation 条与基线期／闭环期 alt、逐拍 loop | **双击即开**（离线自包含，无需服务、不出网） |
 | `qgraphflow\*.graph.json` | 上面几张 HTML 的图数据源（QGraphFlow 格式，自带行区间级 `source`） | 改这里再重跑三条命令 |
 
 ## 二、证据来源（已逐条抽查行号属实）
@@ -42,6 +44,29 @@
 - 正源⑤运行巡检＝C3（暂停中）：`AI-开工入口.md:100`（§二.9 暂停＋停催令注记与替代动作；2026-10-09 由 `:99` 顺延 1 行＝他窗在 §二bis 第 3 条下补了一行「自报数必须来自命令原样输出」，非本目录改动）、`01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md`
 - 正源⑥会话运行态＝MCP `list_chat_sessions` 快照：`05_产品与开发/任务看板/需求与隐私原则_v1.md:53`（180 秒新鲜度口径）、`board_sources.py:118`（读 `state/live_sessions.json`）
 - 投影侧另三条：`01_项目管理/任务关系图/生成甘特流程图.py:18`（甘特与思维导图同源同快照）、`01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:153,162`（从此线报告只读消费正源）、`01_项目管理/信箱/engine/巡检日志-W3.txt:1`（C3 暂停期的己档留痕面）
+
+## 二bis、闭环会话流（2026-10-09 新增·§七 建议 2 落地）
+
+节点族＝`service.experiment-session`／`module.closedloop-controller`／`module.closedloop-engine`／`database.muse-report`（＋4 节点／＋7 边，全模型 37 节点／34 边，`node validate-model.mjs` PASSED，high 32/33、medium 5/1）。轨二 `closedloop-session-sequence` 的 9 个 `source` 锚点逐条回落正本（脚本核对＝**未覆盖数 0**）。
+
+锚点全部用 Python `ast` 现取区间＋`git show HEAD:<file>` 对行数（产出件 `_analysis_tmp/_w3_anchor_table.py`）：
+
+| 文件 | 符号 | 区间 | 工作区行数 | HEAD 行数 | 基准 |
+| --- | --- | --- | --- | --- | --- |
+| console_server.py | ExperimentSession | 1025-1182 | 3238 | 3238 | SAME |
+| console_server.py | VRSession | 1238-1300 | 3238 | 3238 | SAME |
+| console_server.py | qc_assess | 161-172 | 3238 | 3238 | SAME |
+| console_server.py | start_experiment／stop_experiment／preregister | 2092-2119／2123-2135／2603-2623 | 3238 | 3238 | SAME |
+| closedloop_experiment.py | run_closed_loop | 250-634 | 673 | 673 | SAME |
+| closedloop_controller.py | ClosedLoopController／update | 28-145／99-145 | 171 | 171 | SAME |
+| closedloop_engine.py | IsoEngine | 27-109 | 121 | 121 | SAME |
+| qc_pipeline.py | assess／assess_cached | 269-389／482-512 | 625 | 625 | SAME |
+| registry_tx.py | preregister_locked／REGISTRY_CSV | 242-259／46 | 296 | 296 | SAME |
+| muse2-repo/muse2-master/muse_local_server.py | DataBuffer／save_bin／compute_band_power／derive_zx_phase／REPORT_DIR | 340-1189／855-1069／1115-1189／285-310／38 | 2001 | 2001 | SAME |
+
+调用点（边的 refs，逐行现取原文）：`closedloop_experiment.py:419-420`（`buf.compute_band_power()`／`bp = buf.latest_bp`）、`:433-435`（基线期 `add_baseline`＋`set_volume/set_beat`）、`:457-459`（`beat, vol, note = ctrl.update(bp)` 后写引擎）、`:566-569`（`derive_zx_phase` 用运行证据）、`:573`（`result = buf.save_bin(extra_meta=exp_meta)`）→ `muse_local_server.py:889`（`data_path = os.path.join(REPORT_DIR, f"local_{ts}.npz")`）；`console_server.py:1131-1136`（`_exp_relay`→`broadcaster.publish`→`VR.push_from_experiment`→`run_closed_loop`）、`:1069/:1079`（`_emit_saved_card` 内 `qc_assess`）、`:1104-1120`（`session_contract.append_event` qc_done＋closed）、`:1152`（`congci_pipeline.enqueue`，**只在 facts 点名、不建边**）、`:2618`（`registry_tx.preregister_locked`）。
+
+两条如实留白：① 收口那一跳 `congci_pipeline.enqueue` 不建边——该文件带他窗在途 +45 行（锚点会漂），且从此线节点族入台账＝丙案候裁（`D-1008-W3b` §八.1）；② `IsoEngine` 到扬声器是框架行为（sounddevice），DOT 里画成 `framework` 虚线注记、模型 JSON 不建边。
 
 ## 三、假设与缺口（confidence 未达 high 的部分）
 
@@ -113,6 +138,7 @@ node <SKILL>/scripts/validate-graph.mjs "<本目录>/qgraphflow/zhiguan-console-
 # board 那张同法，把文件名换成 zhiguan-board-architecture
 # 从此线时序图同法，换成 congci-feed-sequence
 # 六面正源映射同法，换成 source-of-truth-map（改台账 soT.*／proj.* 后必须重跑这三条）
+# 闭环会话时序图同法，换成 closedloop-session-sequence（2026-10-09 新增，改台账 experiment-session／closedloop-* ／muse-report 后重跑这三条）
 
 # 4. 轨一 DOT 渲染（六面正源映射）。插件的 dot 渲染器不是 CLI，靠两个环境变量传参
 #    （签名取自 examples/basic-architecture/run-smoke.mjs:78-93 的 runViewer()，勿臆造 --out）：
@@ -121,6 +147,8 @@ QODER_CANVAS_SCRIPT_ARGS='{"targetFilePath":"D:/Project/zhiguanAI/05_产品与�
 QODER_CANVAS_DATA="$TEMP/sot.canvas.data.json" \
   node "$PLUGIN/canvases/dot/scripts/index.mjs"
 # 产物在 $TEMP/sot.canvas.data.json 的 .["aicoding.formatViewer.dot"].svg；SVG 只落临时目录，不入库
+# 同法渲染闭环会话流那张：把 targetFilePath 换成 zhiguan-closedloop-flow.dot
+#   （2026-10-09 实测 exit 0，SVG 20,735 B／1432×426 pt／class="node" 12 个／class="edge" 16 个，中文无豆腐块）
 ```
 
 > **重跑必读（2026-10-08 实测踩到的坑）**：QGraphFlow 有**版面硬闸**——`route.shared-segment`（两线共用 >12px 走廊）与 `route.parallel-channels`（并行线间距 <24px）算错误，**拒绝写任何产物**。`groups`（进程边界框）会把两条外部边挤进同一走廊，**4 节点小图也照炸**；本目录两张图的 `groups` 已清空（代价＝丢掉「同属一个进程」这一事实）。要恢复边界，只能拆更多视图，不能加回 group。
@@ -128,7 +156,7 @@ QODER_CANVAS_DATA="$TEMP/sot.canvas.data.json" \
 ## 七、下一步建议（候法师裁定，未执行）
 
 1. 把 `validate-model.mjs` 收进 `收口检查.ps1` 或 `vr_gates` 总跑器，成为一道闸——改动 console_server/board_server 后，架构图与代码不一致就报错。对应插件的 `architecture-health` 场景。
-2. 补 `flow-visualizer`：画一张「一次闭环会话」的时序/数据流（采集→质检→阈值→节拍→VR→落盘→登记册），这是目前最缺的一张图。
+2. ~~补 `flow-visualizer`：画一张「一次闭环会话」的时序/数据流（采集→质检→阈值→节拍→VR→落盘→登记册），这是目前最缺的一张图。~~ **已执行（2026-10-09，W3 协调窗接图谱双轨线）：轨二 `closedloop-session-sequence`（10 参与者／25 消息／4 fragment，语义＋几何＋sourceEvidence 9/9 全过）＋轨一 `zhiguan-closedloop-flow.dot`，见 §二bis。**
 3. 补 `dependency-impact-analyzer`：以 `console_server.py` 为根出爆炸半径图。注意该文件常有他窗在途改动，正是最需要影响面的地方。
 4. 缺口补证：`closedloop`→`bridge` 直接调用点（medium 升 high）。
 
@@ -158,4 +186,17 @@ QODER_CANVAS_DATA="$TEMP/sot.canvas.data.json" \
 
 **边界（协调窗派单原文）**：本件**未改**规约正本 `AI-开工入口.md`、**未改** L1、**未** push、**未** `git add .`；`board_config.py`／`congci_pipeline.py` 等他窗在途件只读未动。
 
-**§七 四项建议仍候裁，未执行。**
+**§七 四项建议：2 已执行（2026-10-09，见 §九），1／3／4 仍候裁、未执行。**
+
+## 九、2026-10-09 晚·闭环会话流视图落地（W3 协调窗 0b5dfd98 接图谱双轨线）
+
+**线权交接**：原执行会话 `W3｜图谱双轨｜6c7d4751` 现 cold，法师在本窗点「图谱双轨线」⇒ 本窗接手两台账（`evidence.md`／`architecture-model.json`）与两侧产物的写权。**法师待办里那条 MCP 重连本轮顺带证伪一半**：`:8848` 现**无监听**（`netstat` 0 命中），面板重连也连不上，须先起看板服务——而起服务又是一次 MCP 断连事件（规约 §二bis 硬规则 6 末句）。
+
+**落地物**：轨二 `qgraphflow/closedloop-session-sequence{.graph.json,/}`（10 参与者／25 消息／4 fragment／4 activation 条）、轨一 `zhiguan-closedloop-flow.dot`、台账 +4 节点／+7 边＋两处既有边 refs 补到调用点。三道闸原样：`validate-model.mjs` **PASSED**（37 节点／34 边，high 32/33）；QGraphFlow `--input-only` 语义 passed、`sourceEvidence 9/9 passed（working-tree，7 文件）`；`generate-viewer` **geometry passed**、复验同过。**版面硬闸本轮未触发**（`groups` 仍留空，沿用 §六 重跑必读的纪律）。
+
+**⚠本窗一处程序顺序倒置（自曝）**：双轨制令是「先改台账、再重生成两侧」，本窗实际**先出轨二、后补台账**。原因是轨二源件写作时锚点已按台账口径取，但落笔次序反了。已当场补救并留证：补完台账后跑脚本逐条核轨二 9 个 `source` 锚点是否被正本 refs 覆盖＝**未覆盖数 0**，`validate-model.mjs` 复跑 PASSED。**产物本身不错，错的是次序**；下一批照令办。
+
+**对 6c7d4751 三件候答复（协调窗口径，本窗裁定并即刻生效，不越法师既裁）**：
+1. **`--force`**：覆盖**本窗自产、未提交、同一命令可重出**的同名产物 ⇒ **不需法师明示**，但须在己档与本节各留一行「覆盖了什么、何时生成」；一旦覆盖对象**已入库或属他窗**，一律先删后生成并候法师明示。本窗本轮**未用 `--force`**（源件写完后未再变更，无需重出）。
+2. **正源④／⑥ confidence**：**仍不升 high**。④＝批 B 未定案（`congci_pipeline.py` 他窗在途 +45 未入库，施工顺序硬约束两窗共证在生效）；⑥＝单写方从未实跑（且 `:8848` 现不在听）。台账维持 medium。
+3. **锚点基准规则升格入规约**：本窗收下其 3 处静默顺延实证，但**规约一字未动**——该议题属 §16.3 规则贯通批、逐项候法师裁，且法师 10-08 对「双轨制升格」示过「再议」，同类升格不自走。本轮新实证＝**七件文件工作区行数＝HEAD 行数全 SAME ⇒ 基准歧义可以实测消解**（判据：`ast` 现取区间＋`git show HEAD:<file>` 数行数），这条比旧实证更可直接落成动作。
