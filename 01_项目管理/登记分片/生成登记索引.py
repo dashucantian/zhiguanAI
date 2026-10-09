@@ -85,5 +85,60 @@ lines += ["## D. 工作日志（文件天然分片）", "",
           f"- 标题号缺号：{('、'.join(f'{n:03d}' for n in gaps)) if gaps else '无（缺号者多为无号旧档，属预期）'}",
           "- 标题级总索引仍以 `工作日志\\README.md` §七 为冻结载体；今后新日志不再手写该表，由本生成器汇总（后续版本接入）。", ""]
 
+# E. 分片署名行核查（D-1009-W3b 新制）
+# 只查"本制之后新建"的分片。判据＝git **首次入库时刻**：早于裁定时刻者＝制前旧件，
+# 一律豁免（法师裁「不回填」，把已入库旧号报成缺项＝变相逼回填，违背该裁）；
+# 未入库（表里没有）者＝本制后新件，要求署名。常量带年份，跨年自动无歧义。
+EFFECTIVE = "2026-10-09 15:30"      # 法师「三点同意」时刻
+SIG = re.compile(r"^署｜([^｜]*)｜([^｜]*)｜([^｜]*)｜([^｜]*)$", re.M)
+DATELINE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
+
+def first_added_dates():
+    """一次性扫本目录各件的首次入库时间 → {文件名: 'YYYY-MM-DD HH:MM'}。git 不可用返 None。"""
+    import subprocess
+    try:
+        raw = subprocess.run(
+            ["git", "log", "--diff-filter=A", "--name-only", "--format=%ad",
+             "--date=format:%Y-%m-%d %H:%M", "--", HERE],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30).stdout
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    cur, m = None, {}
+    for ln in raw.splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        if DATELINE.match(ln):
+            cur = ln
+        elif cur and ln.endswith(".md"):
+            k = os.path.basename(ln.replace("/", os.sep))
+            if k not in m or cur < m[k]:
+                m[k] = cur
+    return m
+
+added = first_added_dates()
+if added is None:
+    lines += ["## E. 署名行核查（`署｜任务号｜窗别｜会话短号｜AI号`）", "",
+              "- ？git 不可读，**本项本轮未执行**——不静默判合格，请人工核查。", ""]
+else:
+    req, exempt, miss = 0, 0, []
+    for fn in sorted(os.listdir(HERE)):
+        if not (fn.endswith(".md") and (fn.startswith("KZ-") or fn.startswith("D-"))):
+            continue
+        a = added.get(fn)
+        if a and a < EFFECTIVE:
+            exempt += 1          # 制前已入库旧件，豁免且不回填
+            continue
+        req += 1
+        if not SIG.search(read(os.path.join(HERE, fn)) or ""):
+            miss.append(fn[:-3])
+    lines += ["## E. 署名行核查（`署｜任务号｜窗别｜会话短号｜AI号`）", "",
+              f"- 裁定时刻＝{EFFECTIVE}｜本制后应署 **{req}** 件，缺署名行 **{len(miss)}** 件｜制前豁免 **{exempt}** 件",
+              f"- 缺项清单：{('、'.join(miss)) if miss else '无'}",
+              "- 本项为**旁路提示，非提交闸门**（法师 2026-10-09 裁「不加 `收口检查.ps1` 闸门」，接受会漂）；缺项者下批提交前补一行即可，历史件不回改。", ""]
+
 io.open(OUT, "w", encoding="utf-8", newline="\n").write("\n".join(lines).replace("\n\n\n", "\n\n"))
 print("写出", OUT, len(lines), "行；分片", len(frag), "条；KZ标题", len(kz_head), "；D", len(dh), "；日志号", len(nums))
