@@ -140,5 +140,57 @@ else:
               f"- 缺项清单：{('、'.join(miss)) if miss else '无'}",
               "- 本项为**旁路提示，非提交闸门**（法师 2026-10-09 裁「不加 `收口检查.ps1` 闸门」，接受会漂）；缺项者下批提交前补一行即可，历史件不回改。", ""]
 
+# F. 悬案清单（D-1010-W3COORD-0b5dfd98 §四；坑 022 的机器载体）
+# 病根：写下「候法师另示」＝自认已尽告知，此后无人再提即烂在那里（§25 悬了 24 小时、三轮收口未重列）。
+# 解法：把"我记得"换成"枚举不得不漏"——扫出全部悬案标记，按挂了几天倒序排，最老的排第一。
+# ⚠只报不判结案；且**零命中＝形状失效，绝不当作"已清零"**（教训 7.1／坑 017／坑 022 同一解药）。
+PENDING = re.compile(r"(候法师另示|候法师一句|候您一句|候法师裁|候裁定|候裁|候一句|候示)")
+PEND_TARGETS = [os.path.join(ROOT, "01_项目管理",
+                             "20261008_W3_全项目协同整合基础与首批施工契约_v0.1.md")]
+PEND_TARGETS += [os.path.join(HERE, f) for f in sorted(os.listdir(HERE))
+                 if f.endswith(".md") and (f.startswith("KZ-") or f.startswith("D-"))]
+import datetime as _dt
+_today = _dt.date.today()
+_hits, _unreadable = [], []
+for _p in PEND_TARGETS:
+    _txt = read(_p)
+    if _txt is None:
+        _unreadable.append(os.path.basename(_p))
+        continue
+    _fn = os.path.basename(_p)[:-3]
+    _age_src = added.get(_fn + ".md") if added else None
+    for _i, _ln in enumerate(_txt.splitlines(), 1):
+        if not PENDING.search(_ln):
+            continue
+        _s = _ln.strip().lstrip(">|# ").replace("|", "｜")
+        if len(_s) > 56:
+            _s = _s[:56] + "…"
+        _days = ""
+        if _age_src:
+            try:
+                _days = (_today - _dt.datetime.strptime(_age_src[:10], "%Y-%m-%d").date()).days
+            except Exception:
+                _days = ""
+        _hits.append((_days if _days != "" else -1, _fn, _i, _s))
+_hits.sort(key=lambda x: (-x[0], x[1]))
+lines += ["## F. 悬案清单（「候裁／候另示／候一句」全量枚举，按挂了几天倒序）", ""]
+if not _hits:
+    lines += ["- ⚠**本轮一个悬案标记都没读到**（扫了 %d 件）。**这不是「已清零」**——最可能是标记措辞变了或文件被移动，"
+              "**本项不可信，请人工核查**（同坑 017 恒空转、坑 022 不自知）。" % len(PEND_TARGETS), ""]
+else:
+    _old = [h for h in _hits if h[0] >= 3]
+    lines += ["- 扫 %d 件｜命中 **%d** 处｜**挂 ≥3 天的 %d 处**（这些是最危险的一档：没人再提就等于放弃了）"
+              % (len(PEND_TARGETS), len(_hits), len(_old)),
+              "- 判据来源＝文件**首次入库日**（非文中日期，同 §25.4.3 的教训）。尚未入库者无此日 ⇒ 标「未知」排末位（**不等于不危险，只是无据可算**）。",
+              "- **结案口径**：法师给字＝结案；本窗撤案＝也须写明撤与理由。**不得静默消失**（坑 022 解法 1）。", ""]
+    for _d, _fn, _i, _s in _hits[:14]:
+        _lab = "未知" if _d < 0 else str(_d)
+        lines.append("- 挂 %s 天｜`%s`:%d｜%s" % (_lab, _fn, _i, _s))
+    if len(_hits) > 14:
+        lines.append("- …其余 %d 处未列（本项限 14 行以压认知负荷；全量请 grep）" % (len(_hits) - 14))
+    if _unreadable:
+        lines.append("- ⚠读不到而跳过的件：%s" % "、".join(_unreadable[:6]))
+lines += ["- ⚠**旁路提示非闸门**（法师 10-09 裁「不加 `收口检查.ps1` 闸门」未被覆盖）。每次收口**须逐条重列于提请清单**，否则即坑 022 复发。", ""]
+
 io.open(OUT, "w", encoding="utf-8", newline="\n").write("\n".join(lines).replace("\n\n\n", "\n\n"))
 print("写出", OUT, len(lines), "行；分片", len(frag), "条；KZ标题", len(kz_head), "；D", len(dh), "；日志号", len(nums))
