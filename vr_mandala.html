@@ -349,7 +349,6 @@ const stage = STAGE_ON ? {
   exitAt: null, endCalledAt: null, endAt: null, endObserved: false,
   fromSystem: false, endErr: null, report: null, gatherDone: false,
 } : { on: false };
-const loadEl = document.getElementById('load');
 const baseSnap = STAGE_ON ? {
   fog: scene.fog.density,
   opac: breathLayers.map(L => L.base),
@@ -576,11 +575,7 @@ function stageTickInner(timeMs) {
   stage.lastT = t;
   const p = STAGES[stage.idx];
 
-  if (p.key === 'enter') {
-    const k = Math.min(1, (t - stage.t0) / ENTER_S);
-    loadEl.style.opacity = String(1 - k);
-    if (k >= 1) loadEl.style.display = 'none';
-  }
+  /* 进入段不再由 JS 推黑场——见 #stageFade 纯 CSS 动画（rAF 停摆时会盖黑） */
   if (p.key === 'change' && SYNTH_ON) {
     const i = Math.min(SYNTH_SEQ.length - 1, Math.floor((t - stage.t0) / SEGSEC));
     while (stage.synthEmitted < i) { stage.synthEmitted += 1; synthStep(stage.synthEmitted); }
@@ -617,6 +612,11 @@ function updateBadge() {
 if (STAGE_ON) {
   const st = document.createElement('style');
   st.textContent =
+    /* 进入段黑场＝纯 CSS 动画，零 JS 依赖：动画跑不跑都不挡点击（pointer-events:none）、
+       跑完自己透明（forwards）。若改由 rAF 推，页面一旦不可见即永久盖黑。 */
+    '#stageFade{position:fixed;inset:0;z-index:21;background:#000;pointer-events:none;' +
+    'animation:zgEnterFade ' + ENTER_S + 's linear forwards}' +
+    '@keyframes zgEnterFade{from{opacity:1}to{opacity:0}}' +
     '#stageBadge{position:fixed;right:16px;top:14px;z-index:12;font-size:12px;' +
     'line-height:1.7;color:#8a7a5c;letter-spacing:1px;text-align:right;user-select:none}' +
     '#stageReport{position:fixed;inset:0;z-index:22;background:#000;display:none;' +
@@ -626,6 +626,15 @@ if (STAGE_ON) {
     '#stageReport .s{color:#6b5630;font-size:12px;margin-top:14px}' +
     '#stageReport .h{color:#6b5630;font-size:12px;margin-top:6px}';
   document.head.appendChild(st);
+  const fade = document.createElement('div');
+  fade.id = 'stageFade'; document.body.appendChild(fade);
+  fade.addEventListener('animationend', () => { fade.style.display = 'none'; });
+  /* 页面不可见时 CSS 动画同样被节流（实测 hidden 下 opacity 恒 1）⇒ 直接不演
+     这段渐隐。原则＝进入段可有可无，场景绝不能被盖住。 */
+  const killFade = () => { fade.style.display = 'none'; };
+  if (document.visibilityState !== 'visible') killFade();
+  document.addEventListener('visibilitychange',
+    () => { if (document.visibilityState !== 'visible') killFade(); });
   badgeEl = document.createElement('div');
   badgeEl.id = 'stageBadge'; document.body.appendChild(badgeEl);
   const rep = document.createElement('div');
@@ -803,8 +812,11 @@ document.getElementById('hud').textContent =
   '曼荼罗场域 · ' + spec.label + (BREATH_ON ? ' · S2 呼吸中' : '');
 
 /* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色）。
-   ?stage=1 例外：黑场交还"进入"段做 3.0 s 渐隐（件2 段1），由 stageTick 收尾。 */
-if (!STAGE_ON) document.getElementById('load').style.display = 'none';
+   无条件撤除，**不得挂在动画循环上**：?stage=1 曾把撤除交给 stageTick，
+   结果页面一旦不可见（后台标签／头显 2D 视图未聚焦），rAF 停摆、段机零帧、
+   不透明黑场永久盖住整屏＝法师 10-10 真机所见"打开只剩空白"（实测
+   visibilityState=hidden 时 rafFrames=0）。进入段的渐隐改由纯 CSS 动画承担。 */
+document.getElementById('load').style.display = 'none';
 
 /* 窗口自适应 */
 addEventListener('resize', ()=>{

@@ -8,8 +8,9 @@
   4. 三值分层未合并——measure/suggest/output 三列分列，未接线者为 null 不以 0 填充
   5. 红线2：退出屏上只有 采集/保存/异常，不出现绩效评分
   6. 骨架自身无 JS 错误、无 stage_error 事件
+  7. 进入段跑完后场景不得仍被遮（黑场与渐隐层都必须自己撤干净）
 
-反证（--counter）：把页面源码改坏五处，逐条要求对应判据 FAIL。
+反证（--counter）：把页面源码改坏六处，逐条要求对应判据 FAIL。
 
 用法：
     python verify_mandala_stage.py            # 正跑（须 console_server 在 8777）
@@ -84,9 +85,17 @@ async def send(ws, method, params=None):
             return m["result"]
 
 
+async def until(base, secs):
+    """按"自导航起算的绝对时刻"睡眠，避免各段误差累积。"""
+    d = base + secs - time.perf_counter()
+    if d > 0:
+        await asyncio.sleep(d)
+
+
 async def collect(ws, url, do_exit=True, gather_wait=3.0):
-    """跑一遍页面，返回 {diag, events, report, panel, err, exit_call_ms}。"""
+    """跑一遍页面，返回 {diag, events, report, panel, err, exit_call_ms, overlay}。"""
     await send(ws, "Page.navigate", {"url": url})
+    base = time.perf_counter()
     await asyncio.sleep(1.2)
     err = await ev(ws, "window.__vrErr || ''")
     diag = await ev(ws, "JSON.stringify(window.__mandalaDiag ? __mandalaDiag.pathStage : null)")
@@ -95,12 +104,23 @@ async def collect(ws, url, do_exit=True, gather_wait=3.0):
                        "report:!!document.getElementById('stageReport')})")
     out = {"diag": json.loads(diag) if diag else None,
            "dom": json.loads(dom) if dom else {}, "err": err,
-           "events": [], "report": None, "panel": "", "exit_call_ms": None}
+           "events": [], "report": None, "panel": "", "exit_call_ms": None,
+           "overlay": None, "visibility": None}
     if not do_exit:
         return out
+    # 进入段（3s）跑完后再探一次遮挡：黑场与进入段渐隐都不得还盖着场景。
+    # 这条是 10-10 真机回报逼出来的——曾把 #load 撤除挂到 rAF 上，页面一旦
+    # 不可见（后台标签／头显 2D 视图未聚焦）即整屏永久黑＝"打开只剩空白"。
+    await until(base, 3.6)
+    out["visibility"] = await ev(ws, "document.visibilityState")
+    ov = await ev(ws, "JSON.stringify({load:getComputedStyle(document.getElementById('load')).display,"
+                      "fade:(()=>{const f=document.getElementById('stageFade');"
+                      "if(!f)return null;const c=getComputedStyle(f);"
+                      "return {display:c.display,opacity:+parseFloat(c.opacity).toFixed(3)};})()})")
+    out["overlay"] = json.loads(ov) if ov else None
     # 时间线（segsec=2）：enter 0–3 → dwell 3–5 → change 5–13 → gather 13–19。
-    # 已睡 1.2s，再睡 13-1.2+gather_wait ⇒ 落在收束早段，退出才测得到"打断渐变"。
-    await asyncio.sleep(3.0 + 2.0 + 2.0 * 4 - 1.2 + gather_wait - 1.5)
+    # 落在收束早段发退出，才测得到"打断渐变"。
+    await until(base, 3.0 + 2.0 + 2.0 * 4 + gather_wait - 1.5)
     # 先起一次（模拟）会话：不点这一步，退出路径走的是"无会话"分支，
     # ourPathMs 定义上恒为 0，判据 3 就成了空转（03:4x 反证实测抓到）。
     await ev(ws, "document.getElementById('btnVR').click()")
@@ -213,6 +233,21 @@ def judge_no_score(o):
           f"屏上缺项：{[k for k in need if k not in panel]}")
 
 
+def judge_overlay(o):
+    """判据 7：进入段跑完后，场景不得仍被任何全屏层盖住。"""
+    print("\n── 判据 7：进入段后场景不得被遮（真机「打开只剩空白」回报所立）──")
+    ov = o.get("overlay")
+    if not ov:
+        check(False, "", "遮挡探针未取到——本判据没跑成，不等于通过")
+        return
+    check(ov.get("load") == "none", "黑场 #load 已撤",
+          f"#load 仍在显示：{ov.get('load')}——骨架把主视图夺走了")
+    f = ov.get("fade")
+    clear = f is None or f.get("display") == "none" or f.get("opacity", 0) < 0.02
+    check(clear, f"进入段渐隐已尽（页面 {o.get('visibility')}／fade＝{f}）",
+          f"进入段结束后仍有全屏遮挡：{f}")
+
+
 def judge_no_error(o):
     print("\n── 判据 6：骨架自身无错 ──────────────────────────────────")
     check(not (o.get("err2") or o.get("err")),
@@ -238,6 +273,9 @@ MUTATIONS = [
     ("屏上弹评分", "c5_score_popup.html",
      [("    '<div>异常：' + errs + '</div>' +",
        "    '<div>异常：' + errs + '</div>' + '<div>本次得分：92</div>' +")], judge_no_score),
+    ("进入段遮不撤净", "c7_overlay_stuck.html",
+     [("    'animation:zgEnterFade ' + ENTER_S + 's linear forwards}' +",
+       "    'animation:zgEnterFade 3000s linear forwards}' +")], judge_overlay),
 ]
 
 
@@ -321,6 +359,7 @@ async def run_normal(base):
         judge_three_values(o)
         judge_no_score(o)
         judge_no_error(o)
+        judge_overlay(o)
     finally:
         proc.kill()
 
