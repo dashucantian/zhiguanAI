@@ -309,11 +309,349 @@ const breathState = BREATH_ON
   ? { fog: spec.fog, glow: spec.orb.glow, lastT: null }
   : null;
 
+/* ══ 五段路径骨架（件 3，2026-10-10，W1·VR 场景设计专责窗）════════
+   五段＝用户路径拆分，**不替代 S3 五相义理定义**（协调正本 §12.2 原边界）。
+   默认关闭：URL 不带 ?stage=1 时本块只执行一次常量判断，不建 DOM、不注册
+   回调、不进渲染循环 ⇒ 已认可版本的逐像素行为不变（循 S2 呼吸"显式关断
+   仍可回归"的先例，规格 §三.4）。
+   两条由现有闸门逼出的实现约束（不是偏好）：
+     · 时长一律由渲染循环的真实时间差驱动——静态闸源码级禁定时器
+       （vr_gates/verify_mandala_static.py:119）。
+     · 本块不得引入任何音视频元素——同闸 :118 源码级禁，故"退出四条件"里
+       的声音一项在本场景**结构上为 N/A**，如实标注，不冒认通过。 */
+const QSTAGE = new URLSearchParams(location.search);
+const STAGE_ON = QSTAGE.get('stage') === '1';
+const ENTER_S  = 3.0;                       // 段1 黑场渐隐（义理值候裁，件2 §五 N5）
+const GATHER_S = 6.0;                       // 段4 回基线渐变（同上候裁）
+const SEGSEC   = parseFloat(QSTAGE.get('segsec') || '20');   // 合成契约段驻留，默认 20 s
+const SYNTH_ON = STAGE_ON && QSTAGE.get('synth') !== '0';
+const SYNTH_SEQ = [0.2, 0.5, 0.7, 0.4];     // 件2 §三 合成输入序列（固定可重放）
+const XR_MOCK  = STAGE_ON && QSTAGE.get('xrmock') === '1';
+const MOCK_END_MS = parseFloat(QSTAGE.get('mockend') || '0');
+
+const STAGES = STAGE_ON ? [
+  { key: 'enter',  cn: '进入', dur: ENTER_S },
+  { key: 'dwell',  cn: '安住', dur: SEGSEC },
+  { key: 'change', cn: '变化', dur: SEGSEC * SYNTH_SEQ.length },
+  { key: 'gather', cn: '收束', dur: GATHER_S },
+  { key: 'exit',   cn: '退出', dur: 0 },
+] : null;
+
+/* 变化段载体缺口（实测，非推测）：本机 WebGL2 下
+   ALIASED_LINE_WIDTH_RANGE＝[1,1]（AMD 8060S／SwiftShader 两路同果），
+   three.js 的 LineBasicMaterial.linewidth 被渲染器忽略 ⇒ 件2 §段3 的
+   "线宽微观呼吸"在本技术栈**不可实现**，载体形式候法师择（件3 出件 §三）。
+   本块因此对 change 段只记三值分层事件，不伪造任何视觉变化。 */
+
+const stage = STAGE_ON ? {
+  on: true, idx: 0, t0: null, lastT: null, wallT0: null,
+  events: [], synthEmitted: -1, fault: false, tickErr: null,
+  exitAt: null, endCalledAt: null, endAt: null, endObserved: false,
+  fromSystem: false, endErr: null, report: null, gatherDone: false,
+} : { on: false };
+const loadEl = document.getElementById('load');
+const baseSnap = STAGE_ON ? {
+  fog: scene.fog.density,
+  opac: breathLayers.map(L => L.base),
+  glow: BREATH_ON ? BREATH.glow.base : glow.scale.x,
+} : null;
+let xrSessionRef = null;
+
+function pushEvent(kind, extra) {
+  const e = Object.assign({
+    phase: STAGES[stage.idx].key,
+    atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
+    variant: VARIANT_KEY, kind,
+  }, extra || {});
+  stage.events.push(e);
+  return e;
+}
+
+function synthStep(i) {
+  /* 三值分层：measure（合成值）／suggest（决策层）／output（最终场景输出）
+     分列不合并；未接线者留 null，不以 0 填充（件2 §三）。 */
+  stage.events.push({
+    phase: 'change', atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
+    variant: VARIANT_KEY, kind: 'synth', synth: true, seqIndex: i,
+    measure: SYNTH_ON ? SYNTH_SEQ[i] : null,
+    suggest: null, output: null,
+    note: 'suggest 未接线（决策层属 S6）；output 无载体（linewidth 恒 1px 实测）',
+  });
+}
+
+function stageFreezesBreath() {
+  /* 收束／退出段：三路归"回基线"独占，呼吸驱动暂停。这不是改呼吸参数——
+     三路 amp/period/tau 一字未动，只是段路径要求"停止引入任何新变化"。 */
+  return STAGE_ON && stage.idx >= STAGES.length - 2;
+}
+
+function returnToBase(dt, hard) {
+  /* 收束＝把三路拉回进入前基线；hard＝退出已发生，立即锁定（红线 5：
+     退出安全不得等待渐变）。锁定后呼吸不再接管，故基线不会被覆盖回去。 */
+  if (hard) {
+    scene.fog.density = baseSnap.fog;
+    glow.scale.setScalar(baseSnap.glow);
+    for (const L of breathLayers) { L.cur = L.base; L.mesh.material.opacity = L.cur; }
+    if (BREATH_ON) { breathState.fog = baseSnap.fog; breathState.glow = baseSnap.glow; }
+    return;
+  }
+  const follow = 1 - Math.exp(-dt / (GATHER_S / 6));
+  if (BREATH_ON) {
+    breathState.fog  += (baseSnap.fog  - breathState.fog)  * follow;
+    breathState.glow += (baseSnap.glow - breathState.glow) * follow;
+    scene.fog.density = breathState.fog;
+    glow.scale.setScalar(breathState.glow);
+    for (const L of breathLayers) {
+      L.cur += (L.base - L.cur) * follow;
+      L.mesh.material.opacity = L.cur;
+    }
+  }
+  const rel = baseDelta().max;
+  if (rel <= 0.005 && !stage.gatherDone) {
+    stage.gatherDone = true;
+    pushEvent('base_returned', { maxRel: +rel.toExponential(2) });
+  }
+}
+
+function baseDelta() {
+  const cur = { fog: scene.fog.density,
+                opac: breathLayers.map(L => L.mesh.material.opacity),
+                glow: glow.scale.x };
+  const rel = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-9);
+  let max = rel(cur.fog, baseSnap.fog);
+  cur.opac.forEach((o, i) => { max = Math.max(max, rel(o, baseSnap.opac[i])); });
+  max = Math.max(max, rel(cur.glow, baseSnap.glow));
+  return { max, cur, base: baseSnap };
+}
+
+/* 桌面无 WebXR 时的退出路径自测钩子：只验"我方发退出→调 session.end→
+   收到 end 事件"的时序与是否等待渐变，**不碰 renderer.xr、不验 WebXR 本身**
+   （真机 WebXR 须法师在场，金口#7）。 */
+function makeMockSession() {
+  const ls = {};
+  const fire = (k) => (ls[k] || []).forEach(f => { try { f({ type: k }); } catch (e) {} });
+  return {
+    isMock: true,
+    addEventListener: (k, f) => { (ls[k] = ls[k] || []).push(f); },
+    end() {
+      if (MOCK_END_MS <= 0) { requestAnimationFrame(() => fire('end')); return Promise.resolve(); }
+      const t0 = performance.now();
+      (function poll() {
+        if (performance.now() - t0 >= MOCK_END_MS) { fire('end'); return; }
+        requestAnimationFrame(poll);
+      })();
+      return Promise.resolve();
+    },
+  };
+}
+
+function finalizeReport(reason) {
+  const d = baseDelta();
+  const hasAudio = !!(document.querySelector('audio') || document.querySelector('video'));
+  const ourPathMs = (stage.endCalledAt !== null && stage.exitAt !== null)
+    ? +(stage.endCalledAt - stage.exitAt).toFixed(1) : null;
+  const endToEndMs = (stage.endAt !== null && stage.exitAt !== null)
+    ? +(stage.endAt - stage.exitAt).toFixed(1) : null;
+  const xr = stage.endObserved
+    ? { verdict: (stage.exitAt === null || ourPathMs <= 500) ? 'PASS' : 'FAIL',
+        mock: !!XR_MOCK, fromSystem: !!stage.fromSystem,
+        presentingAfter: renderer.xr.isPresenting, ourPathMs, endToEndMs }
+    : { verdict: 'FAIL', reason: '未收到 end 事件', mock: !!XR_MOCK, ourPathMs, endToEndMs };
+  stage.report = {
+    variant: VARIANT_KEY, variantLabel: spec.label,
+    measured: false,                 // 本场景全程不接脑电，无测量
+    synthOnly: SYNTH_ON,
+    reason,
+    conditions: {
+      xrSessionEnded: xr,
+      soundStopped: hasAudio
+        ? { verdict: 'PENDING', reason: '存在媒体元素，须实测 paused/currentTime 与听感' }
+        : { verdict: 'N/A', reason: '本场景源码级禁音视频（verify_mandala_static.py:118），无音频可停；S4 接入后须实测且听感候法师在场' },
+      feedbackAtBaseline: {
+        /* 锁定后的瞬时偏差恒 0，属"由构造成立"；真读数看锁定前的
+           deltaAtExitRel——收束渐变被退出打断时它不为 0，如实呈。 */
+        verdict: d.max <= 0.005 ? 'PASS' : 'FAIL',
+        maxRelDeltaAfterSnap: +d.max.toExponential(2),
+        maxRelDeltaAtExitInstant: stage.deltaAtExit === undefined ? null
+          : +stage.deltaAtExit.toExponential(2),
+        phaseAtExit: stage.phaseKeyAtExit || null,
+        phaseElapsedSecAtExit: stage.phaseElapsedAtExit === undefined ? null
+          : +stage.phaseElapsedAtExit.toFixed(3),
+        gatherSecPlanned: GATHER_S,
+        byConstruction: '退出即锁定三路（红线 5 要求不等渐变），故锁定后偏差恒 0',
+        note: d.max <= 0.005 ? '三路参数等于进入前快照（锁定后）' : '锁定后仍偏离基线——异常',
+        cur: d.cur, base: d.base,
+      },
+      dataSaved: { verdict: 'N/A', reason: '本场景不落盘、不采集（S6 未接），无保存返回码' },
+    },
+    errors: [window.__vrErr, stage.endErr].filter(Boolean),
+    events: stage.events,
+  };
+  window.__stageReport = stage.report;
+  /* 头显侧经 adb logcat 取证的出口（PICO CLI 观察面） */
+  console.log('ZHIGUAN_EXIT_REPORT ' + JSON.stringify(stage.report));
+  renderExitPanel(stage.report);
+}
+
+function requestExit(reason) {
+  if (!STAGE_ON || stage.idx === STAGES.length - 1) return;
+  stage.exitAt = performance.now();
+  /* 退出瞬间先量三路偏离基线程度，再锁定——顺序很要紧：锁定后偏差恒 0，
+     只报锁定后的值等于自证通过（红线4 ③ 的真读数会丢）。 */
+  stage.deltaAtExit = baseDelta().max;
+  stage.phaseElapsedAtExit = (stage.exitAt - stage.phaseAt) / 1000;
+  stage.phaseKeyAtExit = STAGES[stage.idx].key;
+  stage.idx = STAGES.length - 1;
+  stage.t0 = performance.now() / 1000;
+  /* 红线 5：退出即时生效——先结束会话，不等收束渐变；随后硬锁三路回基线 */
+  const s = xrSessionRef;
+  if (s) {
+    stage.endCalledAt = performance.now();
+    try { s.end(); } catch (e) { stage.endErr = String((e && e.message) || e); }
+  } else {
+    stage.endCalledAt = stage.exitAt;
+    stage.endAt = stage.exitAt;
+    stage.endObserved = true;
+  }
+  returnToBase(0, true);
+  pushEvent('exit', { reason, ourPathMs: +(stage.endCalledAt - stage.exitAt).toFixed(1) });
+  if (!s) finalizeReport(reason);      // 有会话时由 end 事件收口，latency 才是真测
+}
+
+function onSessionEnd() {
+  stage.endObserved = true;
+  stage.endAt = performance.now();
+  if (stage.exitAt === null) { stage.exitAt = stage.endAt; stage.endCalledAt = stage.endAt; stage.fromSystem = true; }
+  finalizeReport(stage.fromSystem ? 'system' : 'button');
+}
+
+function renderExitPanel(rep) {
+  /* 红线 2／§12.3：退出后**只显示** 是否采集／是否保存／异常，不弹绩效评分。
+     "只显示"照做：HUD 与段标识条一并撤下，面板不透明（半透明会让坛城
+     与标识条透出，与三行文字叠在一起——03:4x 截图实测）。 */
+  const p = document.getElementById('stageReport');
+  if (!p) return;
+  const errs = rep.errors.length ? rep.errors.join('；') : '无';
+  p.innerHTML =
+    '<div class="t">体验已结束</div>' +
+    '<div>是否采集：否（本场景不接脑电，全程无测量数据）</div>' +
+    '<div>是否保存：否（本场景不落盘）</div>' +
+    '<div>异常：' + errs + '</div>' +
+    '<div class="s">版本 ' + rep.variant + '（' + rep.variantLabel + '）</div>' +
+    '<div class="h">想再来一次：点左下「进入 VR」（须戴头显或支持 WebXR 的浏览器），' +
+    '或刷新本页面；想离开：直接关闭本页面</div>';
+  p.style.display = 'flex';          // 必须 flex：居中靠 align/justify，block 下不生效
+  const hud = document.getElementById('hud');
+  if (hud) hud.style.display = 'none';
+  if (badgeEl) badgeEl.style.display = 'none';
+  /* 面板 inset:0 会盖住按钮条，把按钮抬到面板之上，退出后仍可再进入 */
+  document.getElementById('bar').style.zIndex = '23';
+}
+
+function stageTick(timeMs) {
+  try {
+    stageTickInner(timeMs);
+  } catch (e) {
+    /* 骨架自身出错必须可见：记一次事件并停走，不静默每帧刷屏（闸判据 5 检此键） */
+    if (!stage.fault) {
+      stage.fault = true;
+      stage.tickErr = String((e && e.message) || e);
+      stage.events.push({ phase: STAGES[stage.idx].key, kind: 'stage_error',
+                          atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
+                          error: stage.tickErr });
+    }
+  }
+}
+
+function stageTickInner(timeMs) {
+  const t = timeMs / 1000;
+  if (stage.t0 === null) {
+    stage.wallT0 = performance.now() / 1000;
+    stage.t0 = t; stage.lastT = t;
+    stage.phaseAt = performance.now();
+    pushEvent('phase_begin'); updateBadge();
+    return;
+  }
+  const dt = Math.min(Math.max(t - stage.lastT, 0), 0.5);
+  stage.lastT = t;
+  const p = STAGES[stage.idx];
+
+  if (p.key === 'enter') {
+    const k = Math.min(1, (t - stage.t0) / ENTER_S);
+    loadEl.style.opacity = String(1 - k);
+    if (k >= 1) loadEl.style.display = 'none';
+  }
+  if (p.key === 'change' && SYNTH_ON) {
+    const i = Math.min(SYNTH_SEQ.length - 1, Math.floor((t - stage.t0) / SEGSEC));
+    while (stage.synthEmitted < i) { stage.synthEmitted += 1; synthStep(stage.synthEmitted); }
+  }
+  if (p.key === 'gather' || p.key === 'exit') returnToBase(dt, p.key === 'exit');
+  /* 收束段不自动跳退出：结束须由使用者主动发起（§12.3「随时可用」） */
+  if (p.dur > 0 && stage.idx < STAGES.length - 2 && (t - stage.t0) >= p.dur) {
+    stage.idx += 1; stage.t0 = t;
+    stage.phaseAt = performance.now();
+    if (STAGES[stage.idx].key === 'change') stage.synthEmitted = -1;
+    pushEvent('phase_begin'); updateBadge();
+  }
+}
+
+/* 段标识条：只写 DOM 文本，不触场景状态。声明在模块顶层——
+   ES module 严格模式下块内函数声明只在块内可见，原先写在 if 块里
+   导致 stageTick 每帧 ReferenceError、时序停走（03:3x 冒烟实测）。 */
+let badgeEl = null;
+function updateBadge() {
+  if (!badgeEl || !STAGE_ON) return;
+  const p = STAGES[stage.idx];
+  /* 每行都保持短字幅：左上 HUD 已带长题名，右侧若重复整行会在窄视口与它
+     撞成一片叠字（真浏览器 03:4x 实测抓到，无头 1280 宽看不出来）。
+     变体仍在本条内——件2 段1 判据要求标识条含"版本＋有无测量"两字段。 */
+  badgeEl.textContent =
+    '第' + (stage.idx + 1) + '段 ' + p.cn + '\n' +
+    '版本 ' + VARIANT_KEY + '\n' +
+    '测量：无（不接脑电）\n' +
+    '数据：' + (SYNTH_ON ? '模拟（非测量）' : '无');
+  badgeEl.style.whiteSpace = 'pre';
+}
+
+/* ── 段骨架专用的屏上元素（仅 ?stage=1 时创建，默认态零 DOM 变化）── */
+if (STAGE_ON) {
+  const st = document.createElement('style');
+  st.textContent =
+    '#stageBadge{position:fixed;right:16px;top:14px;z-index:12;font-size:12px;' +
+    'line-height:1.7;color:#8a7a5c;letter-spacing:1px;text-align:right;user-select:none}' +
+    '#stageReport{position:fixed;inset:0;z-index:22;background:#000;display:none;' +
+    'color:#c9b287;font-size:15px;line-height:2.1;letter-spacing:1px;text-align:left;' +
+    'align-items:center;justify-content:center;flex-direction:column}' +
+    '#stageReport .t{font-size:18px;letter-spacing:4px;margin-bottom:10px}' +
+    '#stageReport .s{color:#6b5630;font-size:12px;margin-top:14px}' +
+    '#stageReport .h{color:#6b5630;font-size:12px;margin-top:6px}';
+  document.head.appendChild(st);
+  badgeEl = document.createElement('div');
+  badgeEl.id = 'stageBadge'; document.body.appendChild(badgeEl);
+  const rep = document.createElement('div');
+  rep.id = 'stageReport'; document.body.appendChild(rep);
+  const btnExit = document.createElement('button');
+  btnExit.id = 'btnExit'; btnExit.textContent = '退出';
+  document.getElementById('bar').appendChild(btnExit);
+  btnExit.onclick = () => requestExit('button');
+  window.__stageCtl = {
+    exit: () => requestExit('api'),
+    state: () => stage,
+    report: () => stage.report,
+    events: () => stage.events,
+  };
+  updateBadge();
+} else {
+  window.__stageCtl = null;
+}
+
 /* ── 主循环：默认完全静态（渲染循环只为 WebXR 帧同步存在）──────
    ?breath=on 时三通道按规格更新——除此之外仍无任何 per-frame 状态更新；
    breath=off 路径与 S1 逐字节同行为（连续帧差恒 0 的"绝对安静"判据保留） */
 renderer.setAnimationLoop((time)=>{
-  if (BREATH_ON && breathState.lastT !== null) {
+  if (STAGE_ON && !stage.fault && !stageFreezesBreath()) stageTick(time);
+
+  if (BREATH_ON && breathState.lastT !== null && !stageFreezesBreath()) {
     const t = time / 1000;
     const dt = Math.min(Math.max(t - breathState.lastT, 0), 0.5);   // 钳大间隙防跳变
     breathState.lastT = t;
@@ -345,13 +683,22 @@ renderer.setAnimationLoop((time)=>{
 /* ── VR 进入（复用既有 WebXR 模式：HTTPS 8778 下 Pico 可用） ── */
 const btnVR = document.getElementById('btnVR');
 btnVR.onclick = async ()=>{
-  if(!navigator.xr){ alert('本浏览器不支持 WebXR'); return; }
+  if(!navigator.xr && !XR_MOCK){ alert('本浏览器不支持 WebXR'); return; }
   try{
-    const session = await navigator.xr.requestSession('immersive-vr',
-      {optionalFeatures:['local-floor','bounded-floor']});
-    renderer.xr.setSession(session);
-    session.addEventListener('end', ()=>{ btnVR.textContent = '进入 VR'; });
-    btnVR.textContent = 'VR 中';
+    /* XR_MOCK 只在 ?stage=1&xrmock=1 下生效：不碰 renderer.xr，专供退出路径
+       时序自测（真机 WebXR 须法师在场，本路径不冒称验过 WebXR）。 */
+    const session = XR_MOCK ? makeMockSession()
+      : await navigator.xr.requestSession('immersive-vr',
+          {optionalFeatures:['local-floor','bounded-floor']});
+    if (!XR_MOCK) renderer.xr.setSession(session);
+    xrSessionRef = session;
+    session.addEventListener('end', ()=>{
+      btnVR.textContent = '进入 VR';
+      xrSessionRef = null;
+      if (STAGE_ON) onSessionEnd();
+    });
+    btnVR.textContent = XR_MOCK ? 'VR 中（模拟）' : 'VR 中';
+    if (STAGE_ON) pushEvent('session_begin', { mock: !!XR_MOCK });
   }catch(err){
     alert('进入 VR 失败：' + (err && err.message ? err.message : err));
   }
@@ -422,6 +769,14 @@ window.__mandalaDiag = {
   center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
   palette: PALETTE,
   static: !BREATH_ON,
+  /* 五段路径骨架自述（件3）。字段名用 pathStage——`stage` 已被上方闸门级
+     标注占用（'S1'/'S2'），撞键会静默覆盖既有闸的读数。 */
+  pathStage: STAGE_ON ? {
+    enabled: true, phases: STAGES.map(s => s.key),
+    enterSec: ENTER_S, segSec: SEGSEC, gatherSec: GATHER_S,
+    synth: SYNTH_ON, synthSeq: SYNTH_SEQ, xrmock: !!XR_MOCK,
+    carrierGap: '变化段无视觉载体：WebGL2 下 ALIASED_LINE_WIDTH_RANGE=[1,1]（实测）',
+  } : { enabled: false },
   /* S2 呼吸自述（verify_mandala_breath.py 可对独立复算）：
      enabled=false 即默认态＝S1 回归锚；enabled=true 时三通道参数与规格逐值对应 */
   breath: BREATH_ON ? {
@@ -447,8 +802,9 @@ window.__mandalaDiag = {
 document.getElementById('hud').textContent =
   '曼荼罗场域 · ' + spec.label + (BREATH_ON ? ' · S2 呼吸中' : '');
 
-/* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色） */
-document.getElementById('load').style.display = 'none';
+/* 载入完成：撤黑场（不做渐显动画——S1 静态纪律；黑场即底色）。
+   ?stage=1 例外：黑场交还"进入"段做 3.0 s 渐隐（件2 段1），由 stageTick 收尾。 */
+if (!STAGE_ON) document.getElementById('load').style.display = 'none';
 
 /* 窗口自适应 */
 addEventListener('resize', ()=>{
