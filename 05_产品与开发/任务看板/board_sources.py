@@ -121,6 +121,11 @@ def _live_snapshot() -> dict:
     return obj
 
 
+def window_label(sid: str, reg: dict, live: dict) -> str:
+    """label 组装唯一正源：登记 label ＞ 活体快照 title ＞ 未登记窗口＋短号。"""
+    return reg.get("label") or live.get("title") or f"未登记窗口 {sid[:8]}"
+
+
 def scan_sessions(limit: int = 40, days: int = 45) -> dict:
     registry = _load_config("windows.json", cfg.windows_registry())
     known = {item.get("sessionId"): item for item in registry.get("windows", []) if item.get("sessionId")}
@@ -158,7 +163,7 @@ def scan_sessions(limit: int = 40, days: int = 45) -> dict:
             pending = 0
         windows.append({
             "sessionId": sid,
-            "label": reg.get("label") or live.get("title") or f"未登记窗口 {sid[:8]}",
+            "label": window_label(sid, reg, live),
             "window": reg.get("window"),
             "execClass": reg.get("execClass", "未验"),
             "session": reg.get("session"),

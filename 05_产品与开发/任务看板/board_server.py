@@ -21,7 +21,7 @@ from pathlib import Path
 
 import requests
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -711,9 +711,94 @@ def api_stream():
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
+# ─────────────────────────── MCP 端点（streamable HTTP · 无会话态） ───────────────────────────
+# 供 Qoder 连接器（zhiguan-board）使用：法师经 qoder-cn:// 深链一键安装后，AI 窗口即可原生调看板只读工具。
+# 首版只读：不暴露任何写入／控制动作，投递单仍走 /api/dispatch 的人工流程。
+
+MCP_TOOLS = [
+    {
+        "name": "board_overview",
+        "description": "止观AI任务看板概览：窗口活跃数、任务进度、维那积压、作业队列、系统资源（元数据级，不含对话正文）",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "name": "board_windows",
+        "description": "Qoder 各 AI 窗口状态列表：标签、running/cold、任务完成度（元数据级）",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+]
+
+
+def _mcp_tool_result(text: str) -> dict:
+    return {"content": [{"type": "text", "text": text}], "isError": False}
+
+
+def _mcp_call_tool(name: str) -> dict:
+    if name == "board_overview":
+        return _mcp_tool_result(_board_summary_text() + "\n" + local_answer("作业队列"))
+    if name == "board_windows":
+        with CACHE_LOCK:
+            sess = dict(CACHE.get("sessions") or {})
+        wins = sess.get("windows", [])
+        if not wins:
+            return _mcp_tool_result("尚无窗口扫描结果（看板刚启动或扫描未跑）")
+        src_label = "MCP 活体快照" if sess.get("snapshot", {}).get("fresh") else "磁盘 mtime 推断"
+        lines = [f"窗口 {len(wins)} 个（状态来源：{src_label}）"]
+        for w in wins:
+            upd = time.strftime("%m-%d %H:%M", time.localtime(w["updatedAt"] / 1000))
+            lines.append(f"- {w['label']}｜{w['state']}｜任务 {w['taskDone']}/{w['taskTotal']}｜更新 {upd}")
+        return _mcp_tool_result("\n".join(lines))
+    return {"content": [{"type": "text", "text": f"未知工具：{name}"}], "isError": True}
+
+
+@app.post("/mcp")
+async def mcp_post(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"jsonrpc": "2.0", "id": None,
+                             "error": {"code": -32700, "message": "Parse error"}}, status_code=400)
+    method = body.get("method") or ""
+    msg_id = body.get("id")
+    if method.startswith("notifications/"):
+        return Response(status_code=202)
+    if method == "initialize":
+        client_ver = (body.get("params") or {}).get("protocolVersion")
+        return JSONResponse({
+            "jsonrpc": "2.0", "id": msg_id,
+            "result": {
+                "protocolVersion": client_ver or "2024-11-05",
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "zhiguan-board", "title": "止观AI 任务看板", "version": "0.1.0"},
+                "instructions": "止观AI 可视化任务看板只读工具。数据全部来自本机扫描，不出网。",
+            },
+        })
+    if method == "ping":
+        return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {}})
+    if method == "tools/list":
+        return JSONResponse({"jsonrpc": "2.0", "id": msg_id, "result": {"tools": MCP_TOOLS}})
+    if method == "tools/call":
+        params = body.get("params") or {}
+        return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
+                             "result": _mcp_call_tool(params.get("name") or "")})
+    return JSONResponse({"jsonrpc": "2.0", "id": msg_id,
+                         "error": {"code": -32601, "message": f"Method not found: {method}"}}, status_code=200)
+
+
+@app.get("/mcp")
+def mcp_get():
+    # 无服务端推送能力：按 streamable HTTP 规范返回 405，客户端照常走 POST
+    return Response(status_code=405)
+
+
+@app.delete("/mcp")
+def mcp_delete():
+    return Response(status_code=405)
+
+
 @app.get("/api/health")
 def api_health():
-    return {"ok": True, "version": "0.1.0", "at": int(time.time() * 1000),
+    return {"ok": True, "version": "0.1.0", "mcp": True, "at": int(time.time() * 1000),
             "keyPresent": bool(os.environ.get("QIANWEN_API_KEY"))}
 
 

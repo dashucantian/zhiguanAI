@@ -167,9 +167,13 @@ def main() -> int:
 
     r = requests.post(base + "/api/jobs/resources/control", json={"action": "pause"}, timeout=5).json()
     check("暂停生效", r["ok"] and r["job"]["paused"] is True, r["job"]["state"])
-    for _ in range(40):                      # 等在跑的那一次落地，再数增量
-        if get_job("resources")["state"] != "running":
+    # 暂停处理器会立刻把 state 置 paused（不等在途跑落地），故须等 runs 连续两次采样不变才算数
+    prev = -1
+    for _ in range(40):
+        jj = get_job("resources")
+        if jj["state"] != "running" and jj["runs"] == prev:
             break
+        prev = jj["runs"]
         time.sleep(0.25)
     runs_at_pause = get_job("resources")["runs"]
     time.sleep(7)                            # 跨过 interval=5 一个周期
@@ -440,6 +444,71 @@ def main() -> int:
     check("源码：应答与探活两处回包均显式设 utf-8（已剥注释）", hits == 2, f"命中 {hits} 处")
     check("反证：删掉该行则计数归零（断言不是恒真）",
           len(re.findall(pat, code_nc.replace('resp.encoding = "utf-8"', ""))) == 0)
+
+    # ── 6 MCP 端点（streamable HTTP · 无会话态 · 只读两工具）──
+    print("\n【6】MCP 端点（Qoder 连接器 zhiguan-board 用）")
+    mh = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+
+    def mcp(method, params=None, id_=1):
+        return requests.post(base + "/mcp", headers=mh, timeout=10,
+                             json={"jsonrpc": "2.0", "id": id_, "method": method, "params": params or {}})
+
+    r = mcp("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
+                           "clientInfo": {"name": "selftest", "version": "0"}})
+    init = r.json().get("result", {})
+    check("MCP initialize 200＋回显协议版本", r.status_code == 200
+          and init.get("protocolVersion") == "2025-03-26", str(init.get("protocolVersion")))
+    check("MCP serverInfo 名为 zhiguan-board", init.get("serverInfo", {}).get("name") == "zhiguan-board")
+    r = requests.post(base + "/mcp", headers=mh, timeout=10,
+                      json={"jsonrpc": "2.0", "id": None, "method": "notifications/initialized"})
+    check("MCP 通知回 202", r.status_code == 202, str(r.status_code))
+    r = mcp("tools/list", {})
+    names = {t["name"] for t in r.json().get("result", {}).get("tools", [])}
+    check("MCP tools/list 含两只读工具", names == {"board_overview", "board_windows"}, str(sorted(names)))
+    check("MCP 工具 schema 均为空参对象（只读面）",
+          all(t["inputSchema"].get("properties") == {} for t in r.json()["result"]["tools"]))
+    r = mcp("tools/call", {"name": "board_overview", "arguments": {}})
+    txt = r.json().get("result", {}).get("content", [{}])[0].get("text", "")
+    check("MCP board_overview 真答出窗口数", "窗口" in txt and "维那" in txt, txt[:50])
+    r = mcp("tools/call", {"name": "nope", "arguments": {}})
+    check("MCP 未知工具标 isError", r.json().get("result", {}).get("isError") is True)
+    r = requests.get(base + "/mcp", headers=mh, timeout=5)
+    check("MCP GET 405（无服务端推送，符合规范）", r.status_code == 405)
+
+    # ── 7 两窗标准名＋原题并列＋未登记回退（协调正本 §15 试点）──
+    print("\n【7】标准名显示（W3 协调窗派单·两窗试点）")
+    wd = requests.get(base + "/api/windows", timeout=20).json()
+    rows = {w["sessionId"]: w for w in wd.get("windows", [])}
+    a = rows.get("a5e0f8f4-8c9e-47ef-84f7-929f9fc4bd7a")
+    b = rows.get("b8729a7a-9d38-48b7-84f0-6fced4fa7722")
+    check("a5e0f8f4 标准名＋窗别＋Session",
+          a and a["label"] == "W3｜全项目协调｜a5e0f8f4" and a["window"] == "W3"
+          and a["session"] == "W3-QODER-20261008-COORD-A", a and a["label"])
+    check("b8729a7a 标准名＋窗别＋Session",
+          b and b["label"] == "W1｜从此工程｜b8729a7a" and b["window"] == "W1"
+          and b["session"] == "W1-QODER-20261008-A", b and b["label"])
+    snap = wd.get("snapshot") or {}
+    check("快照元数据带 takenAt/fresh（「上次观测」标注的数据面）",
+          isinstance(snap.get("takenAt"), int) and isinstance(snap.get("fresh"), bool),
+          f"fresh={snap.get('fresh')}")
+    html = (HERE / "static" / "index.html").read_text(encoding="utf-8")
+    check("前端三分支齐全：实时原题／上次观测／原题缺失",
+          "客户端原题：" in html and "上次观测" in html and "原题缺失" in html)
+    check("前端并列短号行", "短号 " in html)
+    unreg = [w for w in wd.get("windows", []) if not w.get("registered")]
+    ok_fallback = all(w["label"] == w.get("title")
+                      or w["label"].startswith("未登记窗口 " + w["sessionId"][:8]) for w in unreg)
+    check("在表未登记窗回退不变（若有）", ok_fallback, f"未登记 {len(unreg)} 窗")
+    # 合成用例：不在登记表的假会话，直接过 label 组装函数，断言真落到「未登记窗口 短号」
+    from board_sources import window_label
+    fake_sid = "deadbeef-0000-0000-0000-000000000000"
+    check("合成未登记窗回退＝「未登记窗口 deadbeef」（改坏必挂）",
+          window_label(fake_sid, {}, {}) == "未登记窗口 deadbeef",
+          window_label(fake_sid, {}, {}))
+    check("合成用例分级仍对：登记 label 优先于快照 title",
+          window_label(fake_sid, {"label": "登记名"}, {"title": "快照题"}) == "登记名")
+    check("合成用例分级仍对：无登记时回退快照 title",
+          window_label(fake_sid, {}, {"title": "快照题"}) == "快照题")
 
     server.should_exit = True
     time.sleep(0.4)
