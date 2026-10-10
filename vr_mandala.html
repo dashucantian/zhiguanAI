@@ -131,6 +131,10 @@ const VARIANTS = {
      留档备终审，参数与几何零改动。 */
   v5stupa: {
     label: 'V5 · 塔影仰观',
+    /* status＝机器可读的在册状态（2026-10-10 低频全量已准）：缺省＝在册，
+       '留档'＝闸从注册表读时**过滤掉**，日常不跑、收口轮才跑。
+       ⚠不得在注册表之外另立变体清单（`vr_gates/README.md:22-26` 记着 09-30 旧缺陷）。 */
+    status: '留档',
     cam: [0, 1.6, 1.5], fog: 0.045,
     inner:  null,
     middle: {k:8, r:4.2,  seg:2160, rings:[4.6,3.0,1.5], spokes:[4.6,5.2,48], color:'goldFar', op:0.75, pos:[0,2.8,-2.8]},
@@ -146,6 +150,7 @@ const VARIANTS = {
      留档备终审，参数与几何零改动。 */
   v6void: {
     label: 'V6 · 虚空',
+    status: '留档',   /* 同 v5stupa：09-19 裁丙（金 0.06% FAIL）＋09-30 真机「不适」同向 */
     cam: [0, 1.6, 5.0], fog: 0.060,
     inner:  null,
     middle: {k:4, r:1.8,  seg:720,  rings:[2.0,1.1], spokes:[2.0,2.3,16], color:'goldFar', op:0.35, pos:[0,1.5,-14]},
@@ -159,8 +164,14 @@ const VARIANTS = {
        像素判据 0.3% 下限，光点角半径仅 0.24°——"一点光"的语义成立，实测见分晓。 */
   },
 };
-const VARIANT_KEY = (new URLSearchParams(location.search).get('variant') || 's1').toLowerCase().replace(/-/g,'');
-const spec = VARIANTS[VARIANT_KEY] || VARIANTS.s1;
+/* 已认可版本指针＝**单一正源**（2026-10-10 法师裁「乙」解锁 C2）。
+   开工包红线 3 点名的缺陷正是"v4 已认可、入口仍默认 s1"；其根因不是值写错，
+   而是**默认值散在三处**（入口 `:162`、备场工具推荐地址、各闸 URL）——改一处
+   漏一处，09-30 那次"六变体终审漏判两个"就是同一形态。此后只此一处，
+   其余工具一律从页面钩子 `__mandalaDiag.approvedVariant` 读，不得再各写一份。 */
+const APPROVED_VARIANT = 'v4lotuspond';
+const VARIANT_KEY = (new URLSearchParams(location.search).get('variant') || APPROVED_VARIANT).toLowerCase().replace(/-/g,'');
+const spec = VARIANTS[VARIANT_KEY] || VARIANTS[APPROVED_VARIANT];
 
 /* ── 渲染器 / 场景 / 相机 ────────────────────────────── */
 let renderer;
@@ -778,6 +789,10 @@ window.__mandalaDiag = {
   center: [centerOrb.position.x, centerOrb.position.y, centerOrb.position.z],
   palette: PALETTE,
   static: !BREATH_ON,
+  /* 变体单一正源对外读数（备场工具／闸一律读这里，不得另立清单） */
+  approvedVariant: APPROVED_VARIANT,
+  variantStatus: Object.fromEntries(Object.keys(VARIANTS).map(k =>
+    [k, VARIANTS[k].status || '在册'])),
   /* 五段路径骨架自述（件3）。字段名用 pathStage——`stage` 已被上方闸门级
      标注占用（'S1'/'S2'），撞键会静默覆盖既有闸的读数。 */
   pathStage: STAGE_ON ? {

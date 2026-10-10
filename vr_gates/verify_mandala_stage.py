@@ -340,8 +340,10 @@ async def browser():
 
 
 async def run_normal(base):
-    url_off = f"{base}/mandala?breath=off"
-    url_on = f"{base}/mandala?stage=1&breath=on&segsec=2&xrmock=1"
+    # 显式钉 variant=s1：2026-10-10 C2 乙案后入口缺省已改指 v4lotuspond，
+    # 本闸测的是骨架时序，须与入口缺省解耦（否则缺省一改，本闸读数跟着漂）。
+    url_off = f"{base}/mandala?variant=s1&breath=off"
+    url_on = f"{base}/mandala?variant=s1&stage=1&breath=on&segsec=2&xrmock=1"
     proc, ws = await browser()
     try:
         print("\n" + "=" * 68)

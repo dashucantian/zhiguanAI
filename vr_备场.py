@@ -17,6 +17,7 @@ HTTPS 端口 8778 也未必是当次实际端口（09-30 现役实例走的是 8
 import ipaddress
 import json
 import os
+import re
 import socket
 import ssl
 import subprocess
@@ -27,7 +28,36 @@ import urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 PY = os.environ.get("LOCALAPPDATA", "") + r"\Programs\Python\Python312\python.exe"
 HTTP_PORT, HTTPS_PORT = 8777, 8778          # 文档口径（判语008／踩坑001）
-VARIANTS = ["s1", "v2abyss", "v3immersion", "v4lotuspond", "v5stupa", "v6void"]
+def registry():
+    """从 `vr_mandala.html` 注册表读（键名＋在册状态＋已认可版本）。
+
+    单一正源（2026-10-10 C2 乙案）：本脚本原先自写一份 `VARIANTS = [...]`、
+    并把推荐地址写死成 `?variant=s1` —— 那正是 `vr_gates/README.md:22-26`
+    记着的"注册表之外维护第二份清单"形态，也是红线 3"v4 已认可、入口仍默认 s1"
+    能活下来的原因之一（工具面在替旧缺省背书）。现一律读页面。
+    """
+    src = open(os.path.join(ROOT, "vr_mandala.html"), encoding="utf-8").read()
+    m = re.search(r"const VARIANTS\s*=\s*\{(.*?)\n\};", src, re.S)
+    if not m:
+        raise RuntimeError("读不到 VARIANTS 注册表——页面结构变了，请同步本脚本")
+    ap = re.search(r"const APPROVED_VARIANT\s*=\s*'([^']+)'", src)
+    if not ap:
+        raise RuntimeError("读不到 APPROVED_VARIANT 指针（C2 乙案单一正源）")
+    body = m.group(1)
+    marks = [(mm.start(), mm.group(1)) for mm in
+             re.finditer(r"^  ([A-Za-z0-9]+):\s*\{", body, re.M)]
+    out = []
+    for i, (pos, key) in enumerate(marks):
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(body)
+        status = "留档" if re.search(r"status:\s*'留档'", body[pos:end]) else "在册"
+        out.append((key, status))
+    if len(out) < 2:
+        raise RuntimeError(f"注册表解析异常，只解析出 {out}")
+    return out, ap.group(1)
+
+
+VARIANTS, APPROVED = registry()
+KEYS = [k for k, _ in VARIANTS]
 fails, notes = [], []
 
 
@@ -118,10 +148,11 @@ def main():
     # ── 3. 六变体＋两场景逐一实取（真发请求，不靠推断） ─────────────
     base = f"http://127.0.0.1:{HTTP_PORT}"
     ok_cnt = 0
-    for key in VARIANTS:
+    for key in KEYS:
         code, info = get(f"{base}/mandala?variant={key}")
         flag = "OK " if code == 200 else "FAIL"
-        print(f"[页面] {flag} /mandala?variant={key:<13} → {code}  {info if code != 200 else str(info) + ' B'}")
+        st = dict(VARIANTS)[key]
+        print(f"[页面] {flag} /mandala?variant={key:<13}{('[' + st + ']') if st != '在册' else '':8} → {code}  {info if code != 200 else str(info) + ' B'}")
         ok_cnt += code == 200
         if code != 200:
             fails.append(f"/mandala?variant={key} 返回 {code} {info if code != 200 else ''}")
@@ -134,7 +165,7 @@ def main():
     # ── 4. HTTPS 侧（WebXR 入场券，踩坑001） ────────────────────
     https_ok = None
     for p in [HTTPS_PORT] + alt:
-        code, _ = get(f"https://127.0.0.1:{p}/mandala?variant=s1")
+        code, _ = get(f"https://127.0.0.1:{p}/mandala?variant={APPROVED}")
         if code == 200:
             https_ok = p
             print(f"[HTTPS] {p} 可达（WebXR 需安全上下文，进 VR 必走此口）")
@@ -147,8 +178,10 @@ def main():
     print("-" * 66)
     if ips and https_ok:
         for ip in ips:
-            print(f"  Pico 浏览器填：  https://{ip}:{https_ok}/mandala?variant=s1")
-            print(f"  桌面预览（非 VR）：http://{ip}:{HTTP_PORT}/mandala?variant=s1")
+            print(f"  Pico 浏览器填：  https://{ip}:{https_ok}/mandala?variant={APPROVED}")
+            print(f"  桌面预览（非 VR）：http://{ip}:{HTTP_PORT}/mandala?variant={APPROVED}")
+            print(f"  （缺省即已认可版本＝{APPROVED}，不带 variant 参数也到这一版；"
+                  f"在册 {len(KEYS)} 个／留档 {sum(1 for _, s in VARIANTS if s == '留档')} 个，均从注册表读）")
     else:
         print("  ⚠ 算不出可路由 IP 或 HTTPS 不可达，暂给不了头显地址（见上）")
     print("  同网段自检：头显与本机须在 192.168.x 同一网段；不通先查路由器隔离，别怀疑引擎")
