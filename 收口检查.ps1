@@ -123,6 +123,74 @@ if ($badNames.Count -gt 0) {
     Ok "上一笔新增文件的日期前缀与提交日一致（或无日期前缀）。"
 }
 
+# ---------- 8. 案例库索引一致性（2026-10-10 法师裁「要」；缘起：016～019 四卡入库时索引未回填，全靠手工回填、无闸可查） ----------
+# 判据：某文体盘上卡片文件数 ＝ 索引表内行数。不等 ⇒ 要么有卡没登记（本闸要抓的），要么有行没卡（引用悬空）。
+Section "8. 案例库索引一致性（盘上文件数 ＝ 索引表行数）"
+$clRoot = Join-Path (Get-Location) '01_项目管理\案例库'
+function ClRows($txt, $sectName) {
+    $parts = [regex]::Split($txt, '(?m)^### ')
+    foreach ($p in $parts) { if ($p.StartsWith($sectName)) { return @([regex]::Matches($p, '(?m)^\|\s*(\d{3})\s*\|')).Count } }
+    return -1
+}
+$clSpecTxt = [System.IO.File]::ReadAllText((Join-Path $clRoot '00_案例库说明.md'), [System.Text.Encoding]::UTF8)
+$clHotTxt = [System.IO.File]::ReadAllText((Join-Path $clRoot '判断实例\00_判断实例索引.md'), [System.Text.Encoding]::UTF8)
+$clBad = 0
+foreach ($c in @(
+        @{ d = '决策判语'; n = ClRows $clSpecTxt '决策判语' },
+        @{ d = '踩坑档案'; n = ClRows $clSpecTxt '踩坑档案' },
+        @{ d = '复现路径'; n = ClRows $clSpecTxt '复现路径' },
+        @{ d = '判断实例'; n = @([regex]::Matches($clHotTxt, '(?m)^\|\s*\*\*JP-(\d{3})\*\*\s*\|')).Count })) {
+    $dir = Join-Path $clRoot $c.d
+    if (-not (Test-Path -LiteralPath $dir)) { Bad "闸8：案例库子目录读不到 $c.d —— 目录被移动？本门不可信"; $clBad++; continue }
+    $disk = @(Get-ChildItem -LiteralPath $dir -Filter '*.md' -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notlike '00_*' -and $_.Name -notlike '99_*' -and $_.Name -notlike '*说明*' })
+    # 闸门自检（教训 7.1）：索引里读到 0 行＝判据形状失效，绝不允许静默 PASS
+    if ($c.n -lt 0) { Bad "闸8：$c.d 在索引中找不到对应小节标题——小节被改名？本门不可信"; $clBad++; continue }
+    if ($c.n -eq 0) { Bad "闸8 自检失败：$c.d 索引行数为 0，而盘上有 $($disk.Count) 件——正则形状可能已失效，本门可能恒空转"; $clBad++; continue }
+    if ($c.n -ne $disk.Count) {
+        Bad "案例库索引与盘不符：$c.d 索引 $c.n 行 ≠ 盘上 $($disk.Count) 件 —— 差 $([Math]::Abs($c.n - $disk.Count))，请逐号对账后回填（016～019 那次漏登记即此类）"
+        $clBad++
+    }
+}
+if ($clBad -eq 0) { Ok "案例库四体索引行数与盘上卡片文件数一致（判断实例按热档行数计，依冷热分离）。" }
+
+# ---------- 9. 架构台账 sourceRefs 空行探针（2026-10-10 法师裁「改为准」——仅此一项，本脚本其余一字不动） ----------
+# ⚠本门只判「指向空行／越界」，**判不到「非空但错行」**（协调正本 §31.3：HEAD 侧那两行都有内容、只是指向了别的函数）。
+#    不得把本门 PASS 当作锚点缺陷已了结。真判据「指向行内容与 ref 语义相符」仍候裁。
+Section "9. sourceRefs 空行探针（HEAD 侧与工作区双侧复算）"
+$amJson = Join-Path (Get-Location) '05_产品与开发\架构可视化\architecture-model.json'
+if (-not (Test-Path -LiteralPath $amJson)) {
+    Bad "闸9：读不到 architecture-model.json —— 台账被移动？本门不可信"
+} else {
+    $amTxt = [System.IO.File]::ReadAllText($amJson, [System.Text.Encoding]::UTF8)
+    $refs = @([regex]::Matches($amTxt, '"([^"\r\n\\]*(?:[\\/][^"\r\n]*)?):(\d{1,6})"'))
+    if ($refs.Count -eq 0) {
+        Bad "闸9 自检失败：台账中一个 ``path:line'' 式 ref 都没读到——正则形状可能已失效，本门可能恒空转（教训 7.1／坑 017）"
+    } else {
+        $blobT = Join-Path $env:TEMP 'anchorblob.bin'
+        $blankHits = @(); $oorHits = @(); $noHeadHits = 0
+        foreach ($m in $refs) {
+            $rp = ($m.Groups[1].Value -replace '\\', '/')
+            $ln = [int]$m.Groups[2].Value
+            & git cat-file -e "HEAD:$rp" 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) { $noHeadHits++; continue }   # 未入库新件（文件已在途），跳过 HEAD 侧判
+            cmd /c "git cat-file blob HEAD:`"$rp`" > `"$blobT`"" 2>$null | Out-Null
+            $raw = [System.IO.File]::ReadAllBytes($blobT)
+            $lines = @([System.Text.Encoding]::UTF8.GetString($raw) -split "`n")
+            if ($ln -lt 1 -or $ln -gt $lines.Count) { $oorHits += "$rp`:$ln"; continue }
+            $cell = $lines[$ln - 1].Trim("`r", " ", "`t")
+            if ($cell -eq '') { $blankHits += "$rp`:$ln" }
+        }
+        Remove-Item -LiteralPath $blobT -ErrorAction SilentlyContinue
+        if ($blankHits.Count -gt 0) { foreach ($b in ($blankHits | Select-Object -Unique)) { Bad "sourceRefs 指向空行（HEAD 侧）：$b —— 该行在库中是空白，锚已失效，请按现势重出行号" } }
+        if ($oorHits.Count -gt 0) { foreach ($o in ($oorHits | Select-Object -Unique)) { Bad "sourceRefs 行号越界（HEAD 侧）：$o" } }
+        if ($blankHits.Count -eq 0 -and $oorHits.Count -eq 0) {
+            Ok "sourceRefs 空行探针：复算 $($refs.Count) 个带行号 ref，零指空、零越界（其中 $noHeadHits 个所指文件尚未入库，跳过）。"
+            Write-Host "     [提示] 本门判不到「非空但错行」，也判不到 HEAD 侧与工作区侧的语义差（正本 §31.3）。PASS ≠ 锚点已了结。" -ForegroundColor Gray
+        }
+    }
+}
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
