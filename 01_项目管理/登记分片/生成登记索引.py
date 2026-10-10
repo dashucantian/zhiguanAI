@@ -149,9 +149,26 @@ PEND_TARGETS = [os.path.join(ROOT, "01_项目管理",
                              "20261008_W3_全项目协同整合基础与首批施工契约_v0.1.md")]
 PEND_TARGETS += [os.path.join(HERE, f) for f in sorted(os.listdir(HERE))
                  if f.endswith(".md") and (f.startswith("KZ-") or f.startswith("D-"))]
+# ⚠2026-10-10 本窗自曝一处设计漏洞：首版只扫登记分片，而"方案稿／提请函"这一类**恰恰最会带候裁**，
+#   却整类不在面内——本窗拿自己刚出的两份方案稿试跑时才抓到（两份都 0 命中）。故补两处目录顶层 md。
+for _d, _pat in [("01_项目管理", lambda f: f.endswith(".md")),
+                 (os.path.join("01_项目管理", "信箱", "engine"),
+                  lambda f: f.endswith(".md") or f.endswith(".txt"))]:
+    _p = os.path.join(ROOT, _d)
+    if os.path.isdir(_p):
+        PEND_TARGETS += [os.path.join(_p, f) for f in sorted(os.listdir(_p))
+                         if _pat(f) and not f.startswith("00_")]
 import datetime as _dt
 _today = _dt.date.today()
-_hits, _unreadable = [], []
+_hits, _unreadable, _freshmap = [], [], {}
+PENDING_TODAY = _dt.date.today()
+
+def _mtime_today(_p):
+    try:
+        return _dt.date.fromtimestamp(os.path.getmtime(_p)) == PENDING_TODAY
+    except Exception:
+        return False
+
 for _p in PEND_TARGETS:
     _txt = read(_p)
     if _txt is None:
@@ -172,6 +189,8 @@ for _p in PEND_TARGETS:
             except Exception:
                 _days = ""
         _hits.append((_days if _days != "" else -1, _fn, _i, _s))
+        if _mtime_today(_p):
+            _freshmap[(_fn, _i)] = True
 _hits.sort(key=lambda x: (-x[0], x[1]))
 lines += ["## F. 悬案清单（「候裁／候另示／候一句」全量枚举，按挂了几天倒序）", ""]
 if not _hits:
@@ -188,6 +207,28 @@ else:
         lines.append("- 挂 %s 天｜`%s`:%d｜%s" % (_lab, _fn, _i, _s))
     if len(_hits) > 14:
         lines.append("- …其余 %d 处未列（本项限 14 行以压认知负荷；全量请 grep）" % (len(_hits) - 14))
+    # ⚠2026-10-10 本窗第二处自曝的设计缺陷：只按"最老"倒序 ⇒ 本轮**刚写的**悬案（未入库＝age 未知）
+    #   全沉到底、在 14 行截断之外永远不可见——而恰恰是这些最该被看见。故另开一段单列。
+    # ⚠2026-10-10 本窗第三处自曝：首版把"未入库"一律当 age 未知，扩面后 455 条全落此档 ⇒ F′ 等于没筛。
+    #   正解不按 git 判（git 只认已入库者），改按**文件 mtime＝今天**判"本轮刚写"。
+    _new = [h for h in _hits if _freshmap.get((h[1], h[2]))]
+    _new.sort(key=lambda h: (h[0], h[1]), reverse=False)
+    _new.sort(key=lambda h: h[1], reverse=True)   # 文件名首 8 位＝日期 ⇒ 倒序＝**今天的新件排最前**（本窗第五处修：升序时 20261008 的正本吃掉全部 10 格）
+    if _new:
+        lines.append("")
+        lines.append("### F′ 今天写改过的文件里的悬案（最该被看见的一档，mtime 判据）")
+        lines.append("")
+        # 形状修正（本窗第五处）：575 处的堆里**任何行数上限都选不对**，根因是按"命中"铺表。
+        # 正解＝按**件**铺表、每行带命中数，且**今天日期的件排最前**——本档要答的是"哪几份文书有活悬案"，
+        # 不是"哪一条命中最靠前"。全文一律 grep，本表只作目录。
+        _by = {}
+        for _d, _fn, _i, _s in _new:
+            _by.setdefault(_fn, []).append((_i, _s))
+        _today8 = PENDING_TODAY.strftime("%Y%m%d")
+        for _fn in sorted(_by, key=lambda x: (0 if x.startswith(_today8) else 1, x))[:20]:
+            _its = _by[_fn]
+            lines.append("- `%s`｜%d 处｜首条 :%d %s" % (_fn, len(_its), _its[0][0], _its[0][1]))
+        lines.append("- （F′ 共 %d 处、%d 件；本表按件铺、**今日日头件排最前**，全文请 grep「候裁」）" % (len(_new), len(_by)))
     if _unreadable:
         lines.append("- ⚠读不到而跳过的件：%s" % "、".join(_unreadable[:6]))
 lines += ["- ⚠**旁路提示非闸门**（法师 10-09 裁「不加 `收口检查.ps1` 闸门」未被覆盖）。每次收口**须逐条重列于提请清单**，否则即坑 022 复发。", ""]
