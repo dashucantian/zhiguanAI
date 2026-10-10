@@ -1,0 +1,745 @@
+{
+  "meta": {
+    "title": "止观AI · 一次闭环会话（先登记 → 采集 → 阈值 → 节拍 → VR → 落盘 → 质检）",
+    "subtitle": "ExperimentSession 编排 run_closed_loop：基线期只累积 Alpha 基线，闭环期每拍由决策层算出节拍与音量并热更新音频引擎，收口时同栈落 npz 与质检",
+    "sourceRef": "zhiguanAI@master(8124cce)",
+    "scope": "只画「一次闭环会话」的调用顺序。从此养脑入队（console_server.py:1152）在另一视图 congci-feed-sequence；SSE 前端渲染、registry_tx 锁内部、IsoEngine 回调线程内的合成公式不在本图。",
+    "diagramType": "sequence",
+    "locale": "zh-CN"
+  },
+  "nodes": [
+    {
+      "id": "fashi",
+      "label": "宗国法师",
+      "kind": "actor",
+      "subtitle": "先登记、点开始／停止的人",
+      "facts": [
+        "SOP V0.2＝先登记后采集，Zen-ID 永不复用",
+        "闭环会话的晋升（/api/ingest）是另一条手动命令，不在本图"
+      ],
+      "size": {
+        "width": 249,
+        "height": 3276
+      },
+      "position": {
+        "x": 32,
+        "y": 48
+      }
+    },
+    {
+      "id": "reg",
+      "label": "01_registry/session_registry.csv",
+      "kind": "database",
+      "module": "入库",
+      "subtitle": "会话登记册（S 号在此分配）",
+      "source": {
+        "kind": "source",
+        "file": "registry_tx.py",
+        "lineStart": 46,
+        "lineEnd": 46,
+        "symbol": "REGISTRY_CSV"
+      },
+      "facts": [
+        "生产写入口只有 POST /api/registry/preregister（console_server.py:2618 → preregister_locked :242-259）",
+        "读→分配 S 号→查重→append→原子写整段收在跨进程临界区内（批 C0）",
+        "盘上另有一张 participant_registry.csv，两张表 status 语义不同（10-09 W1 只读盘查）"
+      ],
+      "size": {
+        "width": 446,
+        "height": 3276
+      },
+      "position": {
+        "x": 345,
+        "y": 48
+      }
+    },
+    {
+      "id": "exp",
+      "label": "ExperimentSession",
+      "kind": "service",
+      "module": "驾驶舱",
+      "subtitle": "闭环会话编排：起线程、转推流、收口质检",
+      "source": {
+        "kind": "source",
+        "file": "console_server.py",
+        "lineStart": 1025,
+        "lineEnd": 1182,
+        "symbol": "ExperimentSession"
+      },
+      "facts": [
+        "只做编排与事件转发，判定全在闭环三件（controller/engine）与 qc_pipeline，不建平行定义（红线5）",
+        "结束后另有一跳 congci_pipeline.enqueue（:1152），附属物纪律＝入队失败只 warn、不打断收口"
+      ],
+      "size": {
+        "width": 378,
+        "height": 3276
+      },
+      "position": {
+        "x": 855,
+        "y": 48
+      }
+    },
+    {
+      "id": "run",
+      "label": "run_closed_loop()",
+      "kind": "participant",
+      "module": "闭环",
+      "subtitle": "基线期→闭环期主循环，每 decision_dt 一拍",
+      "tags": [
+        "core"
+      ],
+      "source": {
+        "kind": "source",
+        "file": "closedloop_experiment.py",
+        "lineStart": 250,
+        "lineEnd": 634,
+        "symbol": "run_closed_loop"
+      },
+      "facts": [
+        "数据源四选一：SimulateFeeder :307／BleBgapiReceiver :318／TcpReceiver :322／BleDirectReceiver :326",
+        "另写 experiments/ 三张 CSV（features／decisions／events，EXP_DIR :43）与配置快照",
+        "落盘前用运行证据派生 zx_phase：算出过频段＝照相，产出过闭环决策＝运相（derive_zx_phase）"
+      ],
+      "size": {
+        "width": 422,
+        "height": 3276
+      },
+      "position": {
+        "x": 1297,
+        "y": 48
+      }
+    },
+    {
+      "id": "buf",
+      "label": "DataBuffer",
+      "kind": "participant",
+      "module": "采集",
+      "subtitle": "唯一的信号真值面：接收器写入、循环读取",
+      "source": {
+        "kind": "source",
+        "file": "muse2-repo/muse2-master/muse_local_server.py",
+        "lineStart": 340,
+        "lineEnd": 1189,
+        "symbol": "DataBuffer"
+      },
+      "facts": [
+        "compute_band_power() 算出五段 dB 并留 latest_bp 供实时显示（:1115-1189）",
+        "模拟件在 meta 打 source_note 标明合成信号，不与真机混称"
+      ],
+      "size": {
+        "width": 378,
+        "height": 3276
+      },
+      "position": {
+        "x": 1783,
+        "y": 48
+      }
+    },
+    {
+      "id": "ctrl",
+      "label": "ClosedLoopController",
+      "kind": "participant",
+      "module": "闭环",
+      "subtitle": "阈值决策层：个人 Alpha 基线→(beat, vol, note)",
+      "source": {
+        "kind": "source",
+        "file": "closedloop_controller.py",
+        "lineStart": 28,
+        "lineEnd": 145,
+        "symbol": "ClosedLoopController"
+      },
+      "facts": [
+        "基线＝statistics.median(Alpha)；超阈值判奖励态",
+        "θ/β 比自适应目标节拍，每周期变化量受 vol_smooth_step／beat_step 限幅"
+      ],
+      "size": {
+        "width": 486,
+        "height": 3276
+      },
+      "position": {
+        "x": 2664,
+        "y": 48
+      }
+    },
+    {
+      "id": "audio",
+      "label": "IsoEngine",
+      "kind": "participant",
+      "module": "闭环",
+      "subtitle": "等时节拍音频（sounddevice 回调线程）",
+      "source": {
+        "kind": "source",
+        "file": "closedloop_engine.py",
+        "lineStart": 27,
+        "lineEnd": 109,
+        "symbol": "IsoEngine"
+      },
+      "facts": [
+        "载波正弦 × 脉冲包络，运行期热更新 beat／volume／carrier 且无爆音",
+        "只执行决策层给的数，自身不做任何判定"
+      ],
+      "size": {
+        "width": 375,
+        "height": 3276
+      },
+      "position": {
+        "x": 2225,
+        "y": 48
+      }
+    },
+    {
+      "id": "vr",
+      "label": "VRSession → /ws/vr",
+      "kind": "participant",
+      "module": "VR",
+      "subtitle": "闭环事件→WebXR 指标包（剥离原始波形）",
+      "source": {
+        "kind": "source",
+        "file": "console_server.py",
+        "lineStart": 1238,
+        "lineEnd": 1300,
+        "symbol": "VRSession"
+      },
+      "facts": [
+        "push_from_experiment 带 beat／vol／bands／state，字段名与监测路径一致，前端可统一消费",
+        "只送指标不送原始波形"
+      ],
+      "size": {
+        "width": 402,
+        "height": 3276
+      },
+      "position": {
+        "x": 3214,
+        "y": 48
+      }
+    },
+    {
+      "id": "qc",
+      "label": "qc_pipeline.assess_cached()",
+      "kind": "participant",
+      "module": "质检",
+      "subtitle": "质检唯一实现，按 (路径, mtime, size, 阈值版本) 缓存",
+      "source": {
+        "kind": "source",
+        "file": "qc_pipeline.py",
+        "lineStart": 482,
+        "lineEnd": 512,
+        "symbol": "assess_cached"
+      },
+      "facts": [
+        "驾驶舱侧 qc_assess 是薄委托层，report_path 不参与判定",
+        "阈值版本 THRESHOLD_VERSION=20260920 随结果入档（本图不改任何判据）"
+      ],
+      "size": {
+        "width": 538,
+        "height": 3276
+      },
+      "position": {
+        "x": 4288,
+        "y": 48
+      }
+    },
+    {
+      "id": "npz",
+      "label": "report/local_{ts}.npz ＋ 中文报告",
+      "kind": "database",
+      "module": "采集",
+      "subtitle": "save_bin 落点（muse2-repo/muse2-master/report/）",
+      "source": {
+        "kind": "source",
+        "file": "muse2-repo/muse2-master/muse_local_server.py",
+        "lineStart": 38,
+        "lineEnd": 38,
+        "symbol": "REPORT_DIR"
+      },
+      "facts": [
+        "同一路径也是监测路径的落点，即此前所称「暂存池」",
+        "报告随后被注入配置表与状态词（inject_config_table／inject_state_word）"
+      ],
+      "size": {
+        "width": 544,
+        "height": 3276
+      },
+      "position": {
+        "x": 3680,
+        "y": 48
+      }
+    }
+  ],
+  "groups": [
+    {
+      "id": "ticks",
+      "label": "逐拍闭环",
+      "kind": "loop",
+      "loop": {
+        "min": 1,
+        "max": "*"
+      },
+      "operands": [
+        {
+          "id": "tick",
+          "guard": "未收到停止指令且 elapsed < duration_seconds",
+          "edgeIds": [
+            "m7",
+            "m8",
+            "m15",
+            "m16"
+          ]
+        }
+      ],
+      "position": {
+        "x": 749,
+        "y": 814
+      },
+      "size": {
+        "width": 2698,
+        "height": 1212
+      }
+    },
+    {
+      "id": "phase",
+      "label": "基线期 / 闭环期",
+      "kind": "alt",
+      "parentId": "ticks",
+      "parentOperandId": "tick",
+      "operands": [
+        {
+          "id": "base",
+          "guard": "in_baseline（elapsed < baseline_seconds）",
+          "edgeIds": [
+            "m9",
+            "m10"
+          ]
+        },
+        {
+          "id": "closed",
+          "guard": "else（ctrl.has_baseline 已锁定）",
+          "edgeIds": [
+            "m11",
+            "m12",
+            "m13",
+            "m14"
+          ]
+        }
+      ],
+      "position": {
+        "x": 1199,
+        "y": 1092
+      },
+      "size": {
+        "width": 1772,
+        "height": 690
+      }
+    },
+    {
+      "id": "saved",
+      "label": "落盘成功",
+      "kind": "opt",
+      "operands": [
+        {
+          "id": "has-file",
+          "guard": "if result（save_bin 返非空）",
+          "edgeIds": [
+            "m18",
+            "m19"
+          ]
+        }
+      ],
+      "position": {
+        "x": 1231,
+        "y": 2140
+      },
+      "size": {
+        "width": 2753,
+        "height": 298
+      }
+    },
+    {
+      "id": "card",
+      "label": "入库卡与契约事件",
+      "kind": "opt",
+      "operands": [
+        {
+          "id": "path-exists",
+          "guard": "if data_path and os.path.exists(data_path)，否则 _emit_saved_card 直接 return",
+          "edgeIds": [
+            "m21",
+            "m22",
+            "m23"
+          ]
+        }
+      ],
+      "position": {
+        "x": 747,
+        "y": 2576
+      },
+      "size": {
+        "width": 3874,
+        "height": 488
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "m1",
+      "source": "fashi",
+      "target": "reg",
+      "kind": "sync",
+      "label": "POST /api/registry/preregister(P001, session_type, date)",
+      "order": 1,
+      "evidence": "source",
+      "route": {
+        "messageY": 286
+      }
+    },
+    {
+      "id": "m2",
+      "source": "reg",
+      "target": "fashi",
+      "kind": "return",
+      "label": "session_id（ZEN-…-S01）| 409 已存在 | 503 登记表忙",
+      "order": 2,
+      "replyTo": "m1",
+      "evidence": "source",
+      "route": {
+        "messageY": 376
+      }
+    },
+    {
+      "id": "m3",
+      "source": "fashi",
+      "target": "exp",
+      "kind": "sync",
+      "label": "POST /api/experiment/start(cfg, simulate, address)",
+      "order": 3,
+      "evidence": "source",
+      "route": {
+        "messageY": 490
+      }
+    },
+    {
+      "id": "m4",
+      "source": "exp",
+      "target": "run",
+      "kind": "sync",
+      "label": "run_closed_loop(cfg, callback=_exp_relay, stop_event, session_info)",
+      "order": 4,
+      "evidence": "source",
+      "route": {
+        "messageY": 604
+      }
+    },
+    {
+      "id": "m5",
+      "source": "run",
+      "target": "buf",
+      "kind": "sync",
+      "label": "起数据源（BLE／TCP／模拟 四选一）→ 持续写入 DataBuffer",
+      "order": 5,
+      "evidence": "source",
+      "route": {
+        "messageY": 694
+      }
+    },
+    {
+      "id": "m6",
+      "source": "run",
+      "target": "audio",
+      "kind": "sync",
+      "label": "IsoEngine.start()（sd.OutputStream 起回调线程）",
+      "order": 6,
+      "evidence": "source",
+      "route": {
+        "messageY": 784
+      }
+    },
+    {
+      "id": "m7",
+      "source": "run",
+      "target": "buf",
+      "kind": "sync",
+      "label": "compute_band_power()",
+      "order": 7,
+      "evidence": "source",
+      "route": {
+        "messageY": 972
+      }
+    },
+    {
+      "id": "m8",
+      "source": "buf",
+      "target": "run",
+      "kind": "return",
+      "label": "latest_bp {delta, theta, alpha, beta, gamma}",
+      "order": 8,
+      "replyTo": "m7",
+      "evidence": "source",
+      "route": {
+        "messageY": 1062
+      }
+    },
+    {
+      "id": "m9",
+      "source": "run",
+      "target": "ctrl",
+      "kind": "sync",
+      "label": "add_baseline(alpha)（基线期只累积样本）",
+      "order": 9,
+      "evidence": "source",
+      "route": {
+        "messageY": 1274
+      }
+    },
+    {
+      "id": "m10",
+      "source": "run",
+      "target": "audio",
+      "kind": "sync",
+      "label": "set_volume(vol_idle) ＋ set_beat(beat_default)",
+      "order": 10,
+      "evidence": "source",
+      "route": {
+        "messageY": 1364
+      }
+    },
+    {
+      "id": "m11",
+      "source": "run",
+      "target": "ctrl",
+      "kind": "sync",
+      "label": "update(bp)：Alpha 超基线判奖励态，θ/β 定目标节拍",
+      "order": 11,
+      "evidence": "source",
+      "route": {
+        "messageY": 1514
+      }
+    },
+    {
+      "id": "m12",
+      "source": "ctrl",
+      "target": "run",
+      "kind": "return",
+      "label": "(beat_hz, volume, note)",
+      "order": 12,
+      "replyTo": "m11",
+      "evidence": "source",
+      "route": {
+        "messageY": 1580
+      }
+    },
+    {
+      "id": "m13",
+      "source": "run",
+      "target": "audio",
+      "kind": "sync",
+      "label": "set_beat(beat)",
+      "order": 13,
+      "evidence": "source",
+      "route": {
+        "messageY": 1646
+      }
+    },
+    {
+      "id": "m14",
+      "source": "run",
+      "target": "audio",
+      "kind": "sync",
+      "label": "set_volume(vol)",
+      "order": 14,
+      "evidence": "source",
+      "route": {
+        "messageY": 1712
+      }
+    },
+    {
+      "id": "m15",
+      "source": "run",
+      "target": "exp",
+      "kind": "async",
+      "label": "callback({type:'tick', elapsed, bands, beat, vol})",
+      "order": 15,
+      "evidence": "source",
+      "route": {
+        "messageY": 1866
+      }
+    },
+    {
+      "id": "m16",
+      "source": "exp",
+      "target": "vr",
+      "kind": "async",
+      "label": "broadcaster.publish(SSE) ＋ push_from_experiment → /ws/vr",
+      "order": 16,
+      "evidence": "source",
+      "route": {
+        "messageY": 1956
+      }
+    },
+    {
+      "id": "m17",
+      "source": "run",
+      "target": "audio",
+      "kind": "sync",
+      "label": "finally：engine.stop() ＋ receiver.stop()",
+      "order": 17,
+      "evidence": "source",
+      "route": {
+        "messageY": 2110
+      }
+    },
+    {
+      "id": "m18",
+      "source": "run",
+      "target": "npz",
+      "kind": "sync",
+      "label": "save_bin(extra_meta{scene:'closedloop', zx_phase, session_info})",
+      "order": 18,
+      "evidence": "source",
+      "route": {
+        "messageY": 2302
+      }
+    },
+    {
+      "id": "m19",
+      "source": "npz",
+      "target": "run",
+      "kind": "return",
+      "label": "(data_path, report_path)",
+      "order": 19,
+      "replyTo": "m18",
+      "evidence": "source",
+      "route": {
+        "messageY": 2368
+      }
+    },
+    {
+      "id": "m20",
+      "source": "run",
+      "target": "exp",
+      "kind": "async",
+      "label": "callback({type:'end', data_path, report_path}) → _emit_saved_card",
+      "order": 20,
+      "evidence": "source",
+      "route": {
+        "messageY": 2546
+      }
+    },
+    {
+      "id": "m21",
+      "source": "exp",
+      "target": "qc",
+      "kind": "sync",
+      "label": "qc_assess(data_path) → assess_cached(npz)",
+      "order": 21,
+      "evidence": "source",
+      "route": {
+        "messageY": 2778
+      }
+    },
+    {
+      "id": "m22",
+      "source": "qc",
+      "target": "exp",
+      "kind": "return",
+      "label": "{recommend, reasons, metrics{clean_ratio, packet_loss_rate}}",
+      "order": 22,
+      "replyTo": "m21",
+      "evidence": "source",
+      "route": {
+        "messageY": 2892
+      }
+    },
+    {
+      "id": "m23",
+      "source": "exp",
+      "target": "exp",
+      "kind": "sync",
+      "label": "session_contract.append_event：qc_done ＋ closed ＋ vr_interaction",
+      "order": 23,
+      "evidence": "source",
+      "route": {
+        "messageY": 2946
+      }
+    },
+    {
+      "id": "m24",
+      "source": "run",
+      "target": "exp",
+      "kind": "return",
+      "label": "{ok, data_path, report_path, baseline_db, duration_s}",
+      "order": 24,
+      "replyTo": "m4",
+      "evidence": "source",
+      "route": {
+        "messageY": 3172
+      }
+    },
+    {
+      "id": "m25",
+      "source": "exp",
+      "target": "fashi",
+      "kind": "return",
+      "label": "会话收口：npz 已落、qc 已判、已入从此队列（晋升仍候手动命令）",
+      "order": 25,
+      "replyTo": "m3",
+      "evidence": "source",
+      "route": {
+        "messageY": 3262
+      }
+    }
+  ],
+  "executions": [
+    {
+      "id": "x-exp",
+      "participantId": "exp",
+      "start": {
+        "edgeId": "m3",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m25",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-run",
+      "participantId": "run",
+      "start": {
+        "edgeId": "m4",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m24",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-ctrl",
+      "participantId": "ctrl",
+      "start": {
+        "edgeId": "m11",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m12",
+        "at": "send"
+      }
+    },
+    {
+      "id": "x-qc",
+      "participantId": "qc",
+      "start": {
+        "edgeId": "m21",
+        "at": "receive"
+      },
+      "end": {
+        "edgeId": "m22",
+        "at": "send"
+      }
+    }
+  ],
+  "layout": {
+    "version": "adaptive-v2-elkjs-0.11.0",
+    "strategy": "sequence-0"
+  }
+}

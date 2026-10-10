@@ -28,7 +28,7 @@ digraph zhiguan_source_of_truth {
 
     mindmap [label="思维导图\n生成关系图.py:19\n→ 任务关系图.html", shape=note, fillcolor="#e3f2fd"];
     gantt [label="甘特流程图\n生成甘特流程图.py:18\n无日期不画时间条", shape=note, fillcolor="#e3f2fd"];
-    boardsrc [label="看板取数层\nboard_sources.py:28／268\n单一正源常量（a006d32 已废 rglob）", shape=note, fillcolor="#e3f2fd"];
+    boardsrc [label="看板取数层\nboard_sources.py:28／273\n单一正源常量（a006d32 已废 rglob）", shape=note, fillcolor="#e3f2fd"];
     identity_map [label="看板窗口映射\nboard_config.py:74／79\n只承载物理地址＋标准显示名", shape=note, fillcolor="#e3f2fd"];
     graph_t1 [label="图谱·轨一 文本源\n.dot／.structurizr.dsl\n／architecture-model.json", shape=note, fillcolor="#e8f5e9"];
     graph_t2 [label="图谱·轨二 交付面\nqgraphflow\\*\\index.html\n双击即开、离线、不出网", shape=note, fillcolor="#e8f5e9"];

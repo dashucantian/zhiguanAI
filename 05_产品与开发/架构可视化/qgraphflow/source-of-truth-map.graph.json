@@ -93,8 +93,8 @@
       "source": {
         "kind": "document",
         "file": "AI-开工入口.md",
-        "lineStart": 98,
-        "lineEnd": 100
+        "lineStart": 99,
+        "lineEnd": 101
       },
       "facts": [
         "2026-10-07 法师金口「先延期、置暂停、候改定方案」⇒ enabled=false／expiresAt 已清",
@@ -158,8 +158,8 @@
       "source": {
         "kind": "source",
         "file": "05_产品与开发/任务看板/board_sources.py",
-        "lineStart": 267,
-        "lineEnd": 302,
+        "lineStart": 272,
+        "lineEnd": 307,
         "symbol": "_find_weina_snapshot"
       },
       "facts": [
@@ -195,8 +195,8 @@
       "source": {
         "kind": "document",
         "file": "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md",
-        "lineStart": 137,
-        "lineEnd": 144
+        "lineStart": 165,
+        "lineEnd": 172
       },
       "facts": [
         "轨一＝architecture-visualization 0.1.0：.dot／.structurizr.dsl／architecture-model.json，能进 git、能 diff",

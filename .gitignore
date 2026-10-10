@@ -188,6 +188,15 @@ diagnostics/
 05_产品与开发/架构可视化/qgraphflow/congci-feed-sequence/*
 !05_产品与开发/架构可视化/qgraphflow/congci-feed-sequence/index.html
 !05_产品与开发/架构可视化/qgraphflow/congci-feed-sequence/graph.json
+# 〔2026-10-10 法师裁「补 .gitignore 例外行」·6c7d4751 接管批〕闭环会话流视图四件留盘件入库。
+#   同 D-1008-W3a 口径：显式文件名逐条、禁通配。轨一 1 行＋轨二 5 行（目录放行与再排除两行不可省，
+#   否则 git 不下潜子目录，单加文件行无效——congci 那批已实测）。
+!05_产品与开发/架构可视化/zhiguan-closedloop-flow.dot
+!05_产品与开发/架构可视化/qgraphflow/closedloop-session-sequence.graph.json
+!05_产品与开发/架构可视化/qgraphflow/closedloop-session-sequence/
+05_产品与开发/架构可视化/qgraphflow/closedloop-session-sequence/*
+!05_产品与开发/架构可视化/qgraphflow/closedloop-session-sequence/index.html
+!05_产品与开发/架构可视化/qgraphflow/closedloop-session-sequence/graph.json
 
 # 【L1 素材层原件】逐字稿与录音转写原件（法师裁定 D2＝不纳入）
 # 含全部成员真名与内部讨论；原件已在本地存档，纳入版本控制收益有限、暴露面大

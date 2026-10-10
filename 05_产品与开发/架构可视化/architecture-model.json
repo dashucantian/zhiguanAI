@@ -7,7 +7,7 @@
     "generatedAt": "2026-10-07",
     "sourceRefPolicy": "resolvable",
     "sourceRefBase": "D:/Project/zhiguanAI",
-    "refsVerifiedAt": { "at": "2026-10-09", "by": "W3-AI-014（本批＝W3 协调窗 0b5dfd98 接图谱双轨线）", "tree": "working-tree", "baseCommit": "8124cce", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。另：board_config.py 亦带他窗在途改动（标准名批次），本件 :68／:73／:78 按工作区记。〔2026-10-09 现势更新〕congci_pipeline.py 现为 HEAD 944 行／工作区 989 行（他窗在途 +45），本件所引 :149 已用 git show HEAD 对过、HEAD 与工作区同行同文；上句 574／652／653 系 10-08 工作区基准所记，本轮未重核，引用前先自核。board_config.py 标准名 40 行已随 c5faeb5 入库，看板窗另有在途注释插行 ⇒ 本件 :68 未动、WINDOWS 表头与本窗行由 :73／:78 顺延为 :74／:79（已改）。AI-开工入口.md 他窗在 §二bis 第 3 条下补一行 ⇒ §二.9 停催令注记由 :99 顺延为 :100（本件两处已改）。AI代理身份登记.md 协调窗 10-09 改 §四／§三bis（裁定 4 双键制）⇒ 本件 :31／:97 经核未动，§四 由 :141 移至 :143（本件不引）。〔2026-10-09 晚·闭环会话流视图批〕新增 service.experiment-session／module.closedloop-controller／module.closedloop-engine／database.muse-report 四节点＋7 边，并把两处既有边的 refs 补到调用点；本批所引七件文件（console_server／closedloop_experiment／closedloop_controller／closedloop_engine／qc_pipeline／registry_tx／muse_local_server）逐件 ast 现取区间，**工作区行数＝HEAD 行数全 SAME ⇒ 本批锚点无「工作区 vs HEAD」歧义**。congci_pipeline.py 仍带他窗在途 +45 ⇒ 本批一律不引其行号，闭环收口的入队那一跳只在节点 facts 里点名（console_server.py:1152），细节归 congci-feed-sequence 视图。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt。六面正源家族（soT.*／proj.* 共 12 节点＋8 边，10-08 依协调正本 §16.2 新增）逐条现势核对，所引文件除 board_config.py／congci_pipeline.py 外均 clean；congci_pipeline.py:149 已用 git show HEAD 对过，HEAD 与工作区同行同文。〔2026-10-09 复核〕六面家族所引的四件在途文件（AI-开工入口／board_config／AI代理身份登记／congci_pipeline）逐条重取现势行内容，查出并订正 3 处顺延（:99→:100、:73→:74、:78→:79），其余锚点未动；同步订正一处初记错锚（edge.sot-arch-to-graphdual 的 evidence.md:84→:115＋:144）。轨二 source-of-truth-map 的 source 锚点与本台账同源，改这里必须同步改那里并重跑三条命令。", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
+    "refsVerifiedAt": { "at": "2026-10-10", "by": "W3-AI-014（本批＝图谱双轨窗 6c7d4751 依法师「甲」裁定接管复核）", "tree": "working-tree", "baseCommit": "b32e675", "inFlight": "congci_pipeline.py 带他窗未提交改动（HEAD 935 行 → 工作区 945 行，564 之前插 10 行）⇒ 本件 574／652／653 按工作区记；那 10 行若被回退须同步回改成 HEAD 的 564／642／643。锚点基准＝工作区还是 HEAD 此前从未定义，现记为工作区。另：board_config.py 亦带他窗在途改动（标准名批次），本件 :68／:73／:78 按工作区记。〔2026-10-09 现势更新〕congci_pipeline.py 现为 HEAD 944 行／工作区 989 行（他窗在途 +45），本件所引 :149 已用 git show HEAD 对过、HEAD 与工作区同行同文；上句 574／652／653 系 10-08 工作区基准所记，本轮未重核，引用前先自核。board_config.py 标准名 40 行已随 c5faeb5 入库，看板窗另有在途注释插行 ⇒ 本件 :68 未动、WINDOWS 表头与本窗行由 :73／:78 顺延为 :74／:79（已改）。AI-开工入口.md 他窗在 §二bis 第 3 条下补一行 ⇒ §二.9 停催令注记由 :99 顺延为 :100（本件两处已改）。AI代理身份登记.md 协调窗 10-09 改 §四／§三bis（裁定 4 双键制）⇒ 本件 :31／:97 经核未动，§四 由 :141 移至 :143（本件不引）。〔2026-10-09 晚·闭环会话流视图批〕新增 service.experiment-session／module.closedloop-controller／module.closedloop-engine／database.muse-report 四节点＋7 边，并把两处既有边的 refs 补到调用点；本批所引七件文件（console_server／closedloop_experiment／closedloop_controller／closedloop_engine／qc_pipeline／registry_tx／muse_local_server）逐件 ast 现取区间，**工作区行数＝HEAD 行数全 SAME ⇒ 本批锚点无「工作区 vs HEAD」歧义**。congci_pipeline.py 仍带他窗在途 +45 ⇒ 本批一律不引其行号，闭环收口的入队那一跳只在节点 facts 里点名（console_server.py:1152），细节归 congci-feed-sequence 视图。〔2026-10-10 四度顺延·接管复核实测〕board_sources.py：看板窗在 :124 插入 window_label()（+5 行，在途未提交）⇒ 本件 _find_weina_snapshot 的 return 由 :268→:273、正源缺失明确报错那一行由 :302→:307（HEAD 侧仍是 268／302，其改动若回退须同步改回）；同文件 :19／:28／:118 在插入点之前，经核未动。本轮另全量复算：模型所引 32 个文件＝0 缺、0 行区间越界，其中 4 个现带他窗在途 M（board_config／board_server／board_sources／congci_pipeline），逐条取其现势行内容判定，除上述两条外全部命中。〔2026-10-10 同日续·两条〕①AI-开工入口.md 已随 1e3bf04 入库转 clean，但协调窗又就地补条 ⇒ 本件 §二.9 停催令注记再顺延一次 :100→:101（**该锚 24 小时内漂两次**，工作区＝HEAD 同行）；②本台账引自身目录内文档的两条锚（edge.sot-arch-to-graphdual 的 evidence.md :115／:144）被同批插入 §二bis（+23 行）打掉，实测现势为 :140／:172 ⇒ **文档自引用改挂章节锚 `#六-重新生成`／`#八-裁定记录`，不再用行号**（一份按设计持续长大的文档，行号锚必漂且两道闸均不报）；代码类锚仍用行号。轨二 source-of-truth-map 的三处 source 区间同步跟改（98-100→99-101、267-302→272-307、137-144→165-172），已重生成并复验。", "method": "逐条取现势该行内容＋近 ±4 行声明人工判定；全量清单产出 _analysis_tmp/_w3_src_ref_audit.txt。六面正源家族（soT.*／proj.* 共 12 节点＋8 边，10-08 依协调正本 §16.2 新增）逐条现势核对，所引文件除 board_config.py／congci_pipeline.py 外均 clean；congci_pipeline.py:149 已用 git show HEAD 对过，HEAD 与工作区同行同文。〔2026-10-09 复核〕六面家族所引的四件在途文件（AI-开工入口／board_config／AI代理身份登记／congci_pipeline）逐条重取现势行内容，查出并订正 3 处顺延（:99→:100、:73→:74、:78→:79），其余锚点未动；同步订正一处初记错锚（edge.sot-arch-to-graphdual 的 evidence.md:84→:115＋:144）。轨二 source-of-truth-map 的 source 锚点与本台账同源，改这里必须同步改那里并重跑三条命令。〔2026-10-10 接管复核（法师裁「甲」）〕不采信交接函自报，独立跑三道：①全模型被引 32 文件 0 缺 0 越界，但**空行探针**另查出 2 条 .md 锚落在空行（AI-开工入口.md:100、evidence.md:115／:144 三条系协调窗 1e3bf04 插 §二bis＋23 行所致），已全部重取现势并订正；②轨二 source-of-truth-map 三处区间同步跟改后重生成，semantic／geometry／sourceEvidence 复验全过；③所请 closedloop 侧闸门与同源核查另记 evidence.md §十。建议后续每批改动前跑同一条空行探针（脚本用法见 evidence.md §十），它比现有两道闸多抓一类缺陷：锚点落在空行＝该行号必不对应任何声明。", "note": "行号级锚点会随文件插行漂移；validate-model.mjs 只验文件存在、不验行号语义 ⇒ 改完代码须回核被引用的那几条" },
     "notes": "所有 sourceRefs 为仓库内可解析路径；未经代码直接证实的一律降级为 low 并在 description 标明 inferred/assumed。"
   },
   "nodes": [
@@ -53,7 +53,7 @@
       "type": "module",
       "state": "current",
       "description": "扫描 ~/.qoder-cn 会话与任务元数据（按磁盘 mtime 推断活跃/静默）；维那快照只认单一正源常量 WEINA_SOURCE，正源缺失明确报错不回退（2026-10-08 a006d32 已废 rglob 按 mtime 择源）。",
-      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19", "05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:268"],
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:19", "05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:273"],
       "confidence": "high"
     },
     {
@@ -242,7 +242,7 @@
       "type": "source-of-truth",
       "state": "current",
       "description": "运行巡检的正源＝C3 巡检线。现势：cron 8e2925ab… enabled=false／pauseReason=manual（法师 10-07「先做延期，处于暂停的状态」），且 09-29 起有「停催令」⇒ 执行体不在岗，正源目前只有文档态（规约 §二.9 注记＋只读快照件）。替代动作＝报告法师＋各窗己档留痕，不得自行代催他窗。",
-      "sourceRefs": ["AI-开工入口.md:100", "01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md"],
+      "sourceRefs": ["AI-开工入口.md:101", "01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md"],
       "confidence": "medium"
     },
     {
@@ -585,7 +585,7 @@
       "sync": "batch",
       "protocol": "file",
       "description": "看板取数层消费同一份指定快照：WEINA_SOURCE 单一常量（:28）→ `_find_weina_snapshot` 只认该路径（:268），正源缺失明确报错不回退（:302）。a006d32 已解除递归 mtime 择源。",
-      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:268"],
+      "sourceRefs": ["05_产品与开发/任务看板/board_sources.py:28", "05_产品与开发/任务看板/board_sources.py:273"],
       "confidence": "high"
     },
     {
@@ -606,8 +606,8 @@
       "type": "projects-to",
       "sync": "manual",
       "protocol": "file",
-      "description": "evidence.md §六 的重生成命令：先改台账 → 轨一 DOT/DSL 渲染 → 轨二 validate-graph＋generate-viewer＋复验。（原记 `evidence.md:84` 系错锚：该处是 §四 插件性能表，与本边无关；2026-10-08 订正为 §六 命令行＋§八 双轨制条款。）",
-      "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md:115", "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md:144"],
+      "description": "evidence.md §六 的重生成命令：先改台账 → 轨一 DOT/DSL 渲染 → 轨二 validate-graph＋generate-viewer＋复验。（原记 `evidence.md:84` 系错锚，2026-10-08 改 `:115`＋`:144`；**该两条又被 10-09 协调窗插入 §二bis（+23 行）顺延失效**，实测现势为 `:140`／`:172` ⇒ 本对文档自引用一律改挂章节锚 `#六-重新生成`／`#八-裁定记录`，不再用行号：一份按设计会持续长大的文档，其行号锚必漂，而两道闸都抓不到。代码类锚仍用行号。）",
+      "sourceRefs": ["05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md#六-重新生成", "05_产品与开发/架构可视化/zhiguan-l2-containers.evidence.md#八-裁定记录"],
       "confidence": "high"
     },
     {
@@ -629,7 +629,7 @@
       "sync": "manual",
       "protocol": "file",
       "description": "C3 暂停期的替代动作（规约 §二.9 注记①）：被挡窗口报告法师＋己档留痕，不挂账、不代催他窗。",
-      "sourceRefs": ["AI-开工入口.md:100"],
+      "sourceRefs": ["AI-开工入口.md:101"],
       "confidence": "high"
     },
     {
