@@ -398,7 +398,11 @@ def admit(npz_path: str, *, qc=None, session_type: str = "",
 # ── 索引行 ──────────────────────────────────────────────────────────────
 
 def _base_lineage(doc) -> tuple:
-    """当前持久脑谱系基线：(version, sha16)。version＝已 committed 单元数。"""
+    """当前持久脑谱系基线：(version, sha16)。version＝已 committed 单元数。
+
+    〔2026-10-08 缺陷④正修〕**必须在脑锁内调用**：脑锁保证无他进程正在提升
+    候选，此刻的 committed 计数与脑 sha 才是本单元真实的起点。入队时调用是
+    原缺陷的成因（批量入队 N 行共用同一基线）。"""
     v = sum(1 for r in doc["rows"] if r.get("status") == "committed"
             and not r.get("duplicate_of"))
     bp = brain_path()
@@ -455,7 +459,6 @@ def enqueue(npz_path: str, *, session_key: str = None, qc=None,
                     and r.get("source_hash16") == h16):
                 return {"queued": False, "status": "already_pending",
                         "unit_id": r["unit_id"], "row": r}
-        base_v, base_s16 = _base_lineage(doc)
         n_attempt = 1 + sum(1 for r in rows
                             if r.get("session_key") == session_key
                             and r.get("source_hash16") == h16)
@@ -464,7 +467,12 @@ def enqueue(npz_path: str, *, session_key: str = None, qc=None,
         row = {"unit_id": unit_id, "session_key": session_key,
                "source_hash": source_hash, "source_hash16": h16,
                "algo_version": av, "lineage_id": LINEAGE_ID,
-               "brain_base_version": base_v, "brain_base_sha16": base_s16,
+               # 〔2026-10-08 缺陷④正修〕base 谱系**不在入队时求值**。批量入队
+               # 时 N 行会读到同一个 committed 计数与同一个脑 sha ⇒ 版本号碰撞
+               # ＋sha 审计链断裂（账本谎称「N 坐同出一个基脑」，而脑体其实逐坐
+               # 串下来了）。两字段留 None ＝「未定，待处理时定」，由
+               # _process_row 在脑锁内落定（见该处注记）。
+               "brain_base_version": None, "brain_base_sha16": None,
                "status": "pending", "duplicate_of": None,
                "npz_path": npz_path, "npz_resolved": None,
                "participant": participant or "", "scene": scene or "",
@@ -543,8 +551,12 @@ def _claim_release(session_key: str) -> None:
 
 # ── 索引行提交（锁内重读合并——C0 同款纪律）─────────────────────────────
 
-def _commit_row(unit_id: str, mutate) -> dict:
+def _commit_row(unit_id: str, mutate, with_doc: bool = False) -> dict:
     """锁内重读索引→按 unit_id 定位→mutate(row)→原子写。返回更新后行。
+    with_doc=True 时改调 mutate(row, doc)——供需要全表视野的字段（base 谱系
+    的 committed 计数）在**同一把索引锁内**求值。不得改为「调用方自己再取一次
+    索引锁」：registry_tx.locked 不可重入（自身 pid 视为活持有者，不接管），
+    嵌套取锁必自锁到 TimeoutError。
     行已消失（他进程已处置）→抛 LookupError（调用方按竞处理放弃）。"""
     with registry_tx.locked(purpose="congci_commit", lock_path=index_lock_path()):
         doc = _read_index()
@@ -555,7 +567,10 @@ def _commit_row(unit_id: str, mutate) -> dict:
                 break
         if hit is None:
             raise LookupError(f"unit {unit_id} 已不在索引（他进程已处置）")
-        mutate(hit)
+        if with_doc:
+            mutate(hit, doc)
+        else:
+            mutate(hit)
         _write_index(doc)
         return dict(hit)
 
@@ -642,10 +657,21 @@ def _process_row(row: dict, *, inject_fail: str = None) -> dict:
                 return {"skipped": True, "unit_id": unit_id,
                         "reason": f"状态已为 {cur.get('status')}"}
 
+            # 〔2026-10-08 缺陷④正修〕base 谱系在此落定，取代原 enqueue() 内
+            # 求值。此点同时满足两个前提：**已持脑锁**（无他进程能提升候选，
+            # committed 计数与脑 sha 稳定）＋**已复判 status==pending**（不把
+            # 基线写进他进程已收口的终态行，那会覆盖已审计的 base）。索引锁嵌
+            # 套在脑锁内＝上方 picked_at 提交已有的取锁顺序，无新死锁面。
+            def _stamp_base(r, doc):
+                bv, bs = _base_lineage(doc)
+                r.update({"brain_base_version": bv, "brain_base_sha16": bs})
+            stamped = _commit_row(unit_id, _stamp_base, with_doc=True)
+            row["brain_base_version"] = stamped["brain_base_version"]
+            row["brain_base_sha16"] = stamped["brain_base_sha16"]
+
             udir = unit_dir(unit_id)
             os.makedirs(udir, exist_ok=True)
             bp = brain_path()
-            base_sha = _sha16(bp)
 
             if inject_fail == "candidate_save":
                 raise RuntimeError("注入失败：candidate_save（事务①前中断）")
@@ -914,7 +940,22 @@ def main() -> int:
     ap.add_argument("--enqueue", nargs="+", metavar="NPZ")
     ap.add_argument("--drain", action="store_true")
     ap.add_argument("--recover", action="store_true")
+    ap.add_argument("--auto-worker", action="store_true",
+                    help="CLI 下仍懒启动常驻 worker（默认不启，理由见 main 内注记）")
     a = ap.parse_args()
+    if not a.auto_worker:
+        # 〔2026-10-08 缺陷②正修·甲〕CLI 进程默认**不留常驻 worker**。
+        # 泄漏链：enqueue() 末尾 ensure_worker() 起 daemon 线程 → CLI 打印完
+        # 即退出 → 解释器关闭时 daemon 线程被硬杀 → registry_tx.locked() 的
+        # finally 来不及跑 → 锁件停在「已 O_CREAT 建空件、未 os.write 写
+        # holder_pid」的 0 字节态。而接管判据是 `if pid and _pid_status(pid)
+        # =="dead"`，空件解析出 pid=0 使 `if pid` 恒假 ⇒ **永不接管**，一次
+        # CLI enqueue 就能把整条管线永久锁死（age 兜底已按 W3 反例① 删除）。
+        # 甲治因：CLI 本就不该留常驻 worker，消化走 --drain 同步路径（即
+        # configure() 注释所述「测试置 False」那条文档化路径）。
+        # 只改 CLI，**不动 _CFG 模块默认**：生产侧 in-process enqueue 跑在
+        # 8777 长命宿主里，仍依赖 worker 懒启动。
+        configure(auto_worker=False)
     if a.status:
         return _cli_status()
     if a.enqueue:
@@ -927,6 +968,10 @@ def main() -> int:
                              ensure_ascii=False))
             n += 1 if r.get("queued") else 0
         print(f"enqueued={n}")
+        if n and not _CFG["auto_worker"]:
+            # 甲 之后 --enqueue 不再自带消化，不提示会被当「入队即已喂」
+            print("hint=已入队未消化（CLI 默认不启常驻 worker）；"
+                  "续跑 --drain 同步消化，或加 --auto-worker 复原旧行为")
         return 0
     if a.recover:
         print(json.dumps(recover_pending(), ensure_ascii=False))
