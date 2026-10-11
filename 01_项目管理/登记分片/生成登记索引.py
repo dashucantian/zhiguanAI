@@ -171,6 +171,10 @@ import datetime as _dt
 _today = _dt.date.today()
 _hits, _unreadable, _freshmap = [], [], {}
 _blind = 0
+# ⚠2026-10-11 法师裁「5、需要」⇒ 盲区不再只报个数，同时**逐条落盘**成双击可开的清单
+#   （`C3-盲区全量-MMDD.md`）。**不改任何判据**：PENDING／PENDING_WIDE 两张词表一字未动，
+#   计数口径不变（坑 023 教训 4「中途不换量具」）；只是把"抓不到的那 N 处"从数字变成可看的清单。
+_blind_hits = []
 PENDING_TODAY = _dt.date.today()
 # ⚠2026-10-11 第一份提醒表跑出来即抓到两处毛病，据此改判据（改完即停，不再调显示启发式）：
 #  ①原「mtime＝日历今天」在**跨日会话**里失效——02:5x 跑时，23:4x 刚写的方案稿全落榜，
@@ -230,6 +234,10 @@ for _p in PEND_TARGETS:
         if not PENDING.search(_ln):
             if PENDING_WIDE.search(_ln):
                 _blind += 1
+                _bs = _ln.strip().lstrip(">|# ").replace("|", "｜")
+                if len(_bs) > 72:
+                    _bs = _bs[:72] + "…"
+                _blind_hits.append((_fn, _i, _bs))
             continue
         _s = _ln.strip().lstrip(">|# ").replace("|", "｜")
         if len(_s) > 56:
@@ -357,6 +365,38 @@ _r += ["", "---",
        "在「近 24 小时」这一档里几乎永远占掉一格且首条常是表格残行——本窗判其为**次优非错**，"
        "故只记不改（再调下去就正是坑 022 里那个「不停调显示启发式」的形态）。"]
 io.open(REMIND, "w", encoding="utf-8", newline="\n").write("\n".join(_r) + "\n")
+
+# ---- 盲区全量清单（法师 2026-10-11「5、需要」）----
+# 缘起：法师不用命令行，故 `00_总索引.md` 里那句"要全量须人工 grep「候法师」"对他等于"看不了"。
+# 本清单＝把宽词表 PENDING_WIDE 命中、窄词表 PENDING 未命中的那些行**逐条落盘**，双击即开。
+# ⚠三条自限（写死在这里，防后来者误读）：
+#   ① **不改判据**：两张词表一字未动，现势／已销／盲区三个计数口径不变，本清单是**补充视图**不是新量具；
+#   ② **不当结案账**：这里面的行**绝大多数不是活悬案**（多为已裁定原文的叙述、历史留痕、规则条文本身），
+#      所以**不纳入销账白名单、不逐条判状态**；要结案仍回 `悬案已销.txt` 加行；
+#   ③ 与 `00_总索引.md`／`C3-悬案提醒-*.md` 同属**派生视图**（自标"自动生成、勿手改"，重跑即修复），
+#      按 §二.7 其 M 态不算开放滞留、不入催办对象。
+BLINDOUT = os.path.join(HERE, "C3-盲区全量-%s.md" % _today.strftime("%m%d"))
+_byfile = {}
+for _fn, _i, _bs in _blind_hits:
+    _byfile.setdefault(_fn, []).append((_i, _bs))
+_b = ["# C3 盲区全量清单｜%s（自动生成，勿手改；受众＝法师一人，不催任何窗）" % _today.isoformat(), "",
+      "> **这是什么**：悬案扫描用两张词表——窄表（`候法师另示／候法师一句／候您一句／候法师裁／候裁定／候裁／候一句／候示`）"
+      "计入正式数；宽表多出的那些说法（如「候法师**给开工号**」「候法师**明示**」「候法师**一个字**」）**窄表抓不到**，"
+      "过去只报一个总数。法师 2026-10-11 裁「需要」⇒ 现把逐条列在这里。",
+      "> **这不是什么**：①不是新量具——窄表口径与三个计数一字未改；②不是待办账——**这里绝大多数不是活悬案**"
+      "（多为已裁定原文的叙述行、历史留痕、规则条文自身），故不逐条判状态、不进销账白名单；"
+      "③不是全量真相——扫描面只含 `01_项目管理` 顶层文书、登记分片、信箱 engine 区与协调正本，**代码与其它目录不在面内**。",
+      "> **要结案**仍回 `悬案已销.txt` 加一行（`文件名:行号｜状态｜日期｜依据`），**不要删原文**。", "",
+      "**共 %d 处，分布在 %d 个文件**（按处数倒序）。" % (len(_blind_hits), len(_byfile)), ""]
+for _fn in sorted(_byfile, key=lambda x: (-len(_byfile[x]), x)):
+    _its = _byfile[_fn]
+    _b += ["## `%s`（%d 处）" % (_fn, len(_its)), ""]
+    for _i, _bs in sorted(_its):
+        _b.append("- `:%d`｜%s" % (_i, _bs))
+    _b.append("")
+io.open(BLINDOUT, "w", encoding="utf-8", newline="\n").write("\n".join(_b) + "\n")
+
+print("盲区全量", BLINDOUT, len(_b), "行｜", len(_blind_hits), "处／", len(_byfile), "文件")
 
 print("写出", OUT, len(lines), "行；分片", len(frag), "条；KZ标题", len(kz_head), "；D", len(dh), "；日志号", len(nums))
 print("悬案提醒", REMIND, len(_r), "行｜现势", len(_hits), "处｜已销", len(_sold_hits), "处｜白名单未命中", _sold_idle, "条",

@@ -191,6 +191,47 @@ if (-not (Test-Path -LiteralPath $amJson)) {
     }
 }
 
+# ---------- 10. 本轮案例库提取声明（2026-10-11 法师裁「那就根据现在的实际情况调整为必做 收口检查」） ----------
+# 背景：法师 2026-10-10 已把"每天从各窗进程提取有价值经验落案例库"授为 W3 常设职责，但**无检查点**
+#   ⇒ 判语 017 的核心结论正是「无检查点的规则不等于规则」。本门就是给它补的检查点。
+# 判据（机器能判的那一半）：机器判不了"这轮有没有值得留档的经验"（语义判断），
+#   但判得了"今天有动静的窗有没有明确表态"。故判据＝**表态制**：
+#   今日己档（`信箱\engine\巡检日志-*.txt`，mtime＝今日）里必须有一行当日声明，形状固定：
+#     案例库提取｜YYYY-MM-DD｜已提取 N 张（编号…）      或
+#     案例库提取｜YYYY-MM-DD｜无可提取（理由一句话）
+#   不表态＝告警 ⇒ 把"没人想起来"变成可见信号，而不是靠人记性。
+# ⚠自检（教训 7.1／坑 017：判据形状失效绝不允许静默 PASS）：
+#   今日有窗动工、而**全区一份声明都读不到** ⇒ 报「制度未落地」并只报制度状态、不逐窗点名
+#   （新制首日逐窗点名＝把闸门建成噪音；坑 021 同族：恒红的警报会训练人不看警报）。
+Section "10. 本轮案例库提取声明（今日有动静的窗须在自己己档表态）"
+$engDir = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+$todayStr = (Get-Date).ToString('yyyy-MM-dd')
+$clMark = "案例库提取｜$todayStr"
+if (-not (Test-Path -LiteralPath $engDir)) {
+    Bad "闸10：读不到信箱 engine 区 —— 目录被移动？本门不可信"
+} else {
+    $todayLogs = @(Get-ChildItem -LiteralPath $engDir -Filter '巡检日志-*.txt' -ErrorAction SilentlyContinue |
+                   Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+    if ($todayLogs.Count -eq 0) {
+        Write-Host "[NOTE] 今日无窗己档有动静（mtime 判据）——本门前提不成立，不判 PASS 也不判告警。" -ForegroundColor Gray
+    } else {
+        $declared = @(); $silent = @()
+        foreach ($lg in $todayLogs) {
+            $txt = [System.IO.File]::ReadAllText($lg.FullName, [System.Text.Encoding]::UTF8)
+            if ($txt.Contains($clMark)) { $declared += $lg.Name } else { $silent += $lg.Name }
+        }
+        if ($declared.Count -eq 0) {
+            Bad "闸10 制度未落地：今日 $($todayLogs.Count) 个窗有动静，全区**零份**当日声明（找的是字面「$clMark」）。首上线只报制度状态、不逐窗点名；规约 §二.12 已定形状，各窗下一轮收口补一行即可。"
+        } else {
+            if ($silent.Count -eq 0) {
+                Ok "今日有动静的 $($todayLogs.Count) 个窗全部留下当日案例库提取声明（$($declared -join '、')）。"
+            } else {
+                Bad "案例库提取声明缺 $($silent.Count) 窗：$($silent -join '、') —— 已表态者：$($declared -join '、')。缺者在自己己档补一行（形状见规约 §二.12），历史轮不回改。"
+            }
+        }
+    }
+}
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
