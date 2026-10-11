@@ -371,6 +371,89 @@ def session_summary(eeg, sfreq):
             "valid_ratio": round(float(valid.mean()), 4)}
 
 
+# ── 四文明原型透镜（形状 1）──────────────────────────────────────────
+# 授权：宗国法师 2026-10-11「六、候您一句的点：六点建议照准」第 2 条＝形状 1 先做。
+# 方案正源：01_项目管理/20261010_W3_四文明原型透镜与零坐标正负象限_个人节点模型呈现方案_v1.md §四形状1。
+#
+# 硬约束（逐条对应方案稿，非本窗自设）：
+#   · **视角维，不是新数据层**：本段只重述 session_summary 的既有输出，
+#     不参与分段、不参与字母表、不新增采集字段 ⇒ 不触 §九第3条「五相归层，不出现第六并列层」。
+#   · **只有 RDoC 栏可验**；另三栏＝词汇／叙述层，一律带 LENS_BOUNDARY 标注，
+#     **不进判据、不进阈值、不进闭环控制**（本模块本就不被 closedloop_controller import，见文件头纪律）。
+#   · **不设总分**：返回体里没有任何跨栏聚合值。依据＝方案稿同构 2「四行读数全是方向、不是量级」
+#     与法师 2026-10-11 指令「零点坐标是动量、是张力」⇒ 收敛成单一标量即违该指令。
+#   · ⚠**阿毗达摩／干支／占星三栏的词汇映射属义理判定权**（开工规约 §四＝法师；案例库说明 §一「义理只能由法师定」）。
+#     AI 不得自拟 ⇒ 三栏**结构在此、内容留空**，显式标 LENS_PENDING。
+#     这不是半成品：**弃权是一等值**（本文件既有纪律），空栏是如实，硬造映射才是缺陷。
+#   · 出生数据（干支／占星真值化）**本轮不采**＝法师 §六④ 照准原文 ⇒ 本段无任何出生字段入口。
+
+LENS_VERSION = "20261011"
+
+LENS_BOUNDARY = "词汇／叙述层——不进判据、不进阈值、不进闭环控制"
+LENS_PENDING = "候法师定词汇映射（义理判定权在法师，AI 不自拟）"
+
+# (键, 栏名, 该书所述波长, 是否可直接验)  —— 栏名与波长逐字取自方案稿 §一 取证表
+LENSES = [
+    ("rdoc", "现代 RDoC／神经科学", "生物生理硬件", True),
+    ("abhidhamma", "阿毗达摩", "微观究竟（毫秒级心法）", False),
+    ("ganzhi", "中国干支", "宏观时空能量", False),
+    ("astro", "西方占星", "子人格冲突动力", False),
+]
+
+# RDoC 栏的诚实缺口：该书案例的 RDoC 读数含以下各项，我们**一项都没测**。
+# 列出缺口即本栏"可验"的一部分（判语 011：我方验证须声明未测项，不以未测项立论）。
+RDOC_NOT_MEASURED = [
+    "脑影像／前额叶灌注（该书：DLPFC 去活化）",
+    "唾液皮质醇昼夜节律",
+    "人格量表分（该书：神经质 N=94）",
+    "行为任务与不良反应记录",
+]
+
+
+def lens_readings(summ):
+    """把一份 session_summary 重述成四栏读法。数据不足照实弃权，不硬造。
+
+    返回 {"ok": False, "reason": ...} 或
+         {"ok": True, "version":..., "lenses": {键: 栏}, "no_aggregate_score": True}
+    """
+    if not isinstance(summ, dict) or not summ.get("ok"):
+        reason = (summ or {}).get("reason") if isinstance(summ, dict) else None
+        return {"ok": False,
+                "reason": reason or "上游 session_summary 弃权，四栏读法一并弃权"}
+
+    lenses = {}
+    for key, name, wavelength, verifiable in LENSES:
+        lenses[key] = {"name": name, "wavelength": wavelength,
+                       "verifiable": verifiable,
+                       "boundary": None if verifiable else LENS_BOUNDARY}
+
+    states = summ.get("states") or []
+    lenses["rdoc"].update({
+        "status": "measured",
+        "measured": {
+            "n_states": summ.get("n_states"),
+            "state_word": summ.get("word"),
+            "valid_ratio": summ.get("valid_ratio"),
+            "state_seq_version": summ.get("version"),
+            "dominant_band_per_state": [
+                {"state": s.get("state"), "dominant_band": s.get("dominant"),
+                 "epochs": s.get("epochs")} for s in states],
+        },
+        "not_measured": list(RDOC_NOT_MEASURED),
+        "claim_limit": "本栏只报可测项；频段占优不得读作任何 RDoC 构念的判定",
+    })
+
+    for key, _n, _w, verifiable in LENSES:
+        if not verifiable:
+            lenses[key].update({"status": "pending", "text": None,
+                                "note": LENS_PENDING})
+
+    return {"ok": True, "version": LENS_VERSION,
+            "source_version": summ.get("version"),
+            "lenses": lenses,
+            "no_aggregate_score": True}
+
+
 def analyze_sessions(npz_paths, out_dir=None):
     """批量：全体会话 → 统一字母表 → 各自状态词 → 加权编辑距离矩阵。
 
@@ -570,12 +653,92 @@ def _selftest():
     if labs3 is None or len(set(labs3)) < 2:
         fails.append("④ 字母表未分出 ≥2 类")
 
+    # ⑤ 四栏读法（形状 1）：只有 RDoC 栏有内容，另三栏必须留空且带边界标注
+    fake = {"ok": True, "version": STATE_SEQ_VERSION, "n_states": 3,
+            "word": "ABC", "valid_ratio": 0.9875,
+            "states": [{"state": 0, "dominant": "alpha", "epochs": 60},
+                       {"state": 1, "dominant": "theta", "epochs": 30},
+                       {"state": 2, "dominant": "alpha", "epochs": 60}]}
+    lr = lens_readings(fake)
+    if not lr.get("ok"):
+        fails.append("⑤ 四栏读法对合格 summary 竟弃权")
+    else:
+        ls = lr["lenses"]
+        if len(ls) != len(LENSES):
+            fails.append(f"⑤ 栏数应 {len(LENSES)}（得 {len(ls)}）")
+        measured = [k for k, v in ls.items() if v.get("status") == "measured"]
+        if measured != ["rdoc"]:
+            fails.append(f"⑤ 可验栏应只有 rdoc（得 {measured}）")
+
+        # 词汇层三栏的断言抽成可复用函数，**为的是能对"做过的假结果"再跑一次**——
+        # 没响过的闸不算闸（教训 7.1／坑 017）。
+        def _pend_fails(d):
+            out = []
+            for k, _n, _w, verifiable in LENSES:
+                col = d.get(k) or {}
+                if verifiable:
+                    if col.get("boundary") is not None:
+                        out.append(f"可验栏 {k} 不应挂词汇层标注")
+                    continue
+                if col.get("status") != "pending":
+                    out.append(f"{k} 栏 status 应 pending（得 {col.get('status')}）")
+                if col.get("text") is not None:
+                    out.append(f"{k} 栏内容应留空候法师定映射（竟有值）")
+                if col.get("boundary") != LENS_BOUNDARY:
+                    out.append(f"{k} 栏缺边界标注")
+            return out
+
+        fails += ["⑤ " + x for x in _pend_fails(ls)]
+        if len([k for k, v in ls.items() if v.get("status") == "pending"]) != 3:
+            fails.append("⑤ 词汇层应 3 栏")
+        m = ls["rdoc"]["measured"]
+        if (m["n_states"], m["state_word"], m["valid_ratio"]) != (3, "ABC", 0.9875):
+            fails.append("⑤ RDoC 栏未如实转录上游 measured 值")
+        if not lr.get("no_aggregate_score"):
+            fails.append("⑤ 缺 no_aggregate_score 声明")
+        # 禁总分：递归扫全树，任何名字带 score/total/aggregate/sum 的键即失败
+        # （`no_aggregate_score` 是"不设总分"的声明位本身，白名单排除）
+        def _scan(o, path=""):
+            bad = []
+            if isinstance(o, dict):
+                for kk, vv in o.items():
+                    low = str(kk).lower()
+                    if low != "no_aggregate_score" and any(
+                            t in low for t in ("score", "total", "aggregate", "sum")):
+                        bad.append(path + "/" + str(kk))
+                    bad += _scan(vv, path + "/" + str(kk))
+            elif isinstance(o, list):
+                for i, vv in enumerate(o):
+                    bad += _scan(vv, f"{path}[{i}]")
+            return bad
+        hits = _scan(lr)
+        if hits:
+            fails.append(f"⑤ 出现聚合／总分类键（违「不设总分」）：{hits}")
+        a = json.dumps(lr, ensure_ascii=False, sort_keys=True)
+        b = json.dumps(lens_readings(fake), ensure_ascii=False, sort_keys=True)
+        if a != b:
+            fails.append("⑤ 四栏读法不确定（同输入两次结果不一致）")
+        # **反向验证**：把上面两道闸各喂一个"做过手脚"的结果，必须都响；
+        # 不响＝断言本身是死的，比没有断言更坏。
+        bad1 = json.loads(a)
+        bad1["lenses"]["ganzhi"]["text"] = "金旺克木"     # 模拟 AI 自拟义理映射
+        if not _pend_fails(bad1["lenses"]):
+            fails.append("⑤ 反向验证失效：词汇栏被填值却未报警")
+        bad2 = json.loads(a)
+        bad2["lenses"]["rdoc"]["measured"]["focus_score"] = 0.8   # 模拟偷偷加总分
+        if not _scan(bad2):
+            fails.append("⑤ 反向验证失效：加了总分类键却未报警")
+    # 弃权传递：上游弃权则四栏一并弃权，且不吞掉上游理由
+    ab = lens_readings({"ok": False, "reason": "有效数据不足"})
+    if ab.get("ok") or ab.get("reason") != "有效数据不足":
+        fails.append(f"⑤ 弃权未如实传递（得 {ab}）")
+
     if fails:
         for x in fails:
             print("FAIL:", x)
         return 1
     print("PASS: state_segmentation 自测通过（①双态分段+边界+确定性 / "
-          "②短数据弃权 / ③编辑距离 / ④字母表）")
+          "②短数据弃权 / ③编辑距离 / ④字母表 / ⑤四栏读法含两道反向验证）")
     return 0
 
 
