@@ -251,6 +251,11 @@ _sold_used = set()
 for _d, _fn, _i, _s in _sold_hits:
     _sold_used.add((_fn, _i) if (_fn, _i) in _sold_exact else _fn)
 _sold_idle = _sold_n - len(_sold_used)
+# ⚠2026-10-11 补：警报原先只报"未命中 N 条"，**不说是哪 N 条**，查出成本全落在人身上，
+#   实测一轮里本窗为定位 1 条漂移交了两次重跑。点名不改任何计数口径（坑 023 教训 4「中途不换量具」），
+#   只是让这道已有的警报**可执行**。键形态：`文件名:行号` 或 `文件名（整件）`。
+_sold_idle_keys = ["%s:%d" % k if isinstance(k, tuple) else "%s（整件）" % k
+                   for k in list(_sold_exact) + list(_sold_file) if k not in _sold_used]
 _sold_cnt = {"已裁": 0, "已撤": 0}
 for _h in _sold_hits:
     _sold_cnt[_sold_state(_h[1], _h[2])] += 1
@@ -261,10 +266,12 @@ if not os.path.isfile(SOLD_PATH):
               "不可读作「悬案全都还活着」（层C 未生效）。", ""]
 else:
     lines += ["- 销账：白名单有效 %d 条（另有无效行 %d 条%s）｜命中现势悬案 **%d 处**（已裁 %d／已撤 %d）｜"
-              "**未命中 %d 条**%s"
+              "**未命中 %d 条**%s%s"
               % (_sold_n, len(_sold_bad), ("：" + "；".join(_sold_bad[:3])) if _sold_bad else "",
                  len(_sold_hits), _sold_cnt["已裁"], _sold_cnt["已撤"], _sold_idle,
-                 "（⚠白名单自消音：措辞变了或行号漂了，须逐条复核，**不得当作已清**）" if _sold_idle > 0 else ""), ""]
+                 "（⚠白名单自消音：措辞变了或行号漂了，须逐条复核，**不得当作已清**）" if _sold_idle > 0 else "",
+                 "　点名：" + "；".join("`%s`" % k for k in _sold_idle_keys[:5])
+                 + ("…" if len(_sold_idle_keys) > 5 else "") if _sold_idle_keys else ""), ""]
 if not _hits:
     lines += ["- ⚠**本轮一个悬案标记都没读到**（扫了 %d 件）。**这不是「已清零」**——最可能是标记措辞变了或文件被移动，"
               "**本项不可信，请人工核查**（同坑 017 恒空转、坑 022 不自知）。" % len(PEND_TARGETS), ""]
@@ -352,4 +359,5 @@ _r += ["", "---",
 io.open(REMIND, "w", encoding="utf-8", newline="\n").write("\n".join(_r) + "\n")
 
 print("写出", OUT, len(lines), "行；分片", len(frag), "条；KZ标题", len(kz_head), "；D", len(dh), "；日志号", len(nums))
-print("悬案提醒", REMIND, len(_r), "行｜现势", len(_hits), "处｜已销", len(_sold_hits), "处｜白名单未命中", _sold_idle, "条")
+print("悬案提醒", REMIND, len(_r), "行｜现势", len(_hits), "处｜已销", len(_sold_hits), "处｜白名单未命中", _sold_idle, "条",
+      ("｜点名 " + "；".join(_sold_idle_keys[:5])) if _sold_idle_keys else "")

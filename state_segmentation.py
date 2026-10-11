@@ -382,15 +382,12 @@ def session_summary(eeg, sfreq):
 #     **不进判据、不进阈值、不进闭环控制**（本模块本就不被 closedloop_controller import，见文件头纪律）。
 #   · **不设总分**：返回体里没有任何跨栏聚合值。依据＝方案稿同构 2「四行读数全是方向、不是量级」
 #     与法师 2026-10-11 指令「零点坐标是动量、是张力」⇒ 收敛成单一标量即违该指令。
-#   · ⚠**阿毗达摩／干支／占星三栏的词汇映射属义理判定权**（开工规约 §四＝法师；案例库说明 §一「义理只能由法师定」）。
-#     AI 不得自拟 ⇒ 三栏**结构在此、内容留空**，显式标 LENS_PENDING。
-#     这不是半成品：**弃权是一等值**（本文件既有纪律），空栏是如实，硬造映射才是缺陷。
 #   · 出生数据（干支／占星真值化）**本轮不采**＝法师 §六④ 照准原文 ⇒ 本段无任何出生字段入口。
+#     ⚠该条经 10-11 裁定后**不是过期条款，而是长期约束**：下面三句式里"不排盘／不定位行星"即由此来。
 
 LENS_VERSION = "20261011"
 
 LENS_BOUNDARY = "词汇／叙述层——不进判据、不进阈值、不进闭环控制"
-LENS_PENDING = "候法师定词汇映射（义理判定权在法师，AI 不自拟）"
 
 # (键, 栏名, 该书所述波长, 是否可直接验)  —— 栏名与波长逐字取自方案稿 §一 取证表
 LENSES = [
@@ -408,6 +405,95 @@ RDOC_NOT_MEASURED = [
     "人格量表分（该书：神经质 N=94）",
     "行为任务与不良反应记录",
 ]
+
+# ── 词汇层三栏的通用句式 ─────────────────────────────────────────────
+# 授权（宗国法师 2026-10-11，逐字）：
+#   「四、候您一句（只一件）三栏的词汇映射怎么办？「三栏各给一句通用句式」」
+# ⇒ 三栏不再留空，各写**一句**通用句式（固定模板 ＋ 槽位）。授权自带的三条边界（非本窗自设）：
+#   ① **句式即上限**：三栏内容只准由 LENS_PATTERNS 这张模板表实例化——**不准每跑自造、不准改写句式、
+#      不准追加第二句**。自测 ⑤ 用"照槽位重算一遍再比对"守这条，并配一道负对照专打"改模板"这种绕法。
+#   ② **槽位只取已测字段**（`session_summary` 既有输出：n_states／word／states[].dominant／epochs／valid_ratio），
+#      一个槽位都不许引新采集。⚠`word` 是**按状态号排序的"每种状态一个字母"，不是时间次第**（见 `state_centroids`）
+#      ⇒ 句式里只说"有 N 种（记为 …）"，**不说"次第"**——把派生列表读成时序是本段最易犯的错。
+#   ③ 仍**不进判据、不进阈值、不进闭环控制**，仍**不设总分**：每句自带 LENS_NO_CLAIM 分句，
+#      把"这是词汇层重述"写进句子本身，而不是只写在旁注里。
+# 义理判定权仍在法师（开工规约 §四）：这三句是**照裁定写的重述句式**，不是 AI 自拟的义理映射。
+#
+# ⚠**三句各读一条不同的轴**，不是把同一组数换三套词说三遍。依据＝方案稿同构 2
+#   「每个通道各有自己的失衡轴，不共用一个『好坏』标量」：
+#     阿毗达摩（微观究竟）→ **颗粒轴**：可辨出几种、各住几拍；
+#     干支（宏观时空能量）→ **两极偏胜轴**：最强一端 ↔ 最弱一端（正对应法师「以零为坐标，所以有正负」）；
+#     占星（子人格冲突动力）→ **消长轴**：有几股动力在争、争在几种状态之间。
+#   并列最多时不写"独大"（那是假的），只把两端照实报出——两端相同则句式自己会显出"这坐没分化"，
+#   **让读数自己露馅，好过用一句漂亮话盖住它**。
+# ⚠槽位里 `valid_share` 是 `valid_ratio` 的百分比写法（同一个数，叙述层换写法）；
+#   RDoC 栏仍存上游**原值**不动。自测 ⑤ 有一道断言专核这两者对得上，防叙述层偷偷改数。
+
+LENS_AUTHORITY = "宗国法师 2026-10-11 裁：「三栏各给一句通用句式」"
+LENS_NO_CLAIM = "此为词汇层重述，不作判定"
+LENS_PATTERN_NOTE = ("句式由法师授权的模板表实例化，槽位只取已测字段；"
+                     "不得改写句式、不得追加第二句、不得据此判定")
+
+LENS_PATTERNS = {
+    "abhidhamma": {
+        "id": "abhidhamma-v1",
+        "template": ("以阿毗达摩「刹那相续」的词汇说：这一坐的心相续可辨出 {n_states} 种"
+                     "（记为 {word}），各住 {epoch_seq} 拍，可辨比例 {valid_share}"
+                     "——" + LENS_NO_CLAIM + "。"),
+        "not_measured": [
+            "毫秒级心法（该书：速行心 Javana 阶段）",
+            "心所名目（该书：52 心所中的痴 Moha／掉举 Uddhacca）",
+            "正念观照是否被切断",
+        ],
+    },
+    "ganzhi": {
+        "id": "ganzhi-v1",
+        "template": ("以干支「气之偏胜」的词汇说：这一坐的偏胜轴两端为 "
+                     "{top_band}（{top_share}）↔ {low_band}（{low_share}），"
+                     "可辨比例 {valid_share}——" + LENS_NO_CLAIM +
+                     "；出生八字不采，故不排盘、不断格局。"),
+        "not_measured": [
+            "出生年月日时与地点（法师 §六④：本轮不采 ⇒ 长期约束）",
+            "八字格局与用神（该书：金旺克木、偏印夺食）",
+            "大运流年",
+        ],
+    },
+    "astro": {
+        "id": "astro-v1",
+        "template": ("以占星「内在动力消长」的词汇说：这一坐有 {n_bands} 股动力在消长"
+                     "（{band_list}），交替出现于 {n_states} 种状态之间，"
+                     "可辨比例 {valid_share}——" + LENS_NO_CLAIM +
+                     "；出生星盘不采，故不定位行星、不定宫位。"),
+        "not_measured": [
+            "出生年月日时与地点（法师 §六④：本轮不采 ⇒ 长期约束）",
+            "行星相位与宫位（该书：火土 90° 刑克、土星卡死第 10 宫）",
+            "子人格冲突的心理学量表",
+        ],
+    },
+}
+
+
+def _lens_slots(summ):
+    """三句式共用的槽位。**只从 session_summary 的既有返回取值**，不新增任何采集或派生判定。"""
+    states = summ.get("states") or []
+    epochs = [int(s.get("epochs") or 0) for s in states]
+    bands = [s.get("dominant") for s in states]
+    ep_all = float(sum(epochs)) or 1.0
+    hi = int(max(range(len(epochs)), key=lambda i: epochs[i])) if epochs else 0
+    lo = int(min(range(len(epochs)), key=lambda i: epochs[i])) if epochs else 0
+    vr = summ.get("valid_ratio")
+    return {
+        "n_states": summ.get("n_states"),
+        "word": summ.get("word"),
+        "valid_share": "无" if vr is None else f"{float(vr):.1%}",
+        "epoch_seq": "、".join(str(n) for n in epochs) or "无",
+        "n_bands": len(set(b for b in bands if b)),
+        "band_list": "、".join(dict.fromkeys(b for b in bands if b)) or "无",
+        "top_band": bands[hi] if bands else "无",
+        "top_share": f"{epochs[hi] / ep_all:.1%}" if epochs else "0.0%",
+        "low_band": bands[lo] if bands else "无",
+        "low_share": f"{epochs[lo] / ep_all:.1%}" if epochs else "0.0%",
+    }
 
 
 def lens_readings(summ):
@@ -443,10 +529,21 @@ def lens_readings(summ):
         "claim_limit": "本栏只报可测项；频段占优不得读作任何 RDoC 构念的判定",
     })
 
+    slots = _lens_slots(summ)
     for key, _n, _w, verifiable in LENSES:
-        if not verifiable:
-            lenses[key].update({"status": "pending", "text": None,
-                                "note": LENS_PENDING})
+        if verifiable:
+            continue
+        pat = LENS_PATTERNS[key]
+        lenses[key].update({
+            "status": "pattern",
+            "authority": LENS_AUTHORITY,
+            "pattern_id": pat["id"],
+            "pattern": pat["template"],
+            "slots": dict(slots),
+            "text": pat["template"].format(**slots),
+            "not_measured": list(pat["not_measured"]),
+            "note": LENS_PATTERN_NOTE,
+        })
 
     return {"ok": True, "version": LENS_VERSION,
             "source_version": summ.get("version"),
@@ -653,7 +750,7 @@ def _selftest():
     if labs3 is None or len(set(labs3)) < 2:
         fails.append("④ 字母表未分出 ≥2 类")
 
-    # ⑤ 四栏读法（形状 1）：只有 RDoC 栏有内容，另三栏必须留空且带边界标注
+    # ⑤ 四栏读法（形状 1）：只有 RDoC 栏是 measured；另三栏＝授权句式实例化，且带边界标注
     fake = {"ok": True, "version": STATE_SEQ_VERSION, "n_states": 3,
             "word": "ABC", "valid_ratio": 0.9875,
             "states": [{"state": 0, "dominant": "alpha", "epochs": 60},
@@ -670,9 +767,13 @@ def _selftest():
         if measured != ["rdoc"]:
             fails.append(f"⑤ 可验栏应只有 rdoc（得 {measured}）")
 
-        # 词汇层三栏的断言抽成可复用函数，**为的是能对"做过的假结果"再跑一次**——
-        # 没响过的闸不算闸（教训 7.1／坑 017）。
-        def _pend_fails(d):
+        # 词汇层三栏的断言抽成可复用函数，**为的是能对"做过手脚的结果"再跑一次**——
+        # 没响过的闸不算闸（教训 7.1／坑 017／坑 024）。
+        # ⚠本谓词是**裁定后改口版**：原先断言"三栏 text 必须为 None"（留空候义理），
+        #   法师 10-11 裁「三栏各给一句通用句式」后该断言作废；改守**更严的一条**——
+        #   text 只准是"授权模板照槽位实例化"的结果。故现在能抓三种绕法：
+        #   ①自造一句 ②照槽位算但对不上 ③**连模板一起换掉**（这条旧断言抓不到，专设 bad3 打它）。
+        def _lens_fails(d):
             out = []
             for k, _n, _w, verifiable in LENSES:
                 col = d.get(k) or {}
@@ -680,20 +781,41 @@ def _selftest():
                     if col.get("boundary") is not None:
                         out.append(f"可验栏 {k} 不应挂词汇层标注")
                     continue
-                if col.get("status") != "pending":
-                    out.append(f"{k} 栏 status 应 pending（得 {col.get('status')}）")
-                if col.get("text") is not None:
-                    out.append(f"{k} 栏内容应留空候法师定映射（竟有值）")
+                if col.get("status") != "pattern":
+                    out.append(f"{k} 栏 status 应 pattern（得 {col.get('status')}）")
                 if col.get("boundary") != LENS_BOUNDARY:
                     out.append(f"{k} 栏缺边界标注")
+                if col.get("authority") != LENS_AUTHORITY:
+                    out.append(f"{k} 栏缺授权出处标注")
+                auth = (LENS_PATTERNS.get(k) or {}).get("template")
+                if col.get("pattern") != auth:
+                    out.append(f"{k} 栏句式非授权模板（疑被改写）")
+                    continue          # 模板已换 ⇒ 下面按它重算没有意义
+                try:
+                    expect = auth.format(**(col.get("slots") or {}))
+                except (KeyError, IndexError) as e:
+                    out.append(f"{k} 栏槽位不全（{e}）")
+                    continue
+                if col.get("text") != expect:
+                    out.append(f"{k} 栏内容与「授权模板照槽位重算」不符（疑每跑自造）")
+                if LENS_NO_CLAIM not in (col.get("text") or ""):
+                    out.append(f"{k} 栏句内缺「不作判定」分句")
             return out
 
-        fails += ["⑤ " + x for x in _pend_fails(ls)]
-        if len([k for k, v in ls.items() if v.get("status") == "pending"]) != 3:
+        fails += ["⑤ " + x for x in _lens_fails(ls)]
+        if len([k for k, v in ls.items() if v.get("status") == "pattern"]) != 3:
             fails.append("⑤ 词汇层应 3 栏")
         m = ls["rdoc"]["measured"]
         if (m["n_states"], m["state_word"], m["valid_ratio"]) != (3, "ABC", 0.9875):
             fails.append("⑤ RDoC 栏未如实转录上游 measured 值")
+        # 叙述层换写法不得换数：三栏槽位里的 valid_share 必须是上游 valid_ratio 的百分比写法
+        for k, _n, _w, verifiable in LENSES:
+            if verifiable:
+                continue
+            got = (ls[k].get("slots") or {}).get("valid_share")
+            if got != f"{fake['valid_ratio']:.1%}":
+                fails.append(f"⑤ {k} 栏 valid_share={got}，与上游 "
+                             f"{fake['valid_ratio']:.1%} 不符（叙述层改了数）")
         if not lr.get("no_aggregate_score"):
             fails.append("⑤ 缺 no_aggregate_score 声明")
         # 禁总分：递归扫全树，任何名字带 score/total/aggregate/sum 的键即失败
@@ -718,16 +840,25 @@ def _selftest():
         b = json.dumps(lens_readings(fake), ensure_ascii=False, sort_keys=True)
         if a != b:
             fails.append("⑤ 四栏读法不确定（同输入两次结果不一致）")
-        # **反向验证**：把上面两道闸各喂一个"做过手脚"的结果，必须都响；
-        # 不响＝断言本身是死的，比没有断言更坏。
+        # **反向验证**：给上面两道闸各喂"做过手脚"的结果，必须都响；不响＝断言是死的，比没断言更坏。
+        # ⚠坑 024 的纪律：故障必须注在**闸还会读到的地方**——下面三例都是改完再交给谓词，谓词当场重算。
         bad1 = json.loads(a)
-        bad1["lenses"]["ganzhi"]["text"] = "金旺克木"     # 模拟 AI 自拟义理映射
-        if not _pend_fails(bad1["lenses"]):
-            fails.append("⑤ 反向验证失效：词汇栏被填值却未报警")
+        bad1["lenses"]["ganzhi"]["text"] = "金旺克木"     # 绕法①：AI 自拟一句义理映射
+        if not _lens_fails(bad1["lenses"]):
+            fails.append("⑤ 反向验证失效：词汇栏被换成自拟句却未报警")
         bad2 = json.loads(a)
         bad2["lenses"]["rdoc"]["measured"]["focus_score"] = 0.8   # 模拟偷偷加总分
         if not _scan(bad2):
             fails.append("⑤ 反向验证失效：加了总分类键却未报警")
+        bad3 = json.loads(a)                              # 绕法③：连授权模板一起换掉
+        bad3["lenses"]["astro"]["pattern"] = "以占星说：本坐心性偏静，专注度良好。"
+        bad3["lenses"]["astro"]["text"] = bad3["lenses"]["astro"]["pattern"]
+        if not _lens_fails(bad3["lenses"]):
+            fails.append("⑤ 反向验证失效：句式被整体改写却未报警")
+        bad4 = json.loads(a)                              # 绕法②：句子不动，只把槽位改成假数
+        bad4["lenses"]["abhidhamma"]["slots"]["n_states"] = 99
+        if not _lens_fails(bad4["lenses"]):
+            fails.append("⑤ 反向验证失效：槽位被改假却未报警")
     # 弃权传递：上游弃权则四栏一并弃权，且不吞掉上游理由
     ab = lens_readings({"ok": False, "reason": "有效数据不足"})
     if ab.get("ok") or ab.get("reason") != "有效数据不足":
@@ -738,7 +869,7 @@ def _selftest():
             print("FAIL:", x)
         return 1
     print("PASS: state_segmentation 自测通过（①双态分段+边界+确定性 / "
-          "②短数据弃权 / ③编辑距离 / ④字母表 / ⑤四栏读法含两道反向验证）")
+          "②短数据弃权 / ③编辑距离 / ④字母表 / ⑤四栏读法含四道反向验证）")
     return 0
 
 
