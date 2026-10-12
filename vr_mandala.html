@@ -122,6 +122,23 @@ const VARIANTS = {
     middle: {k:8, r:2.4,  seg:1440, rings:[2.6,1.7,0.8], spokes:[2.6,3.1,28], color:'goldFar', op:0.55, pos:[0,1.8,-9]},
     ground: {k:4, r:11.0, seg:1440, rings:[12.0,6.0], spokes:[12.0,13.5,36], color:'goldNear', op:0.70, y:0.02},
     orb: {r:0.055, color:'center', glow:1.0, followInner:true},
+    /* 张力层（段3 运相，设计稿 20261012_W1 §二/§五，法师 10-12「开工」）。
+       只存设计意图量，**不存有量纲的 k/c/v0**——那些由段3 时长在运行时反推
+       （v0 ∝ 1/段长，写死就等于存了一份"当前 segsec 下的快照"）。
+       四对落参数、后四对（苦乐／得失／善恶／美丑）刻意不在此处＝账面留空，
+       依法师 10-12 追认「可」，其场景对应挂义理线，不由 VR 窗自裁。
+       unit 一栏是语义标注不是开关：相对＝乘倍率（保持三层既有比例），
+       绝对＝加偏移（雾是密度不是比例）。 */
+    tension: {
+      N: 2, zeta: 0.34, firstPeak: 0.85,       // 段内摆回数／阻尼比／首摆幅（|t| 上限 1）
+      maxT: 1, maxSlew: 1.8,                   // 钳位：|t|≤maxT；|vt|≤maxSlew·firstPeak·ω_d
+      axes: {
+        dongjing: { channel: 'phaseRate', weight: 0.10,   unit: '相对' },
+        yinyang:  { channel: 'fog',       weight: 0.0035, unit: '绝对' },
+        mingan:   { channel: 'glow',      weight: 0.06,   unit: '相对' },
+        xianyin:  { channel: 'opacity',   weight: 0.10,   unit: '相对' },
+      },
+    },
     /* 〔W1 审查 09-19〕设计师自标"金色 ~1.0%"与"大地暖金占比高"存在张力：大地环
        r=12~13.5 是画面最大结构、加色混合亮金，实际占比很可能远超 1.0%。W1 不代改
        配色（美学归设计师＋法师 Pico 终审），问题已回派设计师复核。 */
@@ -340,6 +357,14 @@ const SYNTH_SEQ = [0.2, 0.5, 0.7, 0.4];     // 件2 §三 合成输入序列（�
 const XR_MOCK  = STAGE_ON && QSTAGE.get('xrmock') === '1';
 const MOCK_END_MS = parseFloat(QSTAGE.get('mockend') || '0');
 
+/* 张力层（段3 运相）：只有 ?stage=1 且 ?tension=pos|neg 才介入。
+   **默认 URL 永远是零点**＝本窗自约，法师 10-12 追认「成立」（底账 §八.8 销案）；
+   变体若未配 tension 节（如 v5stupa 留档）⇒ TENS 为空、本层结构上不可能介入。 */
+const TENS = STAGE_ON ? (spec.tension || null) : null;
+const TSIGN = QSTAGE.get('tension') === 'pos' ? 1
+            : QSTAGE.get('tension') === 'neg' ? -1 : 0;
+const TENSION_ON = !!(TENS && TSIGN !== 0);
+
 const STAGES = STAGE_ON ? [
   { key: 'enter',  cn: '进入', dur: ENTER_S },
   { key: 'dwell',  cn: '安住', dur: SEGSEC },
@@ -366,6 +391,84 @@ const baseSnap = STAGE_ON ? {
   glow: BREATH_ON ? BREATH.glow.base : glow.scale.x,
 } : null;
 let xrSessionRef = null;
+
+/* ── 张力层状态（设计稿 20261012_W1 §二）──────────────────────────
+   零点不是"停"，是有回复力的吸引子：段3 起点给一次初速度，此后无外力，
+   偏离→摆开→过冲→衰减回中全由 t'' = -k·t - c·t' 走出来。
+   tRaw＝未钳位值（三值分层的 measure），t＝钳位后实作用值（output），
+   suggest 本段仍为 null（决策层属 S6，未接线不以 0 充）。 */
+const tension = TENSION_ON ? {
+  on: true, t: 0, tRaw: 0, vt: 0, started: false,
+  flips: 0, lastSign: 0, maxAbsT: 0, clipped: false, phiInit: false,
+  phi: { fog: 0, layer: 0, glow: 0 },
+  seg: STAGES[2].dur, wd: 0, wn: 0, k: 0, c: 0, v0: 0, slewCap: 0,
+} : { on: false };
+
+function tensionArm() {
+  /* 有量纲的数一律在此反推，不进注册表：段长（segsec）一改，k/c/v0 全跟着变，
+     写死就等于在账面上存了一份"当前段长下的快照"——与设计稿 §五 同一条理由。 */
+  if (!tension.on) return;
+  const N = TENS.N, z = TENS.zeta;
+  tension.seg = STAGES[2].dur;
+  tension.wd = 2 * Math.PI * N / tension.seg;
+  tension.wn = tension.wd / Math.sqrt(1 - z * z);
+  tension.k  = tension.wn * tension.wn;
+  tension.c  = 2 * z * tension.wn;
+  /* v0 由「首摆幅 = firstPeak」反推：τp = atan(ω_d/(z·ω_n))/ω_d，该处包络 e^(−z·ω_n·τp) */
+  const tauP = Math.atan(tension.wd / (z * tension.wn)) / tension.wd;
+  tension.v0 = TENS.firstPeak * tension.wd / Math.exp(-z * tension.wn * tauP);
+  /* 速率钳位写成无量纲倍式 ⇒ 两档（默认 80s／闸门 8s）同为 maxSlew 倍余量。
+     ⚠既不能写"每秒"（快档 v0 ∝ 1/段长，会被起手就钉住），也不能写"单帧"（帧率的函数）。 */
+  tension.slewCap = TENS.maxSlew * TENS.firstPeak * tension.wd;
+  tension.t = 0; tension.tRaw = 0; tension.vt = 0; tension.started = false;
+  tension.flips = 0; tension.lastSign = 0; tension.maxAbsT = 0;
+  tension.clipped = false; tension.phiInit = false;
+}
+
+function tensionTick(dt) {
+  if (!tension.on || !tension.started) return;
+  tension.vt += (-tension.k * tension.tRaw - tension.c * tension.vt) * dt;
+  if (Math.abs(tension.vt) > tension.slewCap) {
+    tension.vt = tension.slewCap * Math.sign(tension.vt);
+    tension.clipped = true;
+  }
+  tension.tRaw += tension.vt * dt;
+  const mt = TENS.maxT;
+  tension.t = Math.max(-mt, Math.min(mt, tension.tRaw));
+  if (tension.t !== tension.tRaw) tension.clipped = true;
+  if (Math.abs(tension.t) > tension.maxAbsT) tension.maxAbsT = Math.abs(tension.t);
+  const s = Math.sign(tension.t);
+  if (s !== 0) {
+    if (tension.lastSign !== 0 && s !== tension.lastSign) tension.flips += 1;
+    tension.lastSign = s;
+  }
+}
+
+function tensionReadout() {
+  if (!tension.on) return null;
+  return {
+    on: true, mode: TSIGN > 0 ? 'pos' : 'neg',
+    measure: +tension.tRaw.toFixed(4), suggest: null, output: +tension.t.toFixed(4),
+    vt: +tension.vt.toFixed(4), flips: tension.flips, maxAbsT: +tension.maxAbsT.toFixed(4),
+    clipped: tension.clipped, started: tension.started,
+    k: +tension.k.toFixed(4), c: +tension.c.toFixed(4),
+    v0: +tension.v0.toFixed(4), wd: +tension.wd.toFixed(4),
+    slewCap: +tension.slewCap.toFixed(4), seg: tension.seg,
+    axes: {
+      dongjing: tension.on ? +(1 + tension.t * TENS.axes.dongjing.weight).toFixed(4) : 1,
+      yinyang:  +(tension.t * TENS.axes.yinyang.weight).toFixed(5),
+      mingan:   +(1 + tension.t * TENS.axes.mingan.weight).toFixed(4),
+      xianyin:  +(1 + tension.t * TENS.axes.xianyin.weight).toFixed(4),
+    },
+    /* live＝实作用于场景的读数（不是"打算施加的值"）：判据 10 要凭这一层证明画面真动了，
+       只凭 t 等于自证。三通道各取现值，精度按可分辨位数给。 */
+    live: {
+      fog: +scene.fog.density.toFixed(6),
+      glow: +glow.scale.x.toFixed(5),
+      opacity: breathLayers.map(L => +L.cur.toFixed(5)),
+    },
+  };
+}
 
 function pushEvent(kind, extra) {
   const e = Object.assign({
@@ -585,6 +688,17 @@ function stageTickInner(timeMs) {
   stage.lastT = t;
   const p = STAGES[stage.idx];
 
+  /* 张力层只在变化段（运相）受力，其余段不回中、不推摆 */
+  tensionTick(dt);
+  if (p.key === 'change' && tension.on && !tension.started) {
+    tension.started = true;
+    tension.vt = TSIGN * tension.v0;     // 唯一一次外力；符号＝?tension=pos|neg
+    pushEvent('tension_begin', { mode: TSIGN > 0 ? 'pos' : 'neg',
+      seg: tension.seg, wd: +tension.wd.toFixed(4), k: +tension.k.toFixed(4),
+      c: +tension.c.toFixed(4), v0: +tension.v0.toFixed(4),
+      slewCap: +tension.slewCap.toFixed(4) });
+  }
+
   /* 进入段不再由 JS 推黑场——见 #stageFade 纯 CSS 动画（rAF 停摆时会盖黑） */
   if (p.key === 'change' && SYNTH_ON) {
     const i = Math.min(SYNTH_SEQ.length - 1, Math.floor((t - stage.t0) / SEGSEC));
@@ -593,6 +707,12 @@ function stageTickInner(timeMs) {
   if (p.key === 'gather' || p.key === 'exit') returnToBase(dt, p.key === 'exit');
   /* 收束段不自动跳退出：结束须由使用者主动发起（§12.3「随时可用」） */
   if (p.dur > 0 && stage.idx < STAGES.length - 2 && (t - stage.t0) >= p.dur) {
+    /* 离变化段即停手：段末 t 本应回中线（ω_d·seg＝2πN ⇒ sin(2πN)≡0，是构造成立的），
+       落账用于判据 10——符号翻转次数＝有动量，段末 |t|＝有回复力。 */
+    if (p.key === 'change' && tension.on && tension.started) {
+      pushEvent('tension_end', Object.assign({}, tensionReadout()));
+      tension.started = false;   // 外力只给一次；此后不再推，t 自然停在零点附近
+    }
     stage.idx += 1; stage.t0 = t;
     stage.phaseAt = performance.now();
     if (STAGES[stage.idx].key === 'change') stage.synthEmitted = -1;
@@ -644,6 +764,7 @@ function armStage() {
   stage.endObserved = false; stage.fromSystem = false;
   stage.fault = false; stage.tickErr = null; stage.report = null;
   window.__stageReport = null;
+  tensionArm();   // 张力层与段时钟同一零点：再点一次「进入 VR」＝从零摆回第一次
   if (badgeEl) badgeEl.style.display = '';
   playEnterFade();
 }
@@ -708,21 +829,47 @@ renderer.setAnimationLoop((time)=>{
     breathState.lastT = t;
     const follow = tau => 1 - Math.exp(-dt / tau);
     const twoPi = Math.PI * 2;
-    /* 甲 · 雾场（主通道，真实纵深——远处起效，近身所缘不动，规格 §二量级论证） */
+    /* 三路相位取法＝判据 9 的承重前提（设计稿 §三）：**未介入必须走墙上时钟原式**。
+       现势 dt 被 min(dt,0.5) 钳过的大间隙会让累加器永久落后墙上时钟、再也追不回，
+       切过去"默认档逐字节等于已认可版本"就从构造上立不住。介入时先把累加器对齐到
+       原式此刻的相位（phiInit），切换那一帧不跳。 */
+    const T = tension.on;
+    if (T && !tension.phiInit) {
+      tension.phi.fog   = twoPi * t / BREATH.fog.period  + BREATH.fog.phase;
+      tension.phi.layer = twoPi * t / BREATH.opac.period;
+      tension.phi.glow  = twoPi * t / BREATH.glow.period + BREATH.glow.phase;
+      tension.phiInit = true;
+    }
+    const rate = T ? 1 + tension.t * TENS.axes.dongjing.weight : 1;   // 动静＝相位速率
+    if (T) {
+      tension.phi.fog   += twoPi * dt / BREATH.fog.period  * rate;
+      tension.phi.layer += twoPi * dt / BREATH.opac.period * rate;
+      tension.phi.glow  += twoPi * dt / BREATH.glow.period * rate;
+    }
+    const phFog  = T ? tension.phi.fog   : twoPi * t / BREATH.fog.period  + BREATH.fog.phase;
+    const phLay  = T ? tension.phi.layer : twoPi * t / BREATH.opac.period;
+    const phGlow = T ? tension.phi.glow  : twoPi * t / BREATH.glow.period + BREATH.glow.phase;
+    /* 甲 · 雾场（主通道，真实纵深——远处起效，近身所缘不动，规格 §二量级论证）
+       阴阳轴＝密度的**绝对**偏移（雾是密度不是比例） */
     const fogTarget = BREATH.fog.base
-      + BREATH.fog.amp * Math.sin(twoPi * t / BREATH.fog.period + BREATH.fog.phase);
+      + BREATH.fog.amp * Math.sin(phFog)
+      + (T ? tension.t * TENS.axes.yinyang.weight : 0);
     breathState.fog += (fogTarget - breathState.fog) * follow(BREATH.fog.tau);
     scene.fog.density = breathState.fog;
-    /* 乙 · 坛城明暗（近身呼吸载体；三层错相 120°，读作"空间在呼吸"非"整块在闪"） */
+    /* 乙 · 坛城明暗（近身呼吸载体；三层错相 120°，读作"空间在呼吸"非"整块在闪"）
+       显隐轴＝三层**共同相对**倍率：保持 0.85／0.55／0.70 的既有比例（属已认可构图，
+       绝对偏移会把中层推进负值或把内层顶出 1.0）。 */
+    const opMul = T ? 1 + tension.t * TENS.axes.xianyin.weight : 1;
     for (const L of breathLayers) {
       const opTarget = L.base * (1 + BREATH.opac.amp
-        * Math.sin(twoPi * t / BREATH.opac.period + L.phase));
+        * Math.sin(phLay + L.phase)) * opMul;
       L.cur += (opTarget - L.cur) * follow(BREATH.opac.tau);
       L.mesh.material.opacity = L.cur;
     }
-    /* 丙 · 中心光晕尺度（所缘的呼吸暗示；非坛城本体） */
+    /* 丙 · 中心光晕尺度（所缘的呼吸暗示；非坛城本体）＝明暗轴的相对倍率 */
+    const glowMul = T ? 1 + tension.t * TENS.axes.mingan.weight : 1;
     const glowTarget = BREATH.glow.base * (1 + BREATH.glow.amp
-      * Math.sin(twoPi * t / BREATH.glow.period + BREATH.glow.phase));
+      * Math.sin(phGlow)) * glowMul;
     breathState.glow += (glowTarget - breathState.glow) * follow(BREATH.glow.tau);
     glow.scale.setScalar(breathState.glow);
   } else if (BREATH_ON) {
@@ -835,7 +982,19 @@ window.__mandalaDiag = {
     enabled: true, phases: STAGES.map(s => s.key),
     enterSec: ENTER_S, segSec: SEGSEC, gatherSec: GATHER_S,
     synth: SYNTH_ON, synthSeq: SYNTH_SEQ, xrmock: !!XR_MOCK,
-    carrierGap: '变化段无视觉载体：WebGL2 下 ALIASED_LINE_WIDTH_RANGE=[1,1]（实测）',
+    carrierGap: '变化段无视觉载体：WebGL2 下 ALIASED_LINE_WIDTH_RANGE=[1,1]（实测）；'
+              + '张力层（?tension=pos|neg）为第四条载体候选，见 20261012_W1 设计稿',
+    /* 张力层自述＋实时读数：`tensors` 用 getter，闸每次求值都取当前值而非快照。
+       读数一律从注册表 spec.tension 来（单一正源），闸不得另写一份清单。 */
+    tension: TENS ? {
+      enabled: TENSION_ON, mode: TSIGN > 0 ? 'pos' : 'neg',
+      N: TENS.N, zeta: TENS.zeta, firstPeak: TENS.firstPeak,
+      maxT: TENS.maxT, maxSlew: TENS.maxSlew, changeSegSec: STAGES[2].dur,
+      axes: Object.fromEntries(Object.entries(TENS.axes)
+        .map(([k, v]) => [k, { weight: v.weight, unit: v.unit, channel: v.channel }])),
+      reserved: '苦乐／得失／善恶／美丑 四对依法师 10-12 追认「可」留空，不进参数字典',
+    } : null,
+    get tensors() { return tensionReadout(); },
   } : { enabled: false },
   /* S2 呼吸自述（verify_mandala_breath.py 可对独立复算）：
      enabled=false 即默认态＝S1 回归锚；enabled=true 时三通道参数与规格逐值对应 */
