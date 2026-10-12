@@ -1,0 +1,57 @@
+=== 5.3 只读离线试算　启动时刻 2026-10-12T15:48:21 ===
+数据根以只读方式打开；本脚本无任何写盘动作（结果由调用方捕获）
+
+【一】概念侧（主观标注）可配对性
+  ZEN-20260830-P001-S02      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  ZEN-20260830-P001-S03      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  ZEN-20260830-P001-S04      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  ZEN-20260831-P001-S05      pre_state=放松、不涣散（受试者自评） | post_state=放松、不涣散（受试者自评，对整个采集过程的描述，未单 | contact_quality=unknown（待操作员补记）
+  ZEN-20260901-P001-S06      pre_state=未单独陈述（前接基线段；基线自评：放松、不涣散） | post_state=有些疲乏，不太能够专注（受试者自评） | contact_quality=unknown（待操作员补记）
+  ZEN-20260905-P001-S08      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  ZEN-20260906-P001-S12      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=good
+  ZEN-20260911-P001-S13      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  ZEN-20261006-P001-S18      pre_state=unknown（补登记，未当场记录） | post_state=unknown（补登记，未当场记录） | contact_quality=unknown（补登记，未当场记录）
+  汇总：
+    pre_state        {'unknown/未记录': 7, '有实值': 2}
+    post_state       {'unknown/未记录': 7, '有实值': 2}
+    contact_quality  {'unknown/未记录': 8, '有实值': 1}
+  `05_annotation/` 文件数＝1（['README.md']）
+
+【二】会话级特征 n=9 的逆向云三数（经典版 vs 四阶矩版并列，不择好看者）
+  clean_ratio (n=9)
+     经典一阶矩 Ex=0.98651 En=0.020056 He=0.01623  
+     四阶矩　Ex=0.98651 En=0.02013 He=0.01613  
+     两版 En 相对差＝0.4%（n4 有效时）
+  effective_hz (n=9)
+     经典一阶矩 Ex=254.99 En=1.4461 He=1.13919  
+     四阶矩　Ex=254.99 En=1.39017 He=1.20682  
+     两版 En 相对差＝3.9%（n4 有效时）
+  packet_loss_rate (n=9)
+     经典一阶矩 Ex=0.0039222 En=0.0056477 He=0.00445  
+     四阶矩　Ex=0.0039222 En=0.00543 He=0.00471  
+     两版 En 相对差＝3.9%（n4 有效时）
+
+【三】窗级特征（10s 窗／5s 步，与我方 QC 同参数）三数与形态实测
+  ZEN-20260830-P001-S02: 窗数=408 通道=4 sfreq=256.0
+  ZEN-20260830-P001-S03: 窗数=584 通道=4 sfreq=256.0
+  ZEN-20260830-P001-S04: 窗数=2956 通道=4 sfreq=256.0
+  ZEN-20260831-P001-S05: 窗数=248 通道=4 sfreq=256.0
+  ZEN-20260901-P001-S06: 窗数=556 通道=4 sfreq=256.0
+  ZEN-20260905-P001-S08: 窗数=2896 通道=4 sfreq=256.0
+  ZEN-20260906-P001-S12: 窗数=208 通道=4 sfreq=256.0
+  ZEN-20260911-P001-S13: 窗数=3744 通道=4 sfreq=256.0
+  ZEN-20261006-P001-S18: 窗数=468 通道=4 sfreq=256.0
+  合计窗数（并所有坐所有通道）＝12068
+  alpha_rel (n=12068) 形态：偏度=0.346 超额峰度=1.165 界=[-9.3222,-0.3031] JB=922.5（>5.99 即在 5% 水平拒绝正态）
+     经典 Ex=-4.32585 En=0.881429 He=0.206152 
+     四阶 Ex=-4.32585 En=0.857675 He=0.289499 
+     ⇒ 两版 En 相对差＝2.7%｜He 有一版无解＝False
+  abs_mean_uv (n=12068) 形态：偏度=8.999 超额峰度=118.146 界=[1.7059,413.8543] JB=7181666.65（>5.99 即在 5% 水平拒绝正态）
+     经典 Ex=12.7467 En=11.2768 He=15.4578 
+Traceback (most recent call last):
+  File "D:\Project\zhiguanAI\04_研究调研\20261012_d776cb39_逆向云三数只读试算_v1.py", line 202, in <module>
+    main()
+  File "D:\Project\zhiguanAI\04_研究调研\20261012_d776cb39_逆向云三数只读试算_v1.py", line 193, in main
+    line(f"     四阶 Ex={e4:.6g} En={n4 if n4 is None else '%.6g' % n4} He={h4 if h4 is None else '%.6g' % h4} {f4}")
+                        ^^^^^^^^
+TypeError: unsupported format string passed to NoneType.__format__
