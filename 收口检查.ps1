@@ -145,10 +145,10 @@ foreach ($c in @(
     $disk = @(Get-ChildItem -LiteralPath $dir -Filter '*.md' -ErrorAction SilentlyContinue |
               Where-Object { $_.Name -notlike '00_*' -and $_.Name -notlike '99_*' -and $_.Name -notlike '*说明*' })
     # 闸门自检（教训 7.1）：索引里读到 0 行＝判据形状失效，绝不允许静默 PASS
-    if ($c.n -lt 0) { Bad "闸8：$c.d 在索引中找不到对应小节标题——小节被改名？本门不可信"; $clBad++; continue }
-    if ($c.n -eq 0) { Bad "闸8 自检失败：$c.d 索引行数为 0，而盘上有 $($disk.Count) 件——正则形状可能已失效，本门可能恒空转"; $clBad++; continue }
+    if ($c.n -lt 0) { Bad "闸8：$($c.d) 在索引中找不到对应小节标题——小节被改名？本门不可信"; $clBad++; continue }
+    if ($c.n -eq 0) { Bad "闸8 自检失败：$($c.d) 索引行数为 0，而盘上有 $($disk.Count) 件——正则形状可能已失效，本门可能恒空转"; $clBad++; continue }
     if ($c.n -ne $disk.Count) {
-        Bad "案例库索引与盘不符：$c.d 索引 $c.n 行 ≠ 盘上 $($disk.Count) 件 —— 差 $([Math]::Abs($c.n - $disk.Count))，请逐号对账后回填（016～019 那次漏登记即此类）"
+        Bad "案例库索引与盘不符：$($c.d) 索引 $($c.n) 行 ≠ 盘上 $($disk.Count) 件 —— 差 $([Math]::Abs($c.n - $disk.Count))，请逐号对账后回填（016～019 那次漏登记即此类）"
         $clBad++
     }
 }
