@@ -29,21 +29,49 @@ body{margin:0;background-color:var(--bg);color:var(--tx);
 html.dash body{background-color:var(--bg);
   background-image:radial-gradient(1100px 520px at 12% -8%,#14232b 0%,transparent 60%),
                    radial-gradient(900px 480px at 96% 4%,#1a1526 0%,transparent 55%)}
-/* 平铺改为：左大纲＋右单栏分节，版心收住，治「拉得太长」 */
-.app{display:grid;grid-template-columns:214px minmax(0,1fr);gap:22px;max-width:1120px;margin:0 auto;padding:0 24px 44px}
-.side{position:sticky;top:0;align-self:start;padding:22px 0 10px;max-height:100vh;overflow:auto}
-.side .sk{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
-.side .sk button{padding:5px 10px;font-size:12px}
-.side .sk button.on{background:var(--acc);border-color:var(--acc);color:var(--panel);font-weight:600}
-.nav{list-style:none;margin:0;padding:0;border-left:1px solid var(--line)}
-.nav a{display:block;padding:7px 13px;font-size:13px;color:var(--mut);text-decoration:none;border-left:2px solid transparent;margin-left:-1px}
-.nav a:hover{color:var(--tx)}
-.nav a.on{color:var(--acc);border-left-color:var(--acc);font-weight:600;background:var(--bg2)}
-@media(max-width:900px){.app{grid-template-columns:minmax(0,1fr)}.side{position:static;max-height:none}.nav{display:flex;flex-wrap:wrap;border-left:0}}
-header{padding:22px 0 14px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;align-items:baseline}
-h1{font-size:20px;margin:0;font-weight:650;letter-spacing:.4px}
-.sub{color:var(--mut);font-size:12px}
+/* 顶部一条工具条＝皮肤｜锚点｜全部收起。原先竖在左栏的三行＋一行小字，在窄可视宽下会整列横躺成
+   四条横杠吃掉近 1/3 屏（法师这台机器浏览器可视宽不足 1100 CSS 像素，被旧闸线咬中——实测截图为证）。 */
+.top{position:sticky;top:0;z-index:9;display:flex;align-items:center;gap:10px;height:42px;
+  max-width:1560px;margin:0 auto;padding:0 24px;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .sk{display:flex;gap:5px;flex:0 0 auto}
+.top .sk button{padding:3px 9px;font-size:11.5px;min-height:26px}
+.top .sk button.on{background:var(--acc);border-color:var(--acc);color:var(--panel);font-weight:600}
+.nav{list-style:none;display:flex;gap:2px;margin:0;padding:0;flex:1 1 auto;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.nav a{display:block;padding:4px 10px;font-size:12.5px;color:var(--mut);text-decoration:none;border-radius:999px}
+.nav a:hover{color:var(--tx);background:var(--bg2)}
+.nav a.on{color:var(--acc);background:var(--bg2);font-weight:600}
+.top .tb{flex:0 0 auto;padding:3px 10px;font-size:11.5px;min-height:26px}
+/* 两栏：对话栏（常驻）｜任务区。左大纲已并入工具条，不再单独占一列。 */
+.app{display:grid;grid-template-columns:clamp(272px,25vw,380px) minmax(0,1fr);gap:22px;
+  max-width:1560px;margin:0 auto;padding:0 24px 44px;align-items:start}
+/* 对话栏：粘在工具条下沿、满剩余屏高，消息区自己滚，输入框钉底 */
+.rail{position:sticky;top:42px;align-self:start;height:calc(100vh - 42px);display:flex;flex-direction:column;padding:12px 0 14px}
+.rail>section{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.rail .card{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+/* 窗口开得很矮时，先让顶部黄条截断，也不要把发送按钮挤出屏外（卡片 overflow:hidden，挤了就够不着） */
+.rail .warnbox{flex:0 1 auto;min-height:0;overflow:hidden}
+/* 只有极窄（<760）才退回单栏堆叠。闸线从 1100 一路压低：法师那台机器的缩放比 200% 更高。 */
+@media(max-width:760px){
+  .app{grid-template-columns:minmax(0,1fr);max-width:1120px}
+  .rail{position:static;height:auto}
+  #chat{flex:none;height:300px}
+}
+/* 「紧凑」开关（①工具条上的钮，状态存 localStorage）：只收装饰，八颗计数球一颗不藏。
+   法师要的是"任务区占满、交流留一小块"——浏览器外壳有 F11，页面外壳就得有个钮。 */
+html.tight .top{height:36px}
+html.tight h1,html.tight .sub,html.tight .foot{display:none}
+html.tight header{padding:6px 0 5px}
+/* 分栏相关的收放只在两栏生效，否则窄屏堆叠时 `html.tight .rail` 会盖掉回退里的 height:auto */
+@media(min-width:761px){
+  html.tight .rail{top:36px;height:calc(100vh - 36px)}
+  html.tight .app{grid-template-columns:clamp(240px,20vw,300px) minmax(0,1fr);gap:16px;padding:0 14px 30px}
+}
+header{padding:14px 0 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:nowrap;gap:12px;align-items:baseline}
+h1{font-size:20px;margin:0;font-weight:650;letter-spacing:.4px;white-space:nowrap}
+.sub{color:var(--mut);font-size:12px;white-space:nowrap;flex:0 0 auto}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+/* 头部计数条不许换行——8 个 chip 在窄可视宽折成两三行，正是"横条吃掉半屏"的一半 */
+header .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
 .chip{background:var(--panel);border:1px solid var(--line);border-radius:999px;
   padding:3px 12px;font-size:12px;color:var(--mut);white-space:nowrap;box-shadow:var(--shadow)}
 .chip b{color:var(--tx);font-weight:650}
@@ -56,7 +84,8 @@ h1{font-size:20px;margin:0;font-weight:650;letter-spacing:.4px}
 .card>h2,.card>h3{margin:0;padding:13px 17px 13px 20px;font-size:13.5px;font-weight:650;color:var(--mut);
   border-bottom:1px solid var(--line);letter-spacing:.6px;display:flex;justify-content:space-between;align-items:center;gap:10px}
 .card>.body{padding:15px 18px}
-.card[data-collapsed="1"] .body,.card[data-collapsed="1"] table{display:none}
+.card[data-collapsed="1"] .body,.card[data-collapsed="1"] table,
+.card[data-collapsed="1"] #chat,.card[data-collapsed="1"] .warnbox{display:none}
 .ctgl{background:transparent;border:1px solid var(--line);border-radius:999px;color:var(--mut);
   padding:2px 10px;font-size:11px;cursor:pointer}
 .ctgl:hover{border-color:var(--acc);color:var(--acc)}
@@ -78,7 +107,8 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
 .bar>i.ok{background:var(--ok)} .bar>i.warn{background:var(--warn)} .bar>i.bad{background:var(--bad)}
 .mut{color:var(--mut);font-size:12.5px}
 .tiny{font-size:11.5px;color:var(--mut2)}
-#chat{height:340px;overflow-y:auto;padding:15px 18px;display:flex;flex-direction:column;gap:12px}
+/* min-height 只留 60：窗口开矮时对话区先收缩，把输入框留在屏内（卡片是 overflow:hidden，挤不下就裁掉了够不着） */
+#chat{flex:1 1 0;min-height:60px;overflow-y:auto;padding:15px 18px;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:90%;padding:10px 14px;border-radius:12px;white-space:pre-wrap;word-break:break-word;font-size:13.5px}
 .msg.me{align-self:flex-end;background:var(--okbg);border:1px solid var(--qing)}
 .msg.ai{align-self:flex-start;background:var(--bg2);border:1px solid var(--line)}
@@ -107,42 +137,40 @@ pre#draft{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
 .tasks li.prog{color:var(--acc)}
 details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
 .foot{max-width:1120px;margin:0 auto;padding:18px 24px 30px;color:var(--mut);font-size:11.5px;line-height:1.95;border-top:1px solid var(--line)}
-@media print{.side{display:none}.app{display:block}.card[data-collapsed="1"] .body,.card[data-collapsed="1"] table{display:revert}}
+@media print{.top{display:none}.app{display:block}
+  /* 打印时对话栏回正文流：粘住与满屏高会截掉消息 */
+  .rail{position:static;height:auto;display:block}
+  .rail .card{display:block}
+  #chat{height:auto;overflow:visible}
+  .card[data-collapsed="1"] .body,.card[data-collapsed="1"] table,
+  .card[data-collapsed="1"] #chat,.card[data-collapsed="1"] .warnbox{display:revert}}
 </style>
 </head>
 <body>
 
+<div class="top">
+  <div class="sk">
+    <button id="bPaper">宣纸</button>
+    <button id="bDash">仪表盘</button>
+    <button id="bNight">夜间</button>
+  </div>
+  <ul class="nav">
+    <li><a href="#s-chat" data-nav="s-chat">对话栏（常驻）</a></li>
+    <li><a href="#s-disp" data-nav="s-disp">跨窗投递</a></li>
+    <li><a href="#s-flow" data-nav="s-flow">任务流</a></li>
+    <li><a href="#s-win" data-nav="s-win">窗口与进度</a></li>
+    <li><a href="#s-priv" data-nav="s-priv">隐私闸门</a></li>
+    <li><a href="#s-res" data-nav="s-res">资源与模型</a></li>
+  </ul>
+  <button id="tightBtn" class="tb">紧凑</button>
+  <button id="collapseAll" class="tb">全部收起</button>
+</div>
+
 <div class="app">
-  <nav class="side">
-    <div class="sk">
-      <button id="bPaper">宣纸</button>
-      <button id="bDash">仪表盘</button>
-      <button id="bNight">夜间</button>
-    </div>
-    <ul class="nav">
-      <li><a href="#s-chat" data-nav="s-chat">对话与语音</a></li>
-      <li><a href="#s-flow" data-nav="s-flow">任务流</a></li>
-      <li><a href="#s-win" data-nav="s-win">窗口与进度</a></li>
-      <li><a href="#s-priv" data-nav="s-priv">隐私闸门</a></li>
-      <li><a href="#s-res" data-nav="s-res">资源与模型</a></li>
-    </ul>
-    <div class="row" style="margin-top:16px;gap:6px">
-      <button id="collapseAll" style="flex:1">全部收起</button>
-    </div>
-    <div class="tiny" style="margin-top:14px;line-height:1.7">皮肤与折叠状态存本机 localStorage（<code>zg-board-v1</code>），不上云、不共享。</div>
-  </nav>
-
-  <div class="wrap">
-    <header>
-      <h1>止观AI 可视化任务看板</h1>
-      <span class="sub" id="clock">—</span>
-      <div class="chips" id="chips"></div>
-    </header>
-
-    <!-- ══════════ 对话与语音 ══════════ -->
-    <section class="sec" id="s-chat">
-      <h2>对话与语音</h2>
-    <div class="card">
+  <!-- ══════════ 对话栏（常驻侧边，不随任务区滚动） ══════════ -->
+  <aside class="rail">
+    <section id="s-chat">
+    <div class="card" data-key="chat">
       <h2>对话窗 <span class="tiny" id="chatModel">—</span></h2>
       <div class="warnbox" id="voiceWarn">
         语音识别经浏览器厂商云端（<b>属出网</b>）。一级内容——修道班资料／学员信息／录音转写——<b>禁止</b>输入本窗与云端模型。
@@ -164,8 +192,20 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
         <div class="tiny" id="micState" style="margin-top:7px"></div>
       </div>
     </div>
+    </section>
+  </aside><!-- /rail -->
 
-    <div class="card">
+  <div class="wrap">
+    <header>
+      <h1>止观AI 可视化任务看板</h1>
+      <span class="sub" id="clock">—</span>
+      <div class="chips" id="chips"></div>
+    </header>
+
+    <!-- ══════════ 跨窗投递 ══════════ -->
+    <section class="sec" id="s-disp">
+      <h2>跨窗投递</h2>
+    <div class="card" data-key="dispatch">
       <h2>跨窗投递单</h2>
       <div class="body">
         <div class="mut" style="margin-bottom:9px">看板<b>不代发消息</b>。此处只生成文本，由法师粘贴或明示授权某窗投递。</div>
@@ -188,7 +228,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
     <!-- ══════════ 任务流 ══════════ -->
     <section class="sec" id="s-flow">
       <h2>任务流</h2>
-      <div class="card">
+      <div class="card" data-key="jobs">
         <h2>看板作业队列 <span class="tiny">优先级小者先跑</span></h2>
       <div class="body" style="padding:0">
         <table id="jobTbl">
@@ -202,7 +242,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
 
     <section class="sec" id="s-win">
       <h2>窗口与进度</h2>
-      <div class="card">
+      <div class="card" data-key="wins">
       <h2>AI 窗口与任务进度 <span class="tiny" id="snapNote">—</span></h2>
       <div class="body" style="padding:0">
         <table id="winTbl">
@@ -213,7 +253,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" data-key="backlog">
       <h2>维那看板积压 <span class="tiny" id="blNote">—</span></h2>
       <div class="body">
         <div class="chips" id="blChips" style="margin:0 0 11px"></div>
@@ -226,7 +266,7 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
     <!-- ══════════ 隐私闸门 ══════════ -->
     <section class="sec" id="s-priv">
       <h2>隐私闸门</h2>
-      <div class="card">
+      <div class="card" data-key="priv">
       <h2>隐私闸门 <span class="tiny">本机强制·绕过前端也拦得住</span></h2>
       <div class="body" id="privBox"><div class="mut">读取中…</div></div>
       <div class="body" style="border-top:1px solid var(--line)">
@@ -244,15 +284,17 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
         <div id="maskView" style="margin-top:9px"></div>
       </div>
     </div>
+    </section>
 
+    <!-- ══════════ 资源与模型 ══════════ -->
     <section class="sec" id="s-res">
       <h2>资源与模型</h2>
-      <div class="card">
+      <div class="card" data-key="res">
       <h2>资源占用</h2>
       <div class="body" id="resBox"><div class="mut">采样中…</div></div>
     </div>
 
-    <div class="card">
+    <div class="card" data-key="models">
       <h2>多模型接入 <button id="probeAll" style="padding:2px 9px">全部探活</button></h2>
       <div class="body" style="padding:0">
         <table id="mdlTbl"><tbody></tbody></table>
@@ -269,7 +311,8 @@ details summary{cursor:pointer;color:var(--acc);font-size:11.5px}
   <b>边界说明</b>：① 看板只读——不改任何他窗文件、不代提交、不代发消息；
   ② 「加速／暂停／优先级」对看板自有作业队列真实生效，对 AI 窗口只生成投递单；
   ③ <code>runtimeState</code> 需 AI 窗口经 MCP 刷新到 <code>state/live_sessions.json</code>，过期时按磁盘 mtime 推断，界面会标明来源；
-  ④ 只听 <code>127.0.0.1</code>，不对局域网开放。
+  ④ 只听 <code>127.0.0.1</code>，不对局域网开放；
+  ⑤ 皮肤与折叠状态存本机 localStorage（<code>zg-board-v1</code>），不上云、不共享。
 </div>
 
 <script>
@@ -290,10 +333,30 @@ applySkin(UI.skin||'paper');
 SKINS.forEach(n=>{const b=document.getElementById('b'+n); if(b) b.onclick=()=>{
   UI.skin=n.toLowerCase(); localStorage.setItem(LS,JSON.stringify(UI)); applySkin(UI.skin); };});
 
+/* 紧凑开关：页面外壳收成一条，状态与皮肤同存 localStorage */
+function applyTight(on){
+  document.documentElement.classList.toggle('tight',!!on);
+  const b=$('#tightBtn'); if(b) b.textContent=on?'恢复':'紧凑';
+}
+applyTight(!!UI.tight);
+$('#tightBtn').onclick=()=>{
+  UI.tight=!document.documentElement.classList.contains('tight');
+  localStorage.setItem(LS,JSON.stringify(UI)); applyTight(UI.tight);
+};
+
+/* 折叠状态改按卡片固定名（data-key）存，DOM 顺序再变也不会张冠李戴。
+   旧版按文档先后编号 c0…c7，LEGACY 即改动前的先后顺序，读到老键时一次性搬一次。 */
+const LEGACY=['chat','dispatch','jobs','wins','backlog','priv','res','models'];
+if(!UI.collV2){
+  const m={};
+  for(const k in (UI.coll||{})){ const n=LEGACY[+k.replace(/^c/,'')]; if(n) m[n]=UI.coll[k]; }
+  UI.coll=m; UI.collV2=1; localStorage.setItem(LS,JSON.stringify(UI));
+}
+
 const CARDS=[...document.querySelectorAll('.card')];
 function setCol(c,b,col){ c.dataset.collapsed=col?'1':'0'; b.textContent=col?'展开':'收起'; }
-CARDS.forEach((c,i)=>{
-  const id='c'+i, h=c.querySelector('h2,h3');
+CARDS.forEach(c=>{
+  const id=c.dataset.key, h=c.querySelector('h2,h3');
   const b=document.createElement('button'); b.className='ctgl'; b.textContent='收起';
   if(h) h.appendChild(b);
   setCol(c,b,!!((UI.coll||{})[id]));
@@ -302,8 +365,8 @@ CARDS.forEach((c,i)=>{
 });
 $('#collapseAll').onclick=function(){
   const open=CARDS.some(c=>c.dataset.collapsed!=='1');
-  UI.coll={};
-  CARDS.forEach((c,i)=>{ UI.coll['c'+i]=open; setCol(c,c.querySelector('.ctgl'),open); });
+  UI.coll=UI.coll||{};
+  CARDS.forEach(c=>{ UI.coll[c.dataset.key]=open; setCol(c,c.querySelector('.ctgl'),open); });
   localStorage.setItem(LS,JSON.stringify(UI));
   this.textContent=open?'全部展开':'全部收起';
 };
