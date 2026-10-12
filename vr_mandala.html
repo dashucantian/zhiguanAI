@@ -456,7 +456,7 @@ function tensionReadout() {
     slewCap: +tension.slewCap.toFixed(4), seg: tension.seg,
     axes: {
       dongjing: tension.on ? +(1 + tension.t * TENS.axes.dongjing.weight).toFixed(4) : 1,
-      yinyang:  +(tension.t * TENS.axes.yinyang.weight).toFixed(5),
+      yinyang:  +(-tension.t * TENS.axes.yinyang.weight).toFixed(5), // 阳＝薄＝负偏移
       mingan:   +(1 + tension.t * TENS.axes.mingan.weight).toFixed(4),
       xianyin:  +(1 + tension.t * TENS.axes.xianyin.weight).toFixed(4),
     },
@@ -850,10 +850,12 @@ renderer.setAnimationLoop((time)=>{
     const phLay  = T ? tension.phi.layer : twoPi * t / BREATH.opac.period;
     const phGlow = T ? tension.phi.glow  : twoPi * t / BREATH.glow.period + BREATH.glow.phase;
     /* 甲 · 雾场（主通道，真实纵深——远处起效，近身所缘不动，规格 §二量级论证）
-       阴阳轴＝密度的**绝对**偏移（雾是密度不是比例） */
+       阴阳轴＝密度的**绝对**偏移（雾是密度不是比例）。
+       ⚠符号是**减**：阳＝露＝雾薄、阴＝藏＝雾厚，t>0 要把密度往下拉。
+       判据 10 的正负两向共模对照首轮就抓到这里接反了（10-12 实测 dFog 符号相反）。 */
     const fogTarget = BREATH.fog.base
       + BREATH.fog.amp * Math.sin(phFog)
-      + (T ? tension.t * TENS.axes.yinyang.weight : 0);
+      - (T ? tension.t * TENS.axes.yinyang.weight : 0);
     breathState.fog += (fogTarget - breathState.fog) * follow(BREATH.fog.tau);
     scene.fog.density = breathState.fog;
     /* 乙 · 坛城明暗（近身呼吸载体；三层错相 120°，读作"空间在呼吸"非"整块在闪"）

@@ -9,8 +9,11 @@
   5. 红线2：退出屏上只有 采集/保存/异常，不出现绩效评分
   6. 骨架自身无 JS 错误、无 stage_error 事件
   7. 进入段跑完后场景不得仍被遮（黑场与渐隐层都必须自己撤干净）
+  8. 段时钟以会话为零点（真机 16:1x「没有中间过场」回报所立；2026-10-12 补进本清单）
+  9. 默认档零介入（不带 ?tension= 与无 tension 节的变体各断一层，防「启动了但值为 0」式假通过）
+ 10. 段3 张力成立＝有动量（会过冲）＋有回复力（回中）＋画面真被驱动（正负两向互为共模抵消对照，不取页面自述）
 
-反证（--counter）：把页面源码改坏六处，逐条要求对应判据 FAIL。
+反证（--counter）：把页面源码改坏十一处，逐条要求对应判据 FAIL。
 
 用法：
     python verify_mandala_stage.py            # 正跑（须 console_server 在 8777）
@@ -24,7 +27,9 @@ import base64
 import json
 import os
 import re
+import shutil
 import subprocess
+import socket
 import sys
 import time
 import urllib.request
@@ -42,8 +47,8 @@ EDGE = next((p for p in [
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"]
     if os.path.exists(p)), None)
 
-PORT = 9355
-STATIC_PORT = 8806
+# 调试端口与静态服务端口一律现取（free_port），不写死——写死过 9355／8806，
+# 上一轮残留进程占着端口时，下一轮会连到陈旧 target 上静默挂起（10-12 实测）。
 FAILS = []
 SKIPS = []
 
@@ -286,6 +291,114 @@ def judge_no_error(o):
 
 
 # ── 反证：把页面改坏，逐条要求对应判据 FAIL ────────────────────────
+TENSION_MUTANTS = {"默认档也挂偏移", "无回复力只剩阻尼", "临界阻尼不过冲", "段长非整数个摆"}
+
+EPS_T = 0.005   # 段末回中容差：实测 0.0007@60fps／0.0013@30fps，而非整数摆回数的残值约 0.0067
+
+async def collect_tension(ws, url, sample_from=4.6, sample_secs=8.8, tick=0.4):
+    """跑一遍带张力层的页，采段3 全周期的**实时场景读数**。
+    采样窗口按 segsec=2 的时线排：enter 0-3 → dwell 3-5 → change 5-13 → gather 13-19，
+    故 4.6 起、采 8.8 秒，覆盖整个变化段并越过段末一点，才拿得到"回中"那一探。"""
+    await send(ws, "Page.navigate", {"url": url})
+    await asyncio.sleep(1.2)
+    cfg = json.loads(await ev(ws, "JSON.stringify(window.__mandalaDiag && __mandalaDiag.pathStage"
+                                  " ? (typeof __mandalaDiag.pathStage.tension === 'undefined'"
+                                  " ? null : __mandalaDiag.pathStage.tension) : null)") or "null")
+    await ev(ws, "document.getElementById('btnVR').click()")
+    arm = time.perf_counter()
+    samples = []
+    await until(arm, sample_from)
+    stop = arm + sample_from + sample_secs
+    while time.perf_counter() < stop:
+        v = await ev(ws, "JSON.stringify(window.__mandalaDiag.pathStage.tensors)")
+        # 未介入时这里是字符串 "null"（JSON.stringify(null）），不是 Python 假值——
+        # 判据 9 要的正是"零样本"，所以这条必须显式认掉，否则崩在解析上。
+        d = json.loads(v) if v and v != "null" else None
+        if d:
+            samples.append({"at": round(time.perf_counter() - arm, 3),
+                            "t": d.get("output"), "vt": d.get("vt"),
+                            "flips": d.get("flips"), "live": d.get("live") or {}})
+        await asyncio.sleep(tick)
+    fin = json.loads(await ev(ws, "JSON.stringify(window.__mandalaDiag.pathStage.tensors)") or "null")
+    evs = json.loads(await ev(ws, "JSON.stringify(__stageCtl ? __stageCtl.events() : [])") or "[]")
+    return {"url": url, "cfg": cfg, "final": fin, "samples": samples,
+            "begin": next((e for e in evs if e.get("kind") == "tension_begin"), None),
+            "end": next((e for e in evs if e.get("kind") == "tension_end"), None)}
+
+
+def judge_tension_default(off, s1):
+    """判据 9：默认档零介入。三层各断一件事——只断「值为 0」会放过「启动了但没动」这种假通过。"""
+    print("\n── 判据 9：默认档零介入（不带 ?tension= 与无 tension 节的变体）─────")
+    cfg = off["cfg"]
+    check(cfg is not None and cfg.get("enabled") is False,
+          "v4 不带 ?tension：注册表有节但 enabled=false（本层根本没启动）",
+          f"v4 不带 ?tension 却已启用：{cfg}——红线：默认呈现被介入，已认可版本不再是入口")
+    check(off["final"] is None and not off["samples"],
+          "同一页跑到段3 时刻 tensors===null、零样本（不是「启动了但值为 0」）",
+          f"未挂参数却有读数：final={off['final']}，样本 {len(off['samples'])} 条")
+    check(s1["cfg"] is None,
+          "s1 挂 ?tension=pos：该变体注册表内无 tension 节，结构上不可能介入",
+          f"s1 竞读到了 tension 节：{s1['cfg']}——单一正源被绕过，须查注册表外是否藏了第二份配置")
+    check(s1["final"] is None,
+          "s1 那次同样零读数（S1/S2 回归锚逐字节安全）",
+          f"s1 挂上 flag 就动了：{s1['final']}")
+
+
+def judge_tension_dynamics(pos, neg):
+    """判据 10：张力成立＝有动量（会过冲）＋有回复力（回中）＋画面真被驱动。
+    第三条用 pos/neg 两次互为对照：两者只差 ?tension 的符号，呼吸与段时钟完全共模，
+    差值只可能来自张力层——所以「动了」不由页面自己声称。"""
+    print("\n── 判据 10：段3 张力＝偏离与回中（正负两向共模抵消对照）───────────")
+    fp, fn = pos["final"], neg["final"]
+    if not fp or not fn:
+        check(False, "", f"读数缺失：pos={bool(fp)} neg={bool(fn)}——本判据没跑成，不等于通过")
+        return
+    check(fp.get("flips", 0) >= 1 and fn.get("flips", 0) >= 1,
+          f"有动量：符号翻转 正向 {fp['flips']} 次／负向 {fn['flips']} 次（至少 1 次才叫过冲）",
+          f"未见翻转＝一次性推到位、没有动量：flips pos/neg = {fp.get('flips')}/{fn.get('flips')}")
+    check(abs(fp["output"]) <= EPS_T and abs(fn["output"]) <= EPS_T,
+          f"有回复力：段末 |t| = {abs(fp['output'])}／{abs(fn['output'])}，容差 {EPS_T}",
+          f"段末没回中：pos={fp['output']} neg={fn['output']}——零点不是吸引子")
+    pairs = []
+    for a in pos["samples"]:
+        if not neg["samples"]:
+            break
+        b = min(neg["samples"], key=lambda s: abs(s["at"] - a["at"]))
+        vals = (a["live"].get("fog"), b["live"].get("fog"),
+                a["live"].get("glow"), b["live"].get("glow"))
+        if None in vals:
+            continue
+        pairs.append((a, b))
+    if len(pairs) < 4:
+        check(False, "", f"共模对照样本不足（{len(pairs)} 条）——本判据没跑成，不等于通过")
+        return
+    i = max(range(len(pairs)),
+            key=lambda k: abs(pairs[k][0]["live"]["fog"] - pairs[k][1]["live"]["fog"]))
+    j = max(range(len(pairs)),
+            key=lambda k: abs(pairs[k][0]["live"]["glow"] - pairs[k][1]["live"]["glow"]))
+    af, bf = pairs[i]
+    ag, bg = pairs[j]
+    dfog = af["live"]["fog"] - bf["live"]["fog"]
+    dglow = ag["live"]["glow"] - bg["live"]["glow"]
+    tf, tg = af["t"], ag["t"]
+    # 阈值按 8 秒快档的实测定，不是纸面推的：雾轴要过一阶跟随 tau=34/6 约 5.67 秒，
+    # 首摆 0.78 秒内只来得及走开约两成，所以共模差在快档只有 0.001 量级（默认档段长 80 秒
+    # 时同一条轴的量级约为它的六倍）；光晕 tau=13/6 约 2.2 秒，跟得上，是 0.03 量级。
+    check(abs(dfog) >= 0.0007 and abs(dglow) >= 0.02,
+          "画面真被驱动：|dFog|max={0:.6f}（阈 0.0007）｜|dGlow|max={1:.5f}（阈 0.02）"
+          .format(abs(dfog), abs(dglow)) + "——两跑只差 ?tension 符号，呼吸为共模已抵消",
+          "t 在动而场景无差：dFog={0:.6f} dGlow={1:.5f}——等于自证".format(dfog, dglow))
+    check((dfog < 0) == (tf > 0) and (dglow > 0) == (tg > 0),
+          "极的接法对得上：t 取正时雾更薄（阳＝露）、光晕更张（明＝阳）",
+          "极接反：t={0} 雾差 {1:.6f}；t={2} 光晕差 {3:.5f}——轴与两极对不上"
+          .format(tf, dfog, tg, dglow))
+    la, lb = pairs[-1]
+    rf, rg = abs(la["live"]["fog"] - lb["live"]["fog"]), abs(la["live"]["glow"] - lb["live"]["glow"])
+    check(rf <= 0.001 and rg <= 0.01,
+          f"两向归于同一场景：段末 |dFog|={rf:.6f}｜dGlow|={rg:.5f}",
+          f"段末两向仍差着：dFog={rf:.6f} dGlow={rg:.5f}——t 归零而场景没归零")
+
+
 MUTATIONS = [
     ("默认改启用", "c1_default_on.html",
      [("const STAGE_ON = QSTAGE.get('stage') === '1';",
@@ -309,6 +422,18 @@ MUTATIONS = [
      [("if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);",
        "if (STAGE_ON && !stage.fault && !stageFreezesBreath()) stageTick(time);")],
      judge_clock_anchor),
+    ("默认档也挂偏移", "c9_tension_by_default.html",
+     [(": QSTAGE.get('tension') === 'neg' ? -1 : 0;",
+       ": QSTAGE.get('tension') === 'neg' ? -1 : 1;")], judge_tension_default),
+    ("无回复力只剩阻尼", "c10a_no_spring.html",
+     [("tension.vt += (-tension.k * tension.tRaw - tension.c * tension.vt) * dt;",
+       "tension.vt += (-tension.c * tension.vt) * dt;")], judge_tension_dynamics),
+    ("临界阻尼不过冲", "c10b_overdamped.html",
+     [("N: 2, zeta: 0.34, firstPeak: 0.85,", "N: 2, zeta: 0.99, firstPeak: 0.85,")],
+     judge_tension_dynamics),
+    ("段长非整数个摆", "c10c_fractional_swing.html",
+     [("N: 2, zeta: 0.34, firstPeak: 0.85,", "N: 2.3, zeta: 0.34, firstPeak: 0.85,")],
+     judge_tension_dynamics),
 ]
 
 
@@ -334,41 +459,89 @@ def build_mutants():
 
 
 def start_static():
+    port = free_port()
     proc = subprocess.Popen(
-        [sys.executable, "-m", "http.server", str(STATIC_PORT), "--bind", "127.0.0.1",
+        [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1",
          "--directory", ROOT],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(40):
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{STATIC_PORT}/", timeout=2)
-            return proc
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2)
+            return proc, port
         except Exception:
             time.sleep(0.25)
-    proc.kill()
+    kill_tree(proc)
     raise RuntimeError("静态服务未起")
 
 
+def free_port():
+    """端口现取，不写死。写死 9355 踩过一次：上一轮 Edge 子进程没被收掉时端口仍被占，
+    下一次 browser() 会连到那个**陈旧 target**上，页面是旧的、CDP 调用静默不返回，
+    表现出来像"改动无效／浏览器坏了"，实际是端口串了。"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+def clean_profiles(keep=None):
+    """_p_* 是每跑一次的临时 profile；进程已死却留着会越堆越多。删不掉就留着，不算失败。"""
+    for name in os.listdir(OUT) if os.path.isdir(OUT) else []:
+        if not name.startswith("_p"):
+            continue
+        path = os.path.join(OUT, name)
+        if keep and name == os.path.basename(keep):
+            continue
+        try:
+            shutil.rmtree(path)
+        except Exception:
+            pass
+
+
+def kill_tree(proc):
+    """Windows 下 proc.kill() 只杀启动器那一个进程，Edge 的子进程树（gpu/utility/renderer/
+    crashpad）会留着继续占端口。按进程树杀；taskkill 不可用时退回 kill()。"""
+    try:
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20)
+    except Exception:
+        proc.kill()
+
+
 async def browser():
+    port = free_port()
+    # profile 目录也一并按端口分开：Edge 对同一 user-data-dir 是单例——残留实例还在时，
+    # 新启的那个会直接并入并退出，调试端口永远等不到（本轮实测踩到，报「Edge 调试端口未就绪」）。
+    prof = os.path.join(OUT, "_p_%d" % port)
     proc = subprocess.Popen(
         [EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-         "--window-size=1280,720", f"--user-data-dir={os.path.join(OUT, '_p')}",
-         "--no-first-run", f"--remote-debugging-port={PORT}", "about:blank"],
+         "--window-size=1280,720", f"--user-data-dir={prof}",
+         "--no-first-run", f"--remote-debugging-port={port}", "about:blank"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     targets = None
     for _ in range(60):
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=2) as r:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=2) as r:
                 targets = json.load(r)
             break
         except Exception:
             await asyncio.sleep(0.5)
     if not targets:
-        proc.kill()
+        kill_tree(proc)
         raise RuntimeError("Edge 调试端口未就绪")
     page = next(t for t in targets if t["type"] == "page")
     ws = await websockets.connect(page["webSocketDebuggerUrl"], max_size=64 * 1024 * 1024)
     await send(ws, "Page.enable")
     await send(ws, "Runtime.enable")
+    # 页面在无 WebXR 的环境下点「进入 VR」会走 alert()，模态框把主线程的 JS 执行连同
+    # 后续所有 CDP 调用一起堵死——探针表现为"静默挂起"，极易误读成被测改动无效
+    # （本窗 10-12 首轮实测栽在此）。新建文档时先把 alert 摘掉：取证面不该被一个弹窗
+    # 劫持；真实告警仍由 __vrErr／事件序列覆盖，不靠这个弹窗。
+    await send(ws, "Page.addScriptToEvaluateOnNewDocument",
+               {"source": "window.alert=function(m){window.__lastAlert=String(m);};\n"
+                          "window.confirm=function(m){window.__lastAlert=String(m);return false;};\n"
+                          "window.print=function(){};"})
     return proc, ws
 
 
@@ -396,8 +569,28 @@ async def run_normal(base):
         judge_no_error(o)
         judge_overlay(o)
         judge_clock_anchor(o)
+        # 判据 9／10：张力层（段3 运相）。四趟采集各约 16 秒，多耗约一分半；
+        # 零介入那两趟是「默认档逐字节」这条红线的直接取证面，省不得。
+        plain = f"{base}/mandala?variant=v4lotuspond&stage=1&breath=on&segsec=2&xrmock=1"
+        s1on = f"{base}/mandala?variant=s1&stage=1&breath=on&segsec=2&xrmock=1&tension=pos"
+        print("\n" + "=" * 68)
+        print("正跑：张力层判据 9（零介入两例：v4 不带 flag／s1 挂了 flag）")
+        print("=" * 68)
+        o_off = await collect_tension(ws, plain)
+        o_s1 = await collect_tension(ws, s1on)
+        judge_tension_default(o_off, o_s1)
+        print("\n" + "=" * 68)
+        print("正跑：张力层判据 10（正负两向共模抵消对照）")
+        print("=" * 68)
+        o_pos = await collect_tension(ws, plain + "&tension=pos")
+        o_neg = await collect_tension(ws, plain + "&tension=neg")
+        judge_tension_dynamics(o_pos, o_neg)
+        with open(os.path.join(OUT, "正跑_张力层.json"), "w", encoding="utf-8") as f:
+            json.dump({"off": o_off, "s1": o_s1, "pos": o_pos, "neg": o_neg},
+                      f, ensure_ascii=False, indent=1)
     finally:
-        proc.kill()
+        kill_tree(proc)
+        clean_profiles()
 
 
 async def run_counter():
@@ -405,9 +598,9 @@ async def run_counter():
     if not made:
         print("无可跑反证")
         return
-    static = start_static()
+    static, static_port = start_static()
     proc, ws = await browser()
-    base = f"http://127.0.0.1:{STATIC_PORT}/output/20261010_W1件3_反证"
+    base = f"http://127.0.0.1:{static_port}/output/20261010_W1件3_反证"
     try:
         for name, fn, judge in made:
             print("\n" + "=" * 68)
@@ -417,26 +610,37 @@ async def run_counter():
             url = f"{base}/{fn}"
             if name == "默认改启用":
                 o = await collect(ws, f"{url}?breath=off", do_exit=False)
+                await _quiet(judge, o)
+            elif name in TENSION_MUTANTS:
+                plain = f"{url}?variant=v4lotuspond&stage=1&breath=on&segsec=2&xrmock=1"
+                s1on = f"{url}?variant=s1&stage=1&breath=on&segsec=2&xrmock=1&tension=pos"
+                if name == "默认档也挂偏移":
+                    await _quiet(judge, await collect_tension(ws, plain),
+                                 await collect_tension(ws, s1on))
+                else:
+                    await _quiet(judge, await collect_tension(ws, plain + "&tension=pos"),
+                                 await collect_tension(ws, plain + "&tension=neg"))
             else:
                 o = await collect(ws, f"{url}?stage=1&breath=on&segsec=2&xrmock=1",
                                   gather_wait=3.0)
-            await _quiet(judge, o)
+                await _quiet(judge, o)
             fired = len(FAILS) > before
             if fired:
                 FAILS[:] = FAILS[:before]          # 反证触发的 FAIL 不计入本闸失败
             expect_fail(name, "判据确实 FAIL", "", fired)
     finally:
-        proc.kill()
+        kill_tree(proc)
+        clean_profiles()
         static.kill()
 
 
-async def _quiet(judge, o):
+async def _quiet(judge, *args):
     """跑判据但把打印压住，只看有没有产生 FAIL。"""
     import io
     import contextlib
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
-        judge(o)
+        judge(*args)
     sys.stdout.write(buf.getvalue())
 
 
@@ -472,7 +676,7 @@ def main():
     print("\n仍不可替代的项（如实标注）：")
     print("   ① 真机 WebXR 会话结束／头显内退出手势——须法师在场（金口#7）")
     print("   ② 声音一项在本场景结构上 N/A（源码级禁音视频），S4 接入后须实测＋听感")
-    print("   ③ 变化段视觉载体未实现（WebGL linewidth 恒 1px 实测），候法师择载体")
+    print("   ③ 变化段载体：linewidth 恒 1px 实测已封死甲案前提；张力层（判据 9/10）为第四条候选，真机体感候法师（设计稿 20261012_W1 §九）")
     print("   ④ 五段体感观察问题（D 级）——任何脚本无法替代")
     return 0
 
