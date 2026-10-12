@@ -268,6 +268,13 @@ if (-not (Test-Path -LiteralPath $engDir11)) {
                 if ($found11 -ge 0) { $start11 = $found11; $skipped11 += $found11 }
             }
             for ($i = $start11; $i -lt $lines11.Count; $i++) {
+                # 逐行二次过滤（10-13 01:1x，VR 窗 `73336324` 01:09 复函指出后补）：
+                #   行首带日期者（「2026-10-01 …」或「【2026-10-13 …】」），日期非今日 ⇒ 跳过并计数。
+                #   病灶＝`巡检日志-W1.txt:16/17/18` 三行是 **10-01 的旧文**，因有人今日往同一份旧档追加一行
+                #   把**文件 mtime 顶成今日**，于是整档历史被拉进"今日"检索面——mtime 判据看不出这一层。
+                if ($f.Extension -eq '.txt' -and $lines11[$i] -match '^\s*【?(\d{4}-\d{2}-\d{2})') {
+                    if ($Matches[1] -ne $today11) { $skipped11++; continue }
+                }
                 if ($lines11[$i] -match $re11) {
                     $n11++
                     if ($lines11[$i] -notmatch $ok11) {
