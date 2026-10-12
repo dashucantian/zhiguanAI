@@ -71,7 +71,17 @@ def show(data):
 
 
 def _load_puller():
-    """复用同目录 10-07 拉取器的鉴权与读取函数，**不另造第二套凭据取法**。"""
+    """复用同目录 10-07 拉取器的鉴权与 HTTP 面（不另造第二套凭据取法）。
+
+    ⚠2026-10-13 00:1x「落笔」前自查抓出第一版三处错，先修后写（全是"我建的闸自己先错"同族）：
+      ①拉取器 fetch_fields() 返回精简结构 [{name,id,type}]，property 已被剥掉
+        ⇒ 旧写法 f.get("property") 永远取空 ⇒ 选项校验空跑一遍却报"通过"
+        （正是门8 自检警告过的"本门可能恒空转"）。现改直读原始字段面，并加硬闸：
+        读到的单选列数＝0 ⇒ FATAL，不判通过（读不到≠通过）。
+      ②http_json() 返回 (status, body) 二元组 ⇒ 旧写法当 dict 用，写调用必崩。已解包判 code。
+      ③fetch_records() 返回 (items, pages)，items 是原始 record（{record_id, fields:{…}}）
+        ⇒ 旧写法按"等宽行下标"取值永远取不到 ⇒ 校验和会恒为 0。现按 fields["任务编号"] 取。
+    """
     import importlib.util
     here = Path(__file__).resolve().parent
     src = here / "20261007_W3_维那快照拉取_v1.py"
@@ -88,40 +98,77 @@ def _load_puller():
         secret = m.read_secret(home / ".credentials.yaml", bot["secretRef"])
         return m.tenant_token(bot["appId"], secret)
 
+    def _call(url, method, tk, payload=None):
+        head = {"Authorization": "Bearer " + tk}
+        if payload is not None:
+            head["Content-Type"] = "application/json; charset=utf-8"
+        status, body = m.http_json(url, method, head, payload)
+        if status != 200 or body.get("code") != 0:
+            raise SystemExit("FATAL｜HTTP %s code=%s msg=%s"
+                             % (status, body.get("code"), str(body.get("msg"))[:200]))
+        return body.get("data") or {}
+
+    def raw_fields(tk):
+        url = "%s/bitable/v1/apps/%s/tables/%s/fields?page_size=200" % (API, BASE_TOKEN, TABLE_ID)
+        items, seen, guard = [], set(), 0
+        while url:
+            guard += 1
+            if guard > 20:
+                raise SystemExit("FATAL｜字段分页超上限 20 页，拒绝出结论")
+            data = _call(url, "GET", tk)
+            for it in data.get("items") or []:
+                nm = it.get("field_name")
+                if nm and nm not in seen:
+                    seen.add(nm)
+                    items.append(it)
+            nxt = data.get("page_token") if data.get("has_more") else None
+            url = (url.split("&page_token=")[0] + "&page_token=" + nxt) if nxt else None
+        if not items:
+            raise SystemExit("FATAL｜字段面为空 ⇒ 本校验不可信（读不到不等于通过）")
+        return items
+
     def select_options(tk):
-        fields = m.fetch_fields(tk, BASE_TOKEN, TABLE_ID)
         out = {}
-        for f in fields:
-            opts = (f.get("property") or {}).get("options") or []
-            if opts:
-                out[f["field_name"]] = [o.get("name") for o in opts if o.get("name")]
+        for it in raw_fields(tk):
+            opts = ((it.get("property") or {}).get("options")) or []
+            names = [o.get("name") for o in opts if o.get("name")]
+            if names:
+                out[it["field_name"]] = names
+        if not out:
+            raise SystemExit("FATAL｜读到的单选列＝0 ⇒ 选项校验无法执行，不判通过（防恒空转）")
         return out
 
     def batch_create(tk, recs):
         url = "%s/bitable/v1/apps/%s/tables/%s/records/batch_create" % (API, BASE_TOKEN, TABLE_ID)
-        return m.http_json(url, "POST",
-                           headers={"Authorization": "Bearer " + tk,
-                                    "Content-Type": "application/json; charset=utf-8"},
-                           payload={"records": recs})
+        return _call(url, "POST", tk, {"records": recs})
 
     def verify(tk, numbers):
-        fields = m.fetch_fields(tk, BASE_TOKEN, TABLE_ID)
-        names = [f["field_name"] for f in fields]
-        snap = m.fetch_records(tk, BASE_TOKEN, TABLE_ID, names, 500)
-        have = set()
-        idx = names.index("任务编号") if "任务编号" in names else None
-        for row in (snap or []):
-            if idx is None:
-                break
-            v = row[idx] if isinstance(row, list) else None
-            if isinstance(v, list):
-                v = "".join(x.get("text", "") for x in v if isinstance(x, dict))
-            if v:
-                have.add(str(v).strip())
-        return len([n for n in numbers if n and str(n).strip() in have])
+        """跑前与跑后都调它：全表分页读原始 record 的 fields["任务编号"]，命中才计数。"""
+        url = "%s/bitable/v1/apps/%s/tables/%s/records/search?page_size=500" % (
+            API, BASE_TOKEN, TABLE_ID)
+        have, pages, seen_tokens = set(), 0, set()
+        while url:
+            pages += 1
+            if pages > 50:
+                raise SystemExit("FATAL｜记录分页超上限 50 页，拒绝出结论")
+            data = _call(url, "POST", tk, {})
+            for it in data.get("items") or []:
+                v = (it.get("fields") or {}).get("任务编号")
+                if isinstance(v, list):
+                    v = "".join(x.get("text", "") if isinstance(x, dict) else str(x) for x in v)
+                if v:
+                    have.add(str(v).strip())
+            nxt = data.get("page_token") if data.get("has_more") else None
+            if nxt and nxt in seen_tokens:
+                raise SystemExit("FATAL｜分页 token 重复，拒绝出结论（防自循环）")
+            seen_tokens.add(nxt)
+            url = (url.split("&page_token=")[0] + "&page_token=" + nxt) if nxt else None
+        hit = len([n for n in numbers if n and str(n).strip() in have])
+        return hit, len(have)
 
-    return {"token": token, "select_options": select_options,
+    return {"token": token, "select_options": select_options, "raw_fields": raw_fields,
             "batch_create": batch_create, "verify": verify}
+
 
 
 def main():
@@ -138,26 +185,36 @@ def main():
         return 1
     show(data)
 
+    if not (a.check or a.fire):
+        print("═══ DRY-RUN｜未发任何网络调用。要真写＝法师给「落笔」后加 --落笔（另需环境变量）。")
+        return 0
+
     pull = _load_puller()          # 复用同目录拉取器的鉴权与字段读取，不另造一套
-    if a.check or a.fire:
-        token = pull["token"]()
-        opts = pull["select_options"](token)
-        miss = []
-        for r in data["rows"]:
-            for col, val in r["fields"].items():
-                if col in opts and val not in opts[col]:
-                    miss.append("%s：%s＝%r 不在该列选项内（现有选项：%s）"
-                                % (r["ref"], col, val, "／".join(opts[col])))
-        if miss:
-            print("FATAL｜单选值对不上表内选项，**不降级、不自动新建选项**：")
-            for m in miss:
-                print("   ", m)
-            return 1
-        print("[只读校验通过] 所有单选值均在表内选项之中")
-        if not a.fire:
-            return 0
+    tk = pull["token"]()
+    opts = pull["select_options"](tk)
+    print("[只读] 表内带选项的列＝%d 个：%s" % (len(opts), "／".join(sorted(opts))))
+    miss = []
+    for r in data["rows"]:
+        for col, val in r["fields"].items():
+            if col in opts and val not in opts[col]:
+                miss.append("%s：%s＝%r 不在该列选项内（现有选项：%s）"
+                            % (r["ref"], col, val, "／".join(opts[col])))
+    if miss:
+        print("FATAL｜单选值对不上表内选项，**不降级、不自动新建选项**：")
+        for m in miss:
+            print("   ", m)
+        return 1
+    print("[只读校验通过] 所有单选值均在表内选项之中")
+
+    numbers = [r["fields"].get("任务编号") for r in data["rows"]]
+    hit0, total0 = pull["verify"](tk, numbers)
+    print("[写前基线] 表内带号记录 %d 条｜这 %d 个号当前已存在 %d 条（应为 0，否则＝重复登表）"
+          % (total0, len(numbers), hit0))
+    if hit0:
+        print("FATAL｜候登号里有已在表上的 ⇒ 先查清是哪几条，**不重复建行**")
+        return 1
     if not a.fire:
-        print("═══ DRY-RUN｜未发任何写调用。要真写＝法师给「落笔」二字后加 --落笔（另需环境变量）。")
+        print("═══ CHECK-REMOTE 通过（全程只读，未发写调用）。")
         return 0
 
     print("⚠「落笔」模式：即将向飞书发出 batch_create（删行需人工，非自动可回收）。")
@@ -165,19 +222,17 @@ def main():
         print("FATAL｜环境变量 ZIGUAN_WRITE_OK=1 未设 ⇒ 拒绝写。")
         print("       这道双闸是故意的：脚本被误跑、被别的窗拿去跑，都不会改到您那张表。")
         return 1
-    recs = [{"fields": r["fields"]} for r in data["rows"]]
-    res = pull["batch_create"](pull["token"](), recs)
-    code = res.get("code")
-    if code != 0:
-        print("FATAL｜batch_create 返回 code=%s msg=%s（照实报，不重试、不改列名硬凑）"
-              % (code, res.get("msg")))
+    res = pull["batch_create"](tk, [{"fields": r["fields"]} for r in data["rows"]])
+    created = res.get("records") or []
+    print("[已写] 接口返回 %d 条 record" % len(created))
+    hit1, total1 = pull["verify"](pull["token"](), numbers)
+    print("[跑后校验和] 表内带号记录 %d 条（写前 %d）｜候登 %d 号命中 **%d／%d**"
+          % (total1, total0, len(numbers), hit1, len(numbers)))
+    if hit1 != len(numbers):
+        print("FATAL｜写后盘侧复核未全命中 ⇒ 立即上呈，**不静默、不重跑碰运气**")
         return 1
-    created = res.get("data", {}).get("records", []) or []
-    print("[已写] 返回 %d 行 record" % len(created))
-    hit = pull["verify"](token if False else pull["token"](),
-                        [r["fields"].get("任务编号") for r in data["rows"]])
-    print("[跑后校验和] 新行号命中 %d／%d" % (hit, len(data["rows"])))
-    return 0 if hit == len(data["rows"]) else 1
+    print("═══ 落笔完成：8 行已进表；写前写后两次盘侧复核一致。")
+    return 0
 
 
 if __name__ == "__main__":

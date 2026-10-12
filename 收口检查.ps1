@@ -232,6 +232,48 @@ if (-not (Test-Path -LiteralPath $engDir)) {
     }
 }
 
+# ---------- 11. 件数口径探针（2026-10-13 法师裁「准修」第二处窄例外：只加本门，其余一字不动） ----------
+# 病根（10-12 一天内两窗同型）：报"在途 N 件"没声明按哪一侧数 ⇒ 协调窗 21:10 函写"您 11 件在途"，
+#   按 git 可见面实为 2 件（其余 9 件在 ignore 区）；人机建构窗 15:4x 那份"候放行清单"同源失真。
+#   判语 017 同族：写在文书里的口径不等于生效，须挂检查点。§二.15 第①款的落地面。
+# 判据形状：凡"在途 N 件／N 件在途／候放行 N 件"一类汇总，**同一行必须带口径词**
+#   （盘上／git 可见／git可见／tracked／未跟踪／已跟踪／暂存）；缺即点名 文件:行号。
+# 检索面：今日（本地日期）mtime 改动过的 己档 与 信箱函件（只读，不判历史轮，历史不回改）。
+Section "11. 件数口径探针（报『在途 N 件』须声明按哪一侧数·法师 10-13 准修）"
+$engDir11 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+if (-not (Test-Path -LiteralPath $engDir11)) {
+    Bad "闸11：读不到信箱 engine 区 —— 目录被移动？本门不可信"
+} else {
+    $scope11 = @(Get-ChildItem -LiteralPath $engDir11 -Filter '*.txt' -ErrorAction SilentlyContinue |
+                 Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+    $scope11 += @(Get-ChildItem -LiteralPath $engDir11 -Filter '*.md' -ErrorAction SilentlyContinue |
+                  Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+    if ($scope11.Count -eq 0) {
+        Write-Host "[NOTE] 闸11：今日无己档／信件有动静（mtime 判据）——本门前提不成立，不判 PASS 也不判告警。" -ForegroundColor Gray
+    } else {
+        $re11  = '(在途\s*[0-9]+\s*件|[0-9]+\s*件在途|候放行[^，。]{0,8}[0-9]+\s*件)'
+        $ok11  = '(盘上|git 可见|git可见|tracked|未跟踪|已跟踪|暂存)'
+        $n11 = 0; $miss11 = @()
+        foreach ($f in $scope11) {
+            $lines11 = [System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8)
+            for ($i = 0; $i -lt $lines11.Count; $i++) {
+                if ($lines11[$i] -match $re11) {
+                    $n11++
+                    if ($lines11[$i] -notmatch $ok11) {
+                        $miss11 += ('{0}:{1}' -f $f.Name, ($i + 1))
+                    }
+                }
+            }
+        }
+        if ($miss11.Count -eq 0) {
+            Ok "闸11：今日 $($scope11.Count) 份动静文书里 $n11 处『在途／候放行 N 件』全部带口径字样（盘上／git 可见／tracked／暂存）。"
+        } else {
+            $show11 = ($miss11 | Select-Object -First 8) -join '、'
+            Bad "闸11：$n11 处件数表述中有 $($miss11.Count) 处未声明口径（§二.15）：$show11$(if ($miss11.Count -gt 8) { ' …余' + ($miss11.Count - 8) + '处' }) —— 就地补『盘上』或『git 可见』即可；历史轮不回改。"
+        }
+    }
+}
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
