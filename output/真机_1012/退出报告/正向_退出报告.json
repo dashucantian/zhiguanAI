@@ -1,0 +1,186 @@
+{
+ "variant": "v4lotuspond",
+ "variantLabel": "V4 · 莲池观",
+ "measured": false,
+ "synthOnly": true,
+ "reason": "system",
+ "conditions": {
+  "xrSessionEnded": {
+   "verdict": "PASS",
+   "mock": false,
+   "fromSystem": true,
+   "presentingAfter": false,
+   "ourPathMs": 0,
+   "endToEndMs": 0
+  },
+  "soundStopped": {
+   "verdict": "N/A",
+   "reason": "本场景源码级禁音视频（verify_mandala_static.py:118），无音频可停；S4 接入后须实测且听感候法师在场"
+  },
+  "feedbackAtBaseline": {
+   "verdict": "FAIL",
+   "maxRelDeltaAfterSnap": 0.0957,
+   "maxRelDeltaAtExitInstant": null,
+   "phaseAtExit": null,
+   "phaseElapsedSecAtExit": null,
+   "gatherSecPlanned": 6,
+   "byConstruction": "退出即锁定三路（红线 5 要求不等渐变），故锁定后偏差恒 0",
+   "note": "锁定后仍偏离基线——异常",
+   "cur": {
+    "fog": 0.027392965867569598,
+    "opac": [
+     0.8272501471167307,
+     0.5519442504782109,
+     0.7143197702587398
+    ],
+    "glow": 1.0020073890228662
+   },
+   "base": {
+    "fog": 0.025,
+    "opac": [
+     0.85,
+     0.55,
+     0.7
+    ],
+    "glow": 1
+   }
+  },
+  "dataSaved": {
+   "verdict": "N/A",
+   "reason": "本场景不落盘、不采集（S6 未接），无保存返回码"
+  }
+ },
+ "errors": [],
+ "events": [
+  {
+   "phase": "enter",
+   "atSec": 0,
+   "variant": "v4lotuspond",
+   "kind": "session_begin",
+   "mock": false,
+   "overlay": "none"
+  },
+  {
+   "phase": "enter",
+   "atSec": 0,
+   "variant": "v4lotuspond",
+   "kind": "phase_begin"
+  },
+  {
+   "phase": "dwell",
+   "atSec": 2.989,
+   "variant": "v4lotuspond",
+   "kind": "phase_begin"
+  },
+  {
+   "phase": "change",
+   "atSec": 23,
+   "variant": "v4lotuspond",
+   "kind": "phase_begin"
+  },
+  {
+   "phase": "change",
+   "atSec": 23.013,
+   "variant": "v4lotuspond",
+   "kind": "tension_begin",
+   "mode": "pos",
+   "seg": 80,
+   "wd": 0.1571,
+   "k": 0.0279,
+   "c": 0.1136,
+   "v0": 0.2078,
+   "slewCap": 0.2403
+  },
+  {
+   "phase": "change",
+   "atSec": 23.013,
+   "variant": "v4lotuspond",
+   "kind": "synth",
+   "synth": true,
+   "seqIndex": 0,
+   "measure": 0.2,
+   "suggest": null,
+   "output": null,
+   "note": "suggest 未接线（决策层属 S6）；output 无载体（linewidth 恒 1px 实测）"
+  },
+  {
+   "phase": "change",
+   "atSec": 43,
+   "variant": "v4lotuspond",
+   "kind": "synth",
+   "synth": true,
+   "seqIndex": 1,
+   "measure": 0.5,
+   "suggest": null,
+   "output": null,
+   "note": "suggest 未接线（决策层属 S6）；output 无载体（linewidth 恒 1px 实测）"
+  },
+  {
+   "phase": "change",
+   "atSec": 63.001,
+   "variant": "v4lotuspond",
+   "kind": "synth",
+   "synth": true,
+   "seqIndex": 2,
+   "measure": 0.7,
+   "suggest": null,
+   "output": null,
+   "note": "suggest 未接线（决策层属 S6）；output 无载体（linewidth 恒 1px 实测）"
+  },
+  {
+   "phase": "change",
+   "atSec": 83.001,
+   "variant": "v4lotuspond",
+   "kind": "synth",
+   "synth": true,
+   "seqIndex": 3,
+   "measure": 0.4,
+   "suggest": null,
+   "output": null,
+   "note": "suggest 未接线（决策层属 S6）；output 无载体（linewidth 恒 1px 实测）"
+  },
+  {
+   "phase": "change",
+   "atSec": 103.002,
+   "variant": "v4lotuspond",
+   "kind": "tension_end",
+   "on": true,
+   "mode": "pos",
+   "measure": 0,
+   "suggest": null,
+   "output": 0,
+   "vt": 0.0022,
+   "flips": 4,
+   "maxAbsT": 0.7983,
+   "clipped": false,
+   "started": true,
+   "k": 0.0279,
+   "c": 0.1136,
+   "v0": 0.2078,
+   "wd": 0.1571,
+   "slewCap": 0.2403,
+   "seg": 80,
+   "axes": {
+    "dongjing": 1,
+    "yinyang": 0,
+    "mingan": 1,
+    "xianyin": 1
+   },
+   "live": {
+    "fog": 0.027393,
+    "glow": 1.00201,
+    "opacity": [
+     0.82725,
+     0.55194,
+     0.71432
+    ]
+   }
+  },
+  {
+   "phase": "gather",
+   "atSec": 103.002,
+   "variant": "v4lotuspond",
+   "kind": "phase_begin"
+  }
+ ]
+}
