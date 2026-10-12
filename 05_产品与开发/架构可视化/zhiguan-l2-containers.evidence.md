@@ -20,6 +20,7 @@
 | `zhiguan-closedloop-flow.dot` | 一次闭环会话的调用顺序（§七 建议 2·2026-10-09 落地）：登记→采集→阈值→节拍→VR→落盘→质检 | 在 Qoder 里直接打开该文件，插件自带 Graphviz 查看器出 SVG |
 | `qgraphflow\closedloop-session-sequence\index.html` | 同一事实的交付面版本：带 activation 条与基线期／闭环期 alt、逐拍 loop | **双击即开**（离线自包含，无需服务、不出网） |
 | `qgraphflow\*.graph.json` | 上面几张 HTML 的图数据源（QGraphFlow 格式，自带行区间级 `source`） | 改这里再重跑三条命令 |
+| `validate-anchors.mjs` | 空行探针：台账每条 `path:行号` 取末行内容，落在空行即报（`validate-model.mjs` 抓不到的一类）。**谁改台账谁跑** | `node 05_产品与开发/架构可视化/validate-anchors.mjs`，CLEAN 退 0／NEEDS-RECHECK 退 1 |
 
 ## 二、证据来源（已逐条抽查行号属实）
 
@@ -41,7 +42,7 @@
 - 正源②窗口身份与授权＝`01_项目管理/AI代理身份登记.md:31`（§三 登记表）、`:97`（§三bis 窗口分类与认领）；投影＝`board_config.py:74,79`（只承载物理地址与显示名）
 - 正源③架构事实＝`architecture-model.json:3`（metadata／sourceRefPolicy）＋本文件 `:19`（§二）；投影＝图谱双轨（`zhiguan-l2-containers.dot:1`、`qgraphflow/congci-feed-sequence.graph.json:1`）
 - 正源④数据准入与判定＝`qc_pipeline.py:432`（`write_qc_json` 定稿写手）＋`05_产品与开发/muse-direct/tools/ingest_session.py:2`（02_raw 唯一合法写入入口）＋`congci_pipeline.py:149`（`processed_index.json` 账本路径；HEAD 与工作区同行同文，已用 `git show HEAD:` 对过）
-- 正源⑤运行巡检＝C3（暂停中）：`AI-开工入口.md:101`（§二.9 暂停＋停催令注记与替代动作；**该锚 24 小时内已漂两次** `:99→:100→:101`，均因他窗就地补条，现该文件 clean、工作区＝HEAD 同行）、`01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md`
+- 正源⑤运行巡检＝C3（暂停中）：`AI-开工入口.md:111（§二.9 停催令注记）`（**双锥并写**：行号＋小节名，下次再漂仍可查。该行号系本窗 2026-10-12 20:19 现取 `grep -n "停催令」首次入规约" AI-开工入口.md` ＝ **111**，且 `git show HEAD:` 同侧亦 **111**；对象＝该注记所在的**那一行**，非全表任何极值。沿革 `:99→:100→:101→:111`，均因他窗就地补条；该文件现带他窗在途 M，但此锚工作区＝HEAD 同行）、`01_项目管理/20261007_C3任务运行态只读快照_候裁_v1.md`
 - 正源⑥会话运行态＝MCP `list_chat_sessions` 快照：`05_产品与开发/任务看板/需求与隐私原则_v1.md:53`（180 秒新鲜度口径）、`board_sources.py:118`（读 `state/live_sessions.json`）
 - 投影侧另三条：`01_项目管理/任务关系图/生成甘特流程图.py:18`（甘特与思维导图同源同快照）、`01_项目管理/20261008_QC入库乱象只读筛查与裁定123执行_v1.md:153,162`（从此线报告只读消费正源）、`01_项目管理/信箱/engine/巡检日志-W3.txt:1`（C3 暂停期的己档留痕面）
 
@@ -229,3 +230,7 @@ QODER_CANVAS_DATA="$TEMP/sot.canvas.data.json" \
 **入库**：法师 2026-10-10 裁「补 `.gitignore` 例外行」（非 `git add -f`）⇒ 已照 `D-1008-W3a` 口径加 **1 行注释＋6 行显式文件名**（轨一 `.dot` 1 行；轨二 5 行，其中目录放行与再排除两行不可省）。实测三证：`git check-ignore -v --no-index` 四件均命中 `!` 规则、`git status -uall` 该目录内无其他件被放出、无他窗路径受影响。
 
 **建议每批改动前跑的空行探针**（比两道现有闸多抓一类缺陷：锚点落在空行＝该行号必不对应任何声明）：实作＝`_analysis_tmp/w3_blank_anchor_probe.mjs`（**只读**，跑法 `node _analysis_tmp/w3_blank_anchor_probe.mjs`，本轮现势输出 `{"refs":149,"sectionAnchored":2,"dirRefs":1,"missing":0,"outOfRange":0,"blankLine":0,"verdict":"CLEAN"}`）。该脚本不入正源依的是 `.gitignore` 里 `/_analysis_tmp/*.py`、`/_analysis_tmp/*.mjs`、`/_analysis_tmp/*.txt` 三条（**故意不写这三条的行号**——本文件自己就是被行号锚坑过四次的当事文档，且 `.gitignore` 本批又长了 7 行），**不是整目录排除**——交接函 §三.3 写「`_analysis_tmp/` 已被忽略」不准，该目录现另有 3,052 项未跟踪件与若干已跟踪 `.md`。反向验窗已做：把 `soT.inspection` 的锚临时改回 `:100` 即报 `★空行`、verdict 转 `NEEDS-RECHECK`，还原后复 `CLEAN`，证明确实抓得到本轮这类缺陷。**勿再以「0 缺 0 越界」代替内容级核对。**
+
+> 🔴 **2026-10-10 迁址更正（协调窗 0b5dfd98 令·本窗执行）**：上段那个探针**已不在 `_analysis_tmp/`**——现址＝**`05_产品与开发/架构可视化/validate-anchors.mjs`**（与 `validate-model.mjs` 并列的第二道台账闸），旧址副本已删。迁址理由＝原址命中 `/_analysis_tmp/*.mjs`，永不入库、随时可丢，而协调窗要把这道闸收进共用闸门，引一个未版本化文件等于把闸门建在沙上（本窗上一段的「不入正源依三条」表述因此作废）。`.gitignore` 已加 **1 行显式文件名例外＋1 行注释**（禁通配）。新址现势输出 `{"refs":149,"sectionAnchored":2,"dirRefs":1,"skipped":11,"missing":0,"outOfRange":0,"blankLine":0,"verdict":"CLEAN"}`，**CLEAN 退 0／NEEDS-RECHECK 退 1**，且仓库根由本件位置推出、任意 cwd 皆可跑。迁址后又做一遍反向验窗：把 `soT.inspection` 锚临时改回 `:100` ⇒ 报 `★空行`、exit 1；还原 ⇒ `CLEAN`、exit 0，还原后 `git diff --numstat` 对该台账**无输出**（往返字节一致）。排程＝**谁改台账谁跑**；升格进共用闸门由协调窗在**笔 D 之后**落（`收口检查.ps1` 本轮只放开这一道，KZ-1007-W3e 编码假阴性仍不准修），本窗不动共用脚本。
+
+> ✅ **2026-10-12 结案（法师给字「P8 过」，经协调窗 44443a0e 转达）**：本文件 §十 那条「`1440×900` 版面像素判定未做、候法师目视」**已通过、结案**，此后不再作为悬项挂在交付面上。同轮另结一件：协调窗 20:5x 复述的 `evidence.md:45` 仍写 `AI-开工入口.md:101` 系**按 HEAD 侧复核**所致（HEAD 里那条实在 :44，本窗 10-10 在 §一 加了一行使其后全漂一位），工作区三处（本文件 :45＋台账 :245／:632）已于 20:2x 改为双锥 `AI-开工入口.md:111（§二.9 停催令注记）`，`grep -c "AI-开工入口.md:101"` 工作区＝**0**、HEAD＝1。⇒ 由此得一条待裁口径：**四窗共用一个工作树，在途修正未落 HEAD 时，按 HEAD 复核会重复派同一件活**；候协调窗择「复核一律读工作区」或「本窗先落笔再复核」。另 `board_sources.py:273`／`:307` 两锥本窗 21:11 再取一次＝工作区与 HEAD **两侧同行同文**（笔 D `520c57a` 入库后自动对齐），**不重出**；照言改回 268／302 反而错位。
