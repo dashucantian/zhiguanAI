@@ -253,10 +253,21 @@ if (-not (Test-Path -LiteralPath $engDir11)) {
     } else {
         $re11  = '(在途\s*[0-9]+\s*件|[0-9]+\s*件在途|候放行[^，。]{0,8}[0-9]+\s*件)'
         $ok11  = '(盘上|git 可见|git可见|tracked|未跟踪|已跟踪|暂存)'
-        $n11 = 0; $miss11 = @()
+        $today11 = (Get-Date).ToString('yyyy-MM-dd')
+        $n11 = 0; $miss11 = @(); $skipped11 = 0
         foreach ($f in $scope11) {
             $lines11 = [System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8)
-            for ($i = 0; $i -lt $lines11.Count; $i++) {
+            # 扫描面＝自今日首轮头行「【yyyy-MM-dd」起（己档惯例）。历史轮不回改，故不判历史行；
+            #   找不到今日头行 ⇒ 整档扫（保守，不放过"改了却没记轮次"的情形）。信箱函件为一次性文书，整件扫。
+            $start11 = 0
+            if ($f.Extension -eq '.txt') {
+                $found11 = -1
+                for ($j = 0; $j -lt $lines11.Count; $j++) {
+                    if ($lines11[$j].StartsWith('【' + $today11)) { $found11 = $j; break }
+                }
+                if ($found11 -ge 0) { $start11 = $found11; $skipped11 += $found11 }
+            }
+            for ($i = $start11; $i -lt $lines11.Count; $i++) {
                 if ($lines11[$i] -match $re11) {
                     $n11++
                     if ($lines11[$i] -notmatch $ok11) {
@@ -266,10 +277,10 @@ if (-not (Test-Path -LiteralPath $engDir11)) {
             }
         }
         if ($miss11.Count -eq 0) {
-            Ok "闸11：今日 $($scope11.Count) 份动静文书里 $n11 处『在途／候放行 N 件』全部带口径字样（盘上／git 可见／tracked／暂存）。"
+            Ok "闸11：今日 $($scope11.Count) 份动静文书里 $n11 处『在途／候放行 N 件』全部带口径字样（盘上／git 可见／tracked／暂存）；己档自今日首轮头行起扫，已跳过历史行 $skipped11 行。"
         } else {
             $show11 = ($miss11 | Select-Object -First 8) -join '、'
-            Bad "闸11：$n11 处件数表述中有 $($miss11.Count) 处未声明口径（§二.15）：$show11$(if ($miss11.Count -gt 8) { ' …余' + ($miss11.Count - 8) + '处' }) —— 就地补『盘上』或『git 可见』即可；历史轮不回改。"
+            Bad "闸11：$n11 处件数表述中有 $($miss11.Count) 处未声明口径（§二.15）：$show11$(if ($miss11.Count -gt 8) { ' …余' + ($miss11.Count - 8) + '处' }) —— 就地补『盘上』或『git 可见』即可；历史轮不回改（己档已跳过历史行 $skipped11 行）。"
         }
     }
 }
