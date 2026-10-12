@@ -105,26 +105,33 @@ async def collect(ws, url, do_exit=True, gather_wait=3.0):
     out = {"diag": json.loads(diag) if diag else None,
            "dom": json.loads(dom) if dom else {}, "err": err,
            "events": [], "report": None, "panel": "", "exit_call_ms": None,
-           "overlay": None, "visibility": None}
+           "overlay": None, "visibility": None, "pre_session": None}
     if not do_exit:
         return out
-    # 进入段（3s）跑完后再探一次遮挡：黑场与进入段渐隐都不得还盖着场景。
-    # 这条是 10-10 真机回报逼出来的——曾把 #load 撤除挂到 rAF 上，页面一旦
-    # 不可见（后台标签／头显 2D 视图未聚焦）即整屏永久黑＝"打开只剩空白"。
-    await until(base, 3.6)
+    # ⭐判据 8 的取证点：会话未起之前段机不得推进。这条是 16:1x 真机回报逼出来的
+    # ——原实现段时钟以"页面加载"为零点，用户点「进入 VR」前进入段就跑完了，
+    # 头显里因此"直接呈现 3D 场景、没有中间过场"。
+    await until(base, 1.6)
+    out["pre_session"] = json.loads(await ev(ws,
+        "JSON.stringify({idx:__stageCtl.state().idx,"
+        "ev:__stageCtl.events().length,"
+        "wallT0:__stageCtl.state().wallT0})") or "{}")
+    # 起一次（模拟）会话＝段时钟此刻归零。不点这一步，退出路径走的是"无会话"分支，
+    # ourPathMs 定义上恒为 0，判据 3 就成了空转（03:4x 反证实测抓到）。
+    await ev(ws, "document.getElementById('btnVR').click()")
+    arm = time.perf_counter()
+    # 进入段（3s）跑完后再探遮挡：黑场与进入段渐隐都不得还盖着场景。渐隐现在
+    # 也在会话起点重放，所以这一探必须排在 arm 之后，否则量到的是动画进行中。
+    await until(arm, 3.6)
     out["visibility"] = await ev(ws, "document.visibilityState")
     ov = await ev(ws, "JSON.stringify({load:getComputedStyle(document.getElementById('load')).display,"
                       "fade:(()=>{const f=document.getElementById('stageFade');"
                       "if(!f)return null;const c=getComputedStyle(f);"
                       "return {display:c.display,opacity:+parseFloat(c.opacity).toFixed(3)};})()})")
     out["overlay"] = json.loads(ov) if ov else None
-    # 时间线（segsec=2）：enter 0–3 → dwell 3–5 → change 5–13 → gather 13–19。
+    # 时间线（segsec=2，**自会话起点算**）：enter 0–3 → dwell 3–5 → change 5–13 → gather 13–19。
     # 落在收束早段发退出，才测得到"打断渐变"。
-    await until(base, 3.0 + 2.0 + 2.0 * 4 + gather_wait - 1.5)
-    # 先起一次（模拟）会话：不点这一步，退出路径走的是"无会话"分支，
-    # ourPathMs 定义上恒为 0，判据 3 就成了空转（03:4x 反证实测抓到）。
-    await ev(ws, "document.getElementById('btnVR').click()")
-    await asyncio.sleep(1.5)
+    await until(arm, 3.0 + 2.0 + 2.0 * 4 + gather_wait - 1.5)
     t0 = time.perf_counter()
     await ev(ws, "__stageCtl.exit()")
     # 外部计时：CDP 的 evaluate 在主线程排队，页面里若有自旋等待会被这条量到；
@@ -156,11 +163,12 @@ def judge_default_off(o):
 def judge_sequence(o):
     """判据 2：五段时序。"""
     print("\n── 判据 2：五段时序（enter→dwell→change→gather）────────────")
-    ph = [e["phase"] for e in o["events"] if e.get("kind") == "phase_begin"]
+    pbe = [e for e in o["events"] if e.get("kind") == "phase_begin"]
+    ph = [e["phase"] for e in pbe]
     check(ph == ["enter", "dwell", "change", "gather"],
           f"段序正确 {ph}", f"段序不符：期望 [enter,dwell,change,gather]，实得 {ph}")
-    if len(ph) >= 2:
-        enter_dur = o["events"][1]["atSec"] - o["events"][0]["atSec"]
+    if len(pbe) >= 2:
+        enter_dur = pbe[1]["atSec"] - pbe[0]["atSec"]
         check(2.6 <= enter_dur <= 3.4,
               f"进入段实测 {enter_dur:.3f}s ≈ 规格 3.0s",
               f"进入段实测 {enter_dur:.3f}s 偏离规格 3.0s")
@@ -248,6 +256,27 @@ def judge_overlay(o):
           f"进入段结束后仍有全屏遮挡：{f}")
 
 
+def judge_clock_anchor(o):
+    """判据 8：段时钟零点＝会话起点（不是页面加载）。"""
+    print("\n── 判据 8：段时钟以会话为零点（真机 16:1x「没有中间过场」所立）──")
+    pre = o.get("pre_session")
+    if pre is None:
+        check(False, "", "会话前探针未取到——本判据没跑成，不等于通过")
+        return
+    check(pre.get("idx") == 0 and pre.get("ev") == 0,
+          f"会话未起时段机零推进（idx={pre.get('idx')}／事件 {pre.get('ev')} 条）",
+          f"页面加载即起段：会话前 idx={pre.get('idx')}、事件 {pre.get('ev')} 条 ⇒ "
+          "进入段在用户点「进入 VR」之前就跑完，头显里必然「没有中间过场」")
+    sb = [e for e in o["events"] if e.get("kind") == "session_begin"]
+    check(bool(sb) and sb[0]["atSec"] <= 0.05,
+          f"session_begin 落在零点（atSec＝{(sb[0]['atSec'] if sb else None)}）",
+          f"session_begin atSec＝{(sb[0]['atSec'] if sb else '缺失')}＞0.05 ⇒ 时钟起点不是会话")
+    pbe = [e for e in o["events"] if e.get("kind") == "phase_begin"]
+    check(bool(pbe) and pbe[0]["phase"] == "enter" and pbe[0]["atSec"] <= 0.3,
+          f"进入段自会话起点开跑（atSec＝{(pbe[0]['atSec'] if pbe else None)}）",
+          f"进入段首事件不在会话起点：{(pbe[0]['atSec'] if pbe else '无')}")
+
+
 def judge_no_error(o):
     print("\n── 判据 6：骨架自身无错 ──────────────────────────────────")
     check(not (o.get("err2") or o.get("err")),
@@ -276,6 +305,10 @@ MUTATIONS = [
     ("进入段遮不撤净", "c7_overlay_stuck.html",
      [("    'animation:zgEnterFade ' + ENTER_S + 's linear forwards}' +",
        "    'animation:zgEnterFade 3000s linear forwards}' +")], judge_overlay),
+    ("段时钟挂在页面加载", "c8_clock_from_load.html",
+     [("if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);",
+       "if (STAGE_ON && !stage.fault && !stageFreezesBreath()) stageTick(time);")],
+     judge_clock_anchor),
 ]
 
 
@@ -362,6 +395,7 @@ async def run_normal(base):
         judge_no_score(o)
         judge_no_error(o)
         judge_overlay(o)
+        judge_clock_anchor(o)
     finally:
         proc.kill()
 
@@ -427,11 +461,13 @@ def main():
     if SKIPS:
         print(f"跳过的反证（锚文本不在页面）：{SKIPS}——须同步本脚本")
     if FAILS:
-        print(f"❌ FAIL {len(FAILS)} 项：")
+        print(f"[FAIL] 五段骨架闸 {len(FAILS)} 项未过：")
         for f in FAILS:
             print("   - " + f)
         return 1
-    print("✅ PASS：五段骨架闸全通过" + ("（含反证有牙）" if a.counter or a.both else
+    # 此处禁写 emoji：GBK 控制台下 print 直接 UnicodeEncodeError、traceback 退出，
+    # 判据全过也会被外层读成 rc≠0（与"收口检查第4门编码假阴性"同族病灶）。
+    print("[PASS] 五段骨架闸全通过" + ("（含反证有牙）" if a.counter or a.both else
           "（本轮未跑反证，须 --both 才算验到有牙）"))
     print("\n仍不可替代的项（如实标注）：")
     print("   ① 真机 WebXR 会话结束／头显内退出手势——须法师在场（金口#7）")

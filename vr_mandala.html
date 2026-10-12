@@ -370,7 +370,7 @@ let xrSessionRef = null;
 function pushEvent(kind, extra) {
   const e = Object.assign({
     phase: STAGES[stage.idx].key,
-    atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
+    atSec: atSecNow(),
     variant: VARIANT_KEY, kind,
   }, extra || {});
   stage.events.push(e);
@@ -381,7 +381,7 @@ function synthStep(i) {
   /* 三值分层：measure（合成值）／suggest（决策层）／output（最终场景输出）
      分列不合并；未接线者留 null，不以 0 填充（件2 §三）。 */
   stage.events.push({
-    phase: 'change', atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
+    phase: 'change', atSec: atSecNow(),
     variant: VARIANT_KEY, kind: 'synth', synth: true, seqIndex: i,
     measure: SYNTH_ON ? SYNTH_SEQ[i] : null,
     suggest: null, output: null,
@@ -567,8 +567,7 @@ function stageTick(timeMs) {
       stage.fault = true;
       stage.tickErr = String((e && e.message) || e);
       stage.events.push({ phase: STAGES[stage.idx].key, kind: 'stage_error',
-                          atSec: +(performance.now() / 1000 - stage.wallT0).toFixed(3),
-                          error: stage.tickErr });
+                          atSec: atSecNow(), error: stage.tickErr });
     }
   }
 }
@@ -605,6 +604,12 @@ function stageTickInner(timeMs) {
    ES module 严格模式下块内函数声明只在块内可见，原先写在 if 块里
    导致 stageTick 每帧 ReferenceError、时序停走（03:3x 冒烟实测）。 */
 let badgeEl = null;
+let enterFadeEl = null;
+/* 段内时刻一律相对"段时钟零点"；零点未定（还没进会话）时报 0，不报 NaN。 */
+function atSecNow() {
+  if (stage.wallT0 === null) return 0;
+  return +(performance.now() / 1000 - stage.wallT0).toFixed(3);
+}
 function updateBadge() {
   if (!badgeEl || !STAGE_ON) return;
   const p = STAGES[stage.idx];
@@ -617,6 +622,30 @@ function updateBadge() {
     '测量：无（不接脑电）\n' +
     '数据：' + (SYNTH_ON ? '模拟（非测量）' : '无');
   badgeEl.style.whiteSpace = 'pre';
+}
+
+function playEnterFade() {
+  /* 进入段渐隐改在"会话起点"重放。只碰 DOM，VR 内必不可见——留它是为了让
+     2D 侧的段界也真看得见，与段时钟同一时刻。 */
+  if (!enterFadeEl) return;
+  enterFadeEl.style.display = '';
+  enterFadeEl.style.animation = 'none';
+  void enterFadeEl.offsetWidth;      // 不强制一次重排，animation 不会从头再跑
+  enterFadeEl.style.animation = '';
+}
+
+function armStage() {
+  /* ⭐段时钟零点＝会话起点（真机 16:1x 回报逼出）。原实现从"页面加载"起算 ⇒
+     用户点「进入 VR」之前进入段(3s)与安住段已在跑，头显里"直接呈现 3D 场景、
+     没有中间过场"是构造必然，不是 WebXR 的毛病。 */
+  stage.idx = 0; stage.t0 = null; stage.lastT = null; stage.wallT0 = null;
+  stage.events = []; stage.synthEmitted = -1; stage.gatherDone = false;
+  stage.exitAt = null; stage.endCalledAt = null; stage.endAt = null;
+  stage.endObserved = false; stage.fromSystem = false;
+  stage.fault = false; stage.tickErr = null; stage.report = null;
+  window.__stageReport = null;
+  if (badgeEl) badgeEl.style.display = '';
+  playEnterFade();
 }
 
 /* ── 段骨架专用的屏上元素（仅 ?stage=1 时创建，默认态零 DOM 变化）── */
@@ -639,6 +668,7 @@ if (STAGE_ON) {
   document.head.appendChild(st);
   const fade = document.createElement('div');
   fade.id = 'stageFade'; document.body.appendChild(fade);
+  enterFadeEl = fade;
   fade.addEventListener('animationend', () => { fade.style.display = 'none'; });
   /* 页面不可见时 CSS 动画同样被节流（实测 hidden 下 opacity 恒 1）⇒ 直接不演
      这段渐隐。原则＝进入段可有可无，场景绝不能被盖住。 */
@@ -669,7 +699,8 @@ if (STAGE_ON) {
    ?breath=on 时三通道按规格更新——除此之外仍无任何 per-frame 状态更新；
    breath=off 路径与 S1 逐字节同行为（连续帧差恒 0 的"绝对安静"判据保留） */
 renderer.setAnimationLoop((time)=>{
-  if (STAGE_ON && !stage.fault && !stageFreezesBreath()) stageTick(time);
+  /* 会话未起 ⇒ 段时钟不推进（xrSessionRef 为空即停在"未入段"，见 armStage） */
+  if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);
 
   if (BREATH_ON && breathState.lastT !== null && !stageFreezesBreath()) {
     const t = time / 1000;
@@ -707,9 +738,12 @@ btnVR.onclick = async ()=>{
   try{
     /* XR_MOCK 只在 ?stage=1&xrmock=1 下生效：不碰 renderer.xr，专供退出路径
        时序自测（真机 WebXR 须法师在场，本路径不冒称验过 WebXR）。 */
+    const xrOpt = { optionalFeatures: ['local-floor', 'bounded-floor'] };
+    /* 戊案取证：只有 ?stage=1 才附带 dom-overlay —— 不带 stage 时请求参数与
+       10-01 真机已过版本逐字相同，取证不落在已认可路径上。 */
+    if (STAGE_ON) { xrOpt.optionalFeatures.push('dom-overlay'); xrOpt.domOverlay = { root: document.body }; }
     const session = XR_MOCK ? makeMockSession()
-      : await navigator.xr.requestSession('immersive-vr',
-          {optionalFeatures:['local-floor','bounded-floor']});
+      : await navigator.xr.requestSession('immersive-vr', xrOpt);
     if (!XR_MOCK) renderer.xr.setSession(session);
     xrSessionRef = session;
     session.addEventListener('end', ()=>{
@@ -718,7 +752,9 @@ btnVR.onclick = async ()=>{
       if (STAGE_ON) onSessionEnd();
     });
     btnVR.textContent = XR_MOCK ? 'VR 中（模拟）' : 'VR 中';
-    if (STAGE_ON) pushEvent('session_begin', { mock: !!XR_MOCK });
+    if (STAGE_ON) armStage();   // 段时钟以此刻为零点，不从页面加载起算
+    if (STAGE_ON) pushEvent('session_begin', { mock: !!XR_MOCK,
+      overlay: session.domOverlayState ? session.domOverlayState.type : 'none' });
   }catch(err){
     alert('进入 VR 失败：' + (err && err.message ? err.message : err));
   }
