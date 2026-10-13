@@ -6,10 +6,13 @@
 任何闸了（09-30 实测发现）。正本已收拢到 `vr_gates/`，本脚本把它们串成一条命令。
 
 顺带修掉两个实测发现的缺口：
-  · `verify_mandala_variants.py` 不带参数时**默认只跑 3 个变体**（:166 写死），
-    而 `vr_mandala.html` 注册表在册 **6 个**——本脚本从注册表**读出键名**再传入，
-    不再靠第二份硬编码清单（单一正源，防再漏）。
+  · `verify_mandala_variants.py` 不带参数时**默认只跑 3 个变体**（旧 :166 写死），
+    而 `vr_mandala.html` 注册表在册 4 个／共 6 个——本脚本从注册表**读出键名与状态**再传入，
+    不再靠第二份硬编码清单（单一正源，防再漏）。⚠**闸自己的裸跑缺省已于 10-12 同批改掉**
+    （W3 领号·改4：现在裸跑从注册表读全量，读不到就 `raise`，不再静默只测 3／6）。
   · 09-19 裁"丙"时明写六变体一起进 Pico 体感终审，跑三个等于漏判两个。
+  · 10-10 法师准"日常只跑在册"⇒ PLAN 分两档：`mandala-变体·日常`（在册 4）与
+    `mandala-变体·收口轮`（全量 6，含 v5/v6 两个已裁留档）。`--only mandala-变体·日常` 即日常面。
 
 用法：
     python vr_gates/vr_闸总跑.py              # 全跑
@@ -30,16 +33,23 @@ OUT_DIR = os.path.join(ROOT, "output")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 
-def variant_keys():
-    """从 vr_mandala.html 的 VARIANTS 注册表读变体键（单一正源，不另立清单）。"""
+def variant_registry():
+    """从注册表读 (键, 在册状态)。单一正源，日常档按状态过滤——不在注册表外另立清单。"""
     src = open(os.path.join(ROOT, "vr_mandala.html"), encoding="utf-8").read()
     m = re.search(r"const VARIANTS\s*=\s*\{(.*?)\n\};", src, re.S)
     if not m:
         raise RuntimeError("读不到 VARIANTS 注册表——页面结构变了，请同步本脚本")
-    keys = re.findall(r"^  ([A-Za-z0-9]+):\s*\{", m.group(1), re.M)
-    if len(keys) < 2:
-        raise RuntimeError(f"注册表解析异常，只解析出 {keys}")
-    return keys
+    body = m.group(1)
+    marks = [(x.start(), x.group(1)) for x in
+             re.finditer(r"^  ([A-Za-z0-9]+):\s*\{", body, re.M)]
+    out = []
+    for i, (pos, key) in enumerate(marks):
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(body)
+        st = "留档" if re.search(r"status:\s*'留档'", body[pos:end]) else "在册"
+        out.append((key, st))
+    if len(out) < 2:
+        raise RuntimeError(f"注册表解析异常，只解析出 {out}")
+    return out
 
 
 PLAN = [
@@ -51,8 +61,14 @@ PLAN = [
      "S1 运行时 11 判据：黑底/金色占比/暖金方向/两帧差≤1.0（绝对安静）/纵深可复算"),
     ("mandala-静态纪律", [os.path.join(GATES, "verify_mandala_static.py")],
      "S1 反向断言：无粒子/无 bloom/无数据流/无音视频/无定时器＋钩子禁字面量自述"),
-    ("mandala-六变体", ["__VARIANTS__"],
-     "逐变体像素与帧差（键名从注册表读，不再默认只跑三个）"),
+    ("mandala-变体·日常", ["__VARIANTS_DAILY__"],
+     "在册变体逐像素与帧差（键与状态均从注册表读；法师 10-10 准日常只跑在册）"),
+    ("mandala-变体·收口轮", ["__VARIANTS_ALL__"],
+     "全量六变体——含 留档 两个（v5/v6 那条 0.22%/0.06% 系已裁预期 FAIL），收口轮才跑"),
+    ("mandala-五段骨架", [os.path.join(GATES, "verify_mandala_stage.py")],
+     "件3 五段路径骨架判据 1-13（默认关闭未破／段序／红线5 退出即时／三值分层／无评分／"
+     "进入段后不遮场景／段时钟以会话为零点／张力层零介入与动力学／收束真归位／"
+     "系统退出同样归位／首摆幅＝名义）——补丁原文写「七判据」，10-12 已增至 13，按实数改口"),
     ("mandala-S2呼吸", [os.path.join(GATES, "verify_mandala_breath.py")],
      "S2 三通道呼吸（?breath=on）：回归锚 off ＋ 呼吸存在/无跳变/周期可检出（规格 §四 1~4）"),
     ("引导版零后端", [os.path.join(GATES, "verify_guided.py")],
@@ -64,12 +80,16 @@ def main():
     only = None
     if "--only" in sys.argv:
         only = sys.argv[sys.argv.index("--only") + 1]
-    keys = variant_keys()
+    REG = variant_registry()
+    keys = [k for k, _s in REG]
+    daily = [k for k, s in REG if s == "在册"]
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
     log_path = os.path.join(OUT_DIR, f"VR闸总跑_{stamp}.txt")
-    lines = [f"VR 线验收闸总跑 · {stamp} · 变体键（注册表实读）：{keys}", ""]
+    lines = [f"VR 线验收闸总跑 · {stamp} · 变体键（注册表实读）：{keys}"
+             f"｜在册 {len(daily)} 个＝日常档面：{daily}", ""]
     print("=" * 70)
     print(f"VR 线验收闸总跑｜注册表实读 {len(keys)} 个变体：{' '.join(keys)}")
+    print(f"        其中在册 {len(daily)}（日常档）／留档 {len(keys) - len(daily)}（仅收口轮跑）")
     print("=" * 70)
     results = []
     for name, argv, why in PLAN:
@@ -77,8 +97,13 @@ def main():
             results.append((name, "SKIP", "未选"))
             print(f"  － {name:<18} 跳过（--only）")
             continue
-        args = ([os.path.join(GATES, "verify_mandala_variants.py")] + keys
+        args = ([os.path.join(GATES, "verify_mandala_variants.py")] + [k for k, s in REG]
+                if argv == ["__VARIANTS_ALL__"] else
+                [os.path.join(GATES, "verify_mandala_variants.py")] + [k for k, s in REG if s == "在册"]
+                if argv == ["__VARIANTS_DAILY__"] else
+                [os.path.join(GATES, "verify_mandala_variants.py")] + [k for k, s in REG]
                 if argv == ["__VARIANTS__"] else argv)
+        # __VARIANTS__ 保留＝全量：向后兼容，不改任何既有调用（补丁原案 §四 改3）
         print(f"  ▶ {name:<18} {why}")
         try:
             p = subprocess.run([PY, "-X", "utf8"] + args, cwd=ROOT,
@@ -108,7 +133,9 @@ def main():
     # 已裁留档的 FAIL：如实点出来，但**不因此改判、不因此把退出码抹平**——
     # 判据不挪（09-19 裁"丙"），S1 未收口就不许说"全绿"。
     ARCHIVED = {
-        "mandala-六变体":
+        # ⚠键名须与 PLAN 里的**当前**名字逐字一致——PLAN 拆两档后旧名 "mandala-六变体" 已不存在，
+        # 不改这里的话这条已裁说明会**静默不打印**（补丁原案 §四 未覆盖这一处，本窗补上）。
+        "mandala-变体·收口轮":
             "v5stupa 金色 0.22%／v6void 金色 0.06%，均低于判据下限 0.3%——"
             "此即 09-19 法师裁「丙」所指：**判据不挪、参数不改、FAIL 原样留档**，"
             "随六变体进 Pico 体感终审。属**预期内留档项**，非本轮回归；"

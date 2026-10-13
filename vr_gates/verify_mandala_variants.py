@@ -165,8 +165,25 @@ async def verify_variant(ws, key):
     return fails, d, path
 
 
+def registry_keys():
+    """裸跑缺省＝从 VARIANTS 注册表读全量键。
+    ⚠这里**不得**再写一份键清单（红线：注册表是唯一正源）。旧写法是
+    `sys.argv[1:] or ["s1", "v2abyss", "v3immersion"]`——总跑器显式传键时没问题，
+    但**谁单独跑本闸就静默只测 3／6**（10-10 本线点出、10-12 W3 领号改4 落地）。
+    解析器住在总跑器里，借过来用，不复制第二份。"""
+    import importlib.util
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vr_闸总跑.py")
+    spec = importlib.util.spec_from_file_location("vr_gate_runner", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)          # 总跑器 main() 在 __main__ 保护下，导入无副作用
+    ks = [k for k, _s in mod.variant_registry()]
+    if not ks:
+        raise RuntimeError("注册表读到 0 个变体——宁可不跑，也不用写死的清单兜底")
+    return ks
+
+
 async def main():
-    keys = sys.argv[1:] or ["s1", "v2abyss", "v3immersion"]
+    keys = sys.argv[1:] or registry_keys()
     print("=" * 70)
     print(f"曼荼罗变体批量验收：{keys}")
     print("=" * 70)

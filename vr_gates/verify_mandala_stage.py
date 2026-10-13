@@ -11,9 +11,19 @@
   7. 进入段跑完后场景不得仍被遮（黑场与渐隐层都必须自己撤干净）
   8. 段时钟以会话为零点（真机 16:1x「没有中间过场」回报所立；2026-10-12 补进本清单）
   9. 默认档零介入（不带 ?tension= 与无 tension 节的变体各断一层，防「启动了但值为 0」式假通过）
- 10. 段3 张力成立＝有动量（会过冲）＋有回复力（回中）＋画面真被驱动（正负两向互为共模抵消对照，不取页面自述）
+ 10. 段3 张力成立＝有动量（会过冲）＋有回复力（回中）＋画面真被驱动（正负两向互为共模抵消对照，不取页面自述）。
+     极向断言取 **|t| 最大那一拍**而非共模差最大那一拍——雾轴滞后 tau=5.67s 而快档整段 8s，
+     差值达峰时 t 已过零，符号随噪声漂（10-12 总跑器实测红过一次，反证 c10d 守住这条）
+ 11. 收束段真归位——须发出 base_returned、收束段内 live 仍在动、末值落进基线 ±0.5%，
+     并且变化段确曾离开基线（否则"回到基线"是假通过）。真机 10-12 首跑所立（D1）
+ 12. 系统退出路径同样归位——不经 requestExit 的会话结束也须硬锁三路，且退出瞬间真读数须记入。
+     真机 10-12 首跑所立（D2：原先红线5 只在按钮路径成立）
+ 13. 首摆幅＝名义 firstPeak（±4%）——v0 推导须带阻尼项 sin(ω_d·τp)＝√(1−ζ²)。
+     真机 10-12 首跑所立（D4：漏它实峰恒为名义的 0.9399，且与帧率无关）
 
-反证（--counter）：把页面源码改坏十一处，逐条要求对应判据 FAIL。
+反证（--counter）：把页面源码改坏十五处，逐条要求对应判据 FAIL。
+  ⚠c10d「阴阳极接反」是 10-12 二次补的：当天把极向断言从"共模差最大那一拍"改成"|t| 最大那一拍"
+  之后，**必须有一反证证明改完仍咬得住符号接反**，否则这次改动等于把闸改松。
 
 用法：
     python verify_mandala_stage.py            # 正跑（须 console_server 在 8777）
@@ -291,7 +301,10 @@ def judge_no_error(o):
 
 
 # ── 反证：把页面改坏，逐条要求对应判据 FAIL ────────────────────────
-TENSION_MUTANTS = {"默认档也挂偏移", "无回复力只剩阻尼", "临界阻尼不过冲", "段长非整数个摆"}
+TENSION_MUTANTS = {"默认档也挂偏移", "无回复力只剩阻尼", "临界阻尼不过冲", "段长非整数个摆",
+                   "v0漏sin因子", "阴阳极接反"}
+GATHER_MUTANTS = {"收束段不跑"}
+SYSEXIT_MUTANTS = {"系统退出无归位"}
 
 EPS_T = 0.005   # 段末回中容差：实测 0.0007@60fps／0.0013@30fps，而非整数摆回数的残值约 0.0067
 
@@ -376,11 +389,25 @@ def judge_tension_dynamics(pos, neg):
             key=lambda k: abs(pairs[k][0]["live"]["fog"] - pairs[k][1]["live"]["fog"]))
     j = max(range(len(pairs)),
             key=lambda k: abs(pairs[k][0]["live"]["glow"] - pairs[k][1]["live"]["glow"]))
+    # ⚠极向**不能**按"共模差最大那一拍"取样（10-12 总跑器实测咬到）：雾轴一阶跟随
+    # tau=34/6≈5.67s，而快档整段只有 8s——差值达峰时 t 早已过零（实取 t=-0.0057 处
+    # dFog=-0.001078，符号自然对不上）。滞后通道的峰值时刻 ≠ 驱动量的峰值时刻。
+    # ⇒ 幅值仍取最大差（它只回答"画面有没有被动"），**极向改取 |t| 最大那一拍**，
+    #   那里 t 离零最远、符号最不含糊；并加一道地板，采到峰才算数。
+    k = max(range(len(pairs)), key=lambda m: abs(pairs[m][0]["t"] or 0))
+    ak, bk = pairs[k]
+    tk = ak["t"]
+    fp_cfg = (pos.get("cfg") or {}).get("firstPeak") or 0.85
+    sampling_ok = abs(tk) >= 0.6 * fp_cfg
+    check(sampling_ok,
+          f"极向取样点落在峰上：|t|＝{abs(tk):.4f}（≥0.6×名义 {fp_cfg}＝{0.6 * fp_cfg:.3f}）",
+          f"极向取样点 |t|＝{abs(tk):.4f} 太靠近零——没采到峰，符号断言无从谈起（**判据没跑成，不等于通过**）")
     af, bf = pairs[i]
     ag, bg = pairs[j]
     dfog = af["live"]["fog"] - bf["live"]["fog"]
     dglow = ag["live"]["glow"] - bg["live"]["glow"]
-    tf, tg = af["t"], ag["t"]
+    dfog_k = ak["live"]["fog"] - bk["live"]["fog"]
+    dglow_k = ak["live"]["glow"] - bk["live"]["glow"]
     # 阈值按 8 秒快档的实测定，不是纸面推的：雾轴要过一阶跟随 tau=34/6 约 5.67 秒，
     # 首摆 0.78 秒内只来得及走开约两成，所以共模差在快档只有 0.001 量级（默认档段长 80 秒
     # 时同一条轴的量级约为它的六倍）；光晕 tau=13/6 约 2.2 秒，跟得上，是 0.03 量级。
@@ -388,15 +415,149 @@ def judge_tension_dynamics(pos, neg):
           "画面真被驱动：|dFog|max={0:.6f}（阈 0.0007）｜|dGlow|max={1:.5f}（阈 0.02）"
           .format(abs(dfog), abs(dglow)) + "——两跑只差 ?tension 符号，呼吸为共模已抵消",
           "t 在动而场景无差：dFog={0:.6f} dGlow={1:.5f}——等于自证".format(dfog, dglow))
-    check((dfog < 0) == (tf > 0) and (dglow > 0) == (tg > 0),
-          "极的接法对得上：t 取正时雾更薄（阳＝露）、光晕更张（明＝阳）",
-          "极接反：t={0} 雾差 {1:.6f}；t={2} 光晕差 {3:.5f}——轴与两极对不上"
-          .format(tf, dfog, tg, dglow))
+    check(sampling_ok and ((dfog_k < 0) == (tk > 0) and (dglow_k > 0) == (tk > 0)),
+          "极的接法对得上（取 |t| 最大那一拍）：t={0:+.4f} 时雾差 {1:+.6f}（阳＝露＝薄）、"
+          "光晕差 {2:+.5f}（明＝阳＝张）".format(tk, dfog_k, dglow_k),
+          ("极向取样无效（|t|＝{0:.4f} 低于地板 {1:.3f}）——**符号断言不采信**，"
+           "不以噪声上的 PASS 冒充验过（本窗 10-13 自纠：取样点判据红了而极向这条照旧打 PASS）"
+           .format(abs(tk), 0.6 * fp_cfg) if not sampling_ok else
+           "极接反：t={0} 雾差 {1:.6f}；光晕差 {2:.5f}——轴与两极对不上"
+           .format(tk, dfog_k, dglow_k)))
     la, lb = pairs[-1]
     rf, rg = abs(la["live"]["fog"] - lb["live"]["fog"]), abs(la["live"]["glow"] - lb["live"]["glow"])
     check(rf <= 0.001 and rg <= 0.01,
           f"两向归于同一场景：段末 |dFog|={rf:.6f}｜dGlow|={rg:.5f}",
           f"段末两向仍差着：dFog={rf:.6f} dGlow={rg:.5f}——t 归零而场景没归零")
+
+
+# ── 判据 11／12／13：真机 10-12 首跑顶出的三条，2D 闸原先全照不到 ────────
+# 时线（segsec=2，自会话起点）：enter 0–3 → dwell 3–5 → change 5–13 → gather 13–19
+
+async def collect_gather(ws, url, tick=0.35, until_s=20.0):
+    """跑到收束段结束，采"三路有没有真被拉回基线"。
+    缺陷态（D1）＝收束段一帧不跑：live 冻在变化段末那一帧、且无 base_returned。"""
+    await send(ws, "Page.navigate", {"url": url})
+    await asyncio.sleep(1.2)
+    await ev(ws, "document.getElementById('btnVR').click()")
+    arm = time.perf_counter()
+    live = []
+    while time.perf_counter() - arm < until_s:
+        v = await ev(ws, "JSON.stringify(window.__mandalaDiag.pathStage.tensors)")
+        d = json.loads(v) if v and v != "null" else None
+        if d and d.get("live"):
+            live.append({"at": round(time.perf_counter() - arm, 3), "live": d["live"]})
+        await asyncio.sleep(tick)
+    evs = json.loads(await ev(ws, "JSON.stringify(__stageCtl ? __stageCtl.events() : [])") or "[]")
+    br = json.loads(await ev(ws, "JSON.stringify(__mandalaDiag.breath)") or "{}")
+    return {"url": url, "live": live, "events": evs, "breath": br}
+
+
+def _rel_from_base(sample, br):
+    """一条采样对基线的最大相对偏离（三通道同量纲可比）。"""
+    lv = sample["live"]
+    d = [abs(lv["fog"] - br["fog"]["base"]) / br["fog"]["base"],
+         abs(lv["glow"] - br["glow"]["base"]) / br["glow"]["base"]]
+    bases = br["opacity"]["layerBases"]
+    for i, b in enumerate(bases):
+        d.append(abs(lv["opacity"][i] - b) / b)
+    return max(d)
+
+
+def judge_gather_returns(o):
+    """判据 11：收束段须真把三路拉回基线（真机 D1 所立）。"""
+    print("\n── 判据 11：收束段真归位（缺陷态＝冻在变化段末那一帧）──────────")
+    br = o.get("breath") or {}
+    ok_cfg = bool(br.get("fog")) and bool((br.get("opacity") or {}).get("layerBases"))
+    check(ok_cfg, "基线三通道值从页面读（闸内不另立清单）",
+          "拿不到 __mandalaDiag.breath 的基值——判据无从算起")
+    if not ok_cfg:
+        return
+    kinds = [e.get("kind") for e in o["events"]]
+    check("base_returned" in kinds,
+          "收束段发出 base_returned（事件流：{0}）".format("→".join(kinds)),
+          "无 base_returned——收束段根本没跑（D1 复现）")
+    chg = [s for s in o["live"] if s["at"] >= 5.2 and s["at"] < 13.0]
+    gth = [s for s in o["live"] if s["at"] >= 13.2]
+    check(len(chg) >= 4 and len(gth) >= 4,
+          f"变化段采 {len(chg)} 点／收束段采 {len(gth)} 点",
+          f"采样不足（变化 {len(chg)}／收束 {len(gth)}）——判据退化为空断言")
+    peak_away = max((_rel_from_base(s, br) for s in chg), default=0.0)
+    check(peak_away > 0.01,
+          f"变化段确实离开过基线：最大相对偏离 {peak_away:.4f}",
+          f"变化段偏离仅 {peak_away:.4f}——场景没被推离过，"
+          "收束后『回到基线』就成了假通过")
+    fog_chg = [s["live"]["fog"] for s in gth]
+    moving = (max(fog_chg) - min(fog_chg)) if fog_chg else 0.0
+    check(moving > 0,
+          f"收束段内雾密度仍在变（峰谷 {moving:.6f}）——不是冻住",
+          "收束段 live 一动不动＝段机没跑（D1 复现）")
+    fin = _rel_from_base(gth[-1], br) if gth else 1.0
+    check(fin <= 0.005,
+          f"收束末三路回到基线 ±0.5% 内（最大相对偏离 {fin:.5f}）",
+          f"收束末仍偏 {fin:.4f}（阈 0.005）——没归位")
+
+
+async def collect_sys_exit(ws, url, at_s=9.0):
+    """走"系统退出"那条路（不经 requestExit）：在变化段中途让会话自己 end()。
+    故意不打收束段——缺陷态（D2）正是这条路径不锁三路。"""
+    await send(ws, "Page.navigate", {"url": url})
+    await asyncio.sleep(1.2)
+    await ev(ws, "document.getElementById('btnVR').click()")
+    arm = time.perf_counter()
+    await until(arm, at_s)
+    pre = json.loads(await ev(ws, "JSON.stringify(__mandalaDiag.pathStage.tensors.live)") or "{}")
+    t0 = time.perf_counter()
+    await ev(ws, "__stageCtl.sysExit()")
+    call_ms = round((time.perf_counter() - t0) * 1000, 1)
+    await asyncio.sleep(1.2)
+    return {"url": url, "at_s": at_s, "pre_live": pre, "exit_call_ms": call_ms,
+            "events": json.loads(await ev(ws, "JSON.stringify(__stageCtl ? __stageCtl.events() : [])") or "[]"),
+            "report": json.loads(await ev(ws, "JSON.stringify(window.__stageReport)") or "null"),
+            "breath": json.loads(await ev(ws, "JSON.stringify(__mandalaDiag.breath)") or "{}")}
+
+
+def judge_sys_exit_returns(o):
+    """判据 12：系统退出（摘头显／浏览器退出面板）也须锁定三路（真机 D2 所立）。"""
+    print("\n── 判据 12：系统退出路径同样归位（红线5 不得只在按钮路径成立）──")
+    rep = o.get("report")
+    check(bool(rep), "拿到退出报告", "无报告——系统退出没走到收口")
+    if not rep:
+        return
+    fb = rep["conditions"]["feedbackAtBaseline"]
+    check(rep.get("reason") == "system",
+          f"reason＝{rep.get('reason')}（确为系统路径，非按钮）",
+          f"reason＝{rep.get('reason')}——这一跑没走系统路径，判据无从验")
+    check(fb.get("verdict") == "PASS",
+          f"feedbackAtBaseline＝PASS，锁定后偏差 {fb.get('maxRelDeltaAfterSnap')}",
+          "feedbackAtBaseline＝{0}，锁定后仍偏 {1}——系统退出没锁三路（D2 复现）"
+          .format(fb.get("verdict"), fb.get("maxRelDeltaAfterSnap")))
+    check((fb.get("cur") or {}) == (fb.get("base") or {}),
+          "cur 逐位等于 base（三路硬锁到位）",
+          "cur 与 base 不等：{0} vs {1}".format(fb.get("cur"), fb.get("base")))
+    check(fb.get("phaseKeyAtExit") or fb.get("phaseAtExit"),
+          "退出瞬间所在段已记入（{0}）".format(fb.get("phaseAtExit")),
+          "phaseAtExit 缺失——系统退出分支没做按钮分支那组量测，"
+          "红线4 ③ 的真读数丢了")
+    check(o["exit_call_ms"] <= 500,
+          f"外部实测退出调用返回 {o['exit_call_ms']}ms（红线5：不等待渐变）",
+          f"退出调用耗时 {o['exit_call_ms']}ms——系统在退出路径上等了东西")
+
+
+def judge_peak_amplitude(pos, neg):
+    """判据 13：实峰＝名义 firstPeak（真机 D4 所立——v0 漏 sin 因子时恒为 0.94 倍）。
+    阈给 ±4%：30fps 欧拉复算 0.82313（−3.2%）仍须放过，而漏因子是 −6.0%。"""
+    print("\n── 判据 13：首摆幅＝名义值（v0 推导须带阻尼 sin 因子）────────────")
+    for tag, o in (("pos", pos), ("neg", neg)):
+        fin = o.get("final") or {}
+        cfg = o.get("cfg") or {}
+        got, want = fin.get("maxAbsT"), cfg.get("firstPeak")
+        if not got or not want:
+            check(False, "", f"{tag} 拿不到 maxAbsT／firstPeak（{got}／{want}）——判据空转")
+            continue
+        r = got / want
+        check(0.96 <= r <= 1.02,
+              f"{tag} 实峰 {got}／名义 {want} ＝ {r:.4f}（阈 0.96–1.02）",
+              f"{tag} 实峰 {got}＝名义的 {r:.4f}——v0 推导缺 sin(ω_d·τp) 这一项（D4 复现）")
 
 
 MUTATIONS = [
@@ -419,9 +580,21 @@ MUTATIONS = [
      [("    'animation:zgEnterFade ' + ENTER_S + 's linear forwards}' +",
        "    'animation:zgEnterFade 3000s linear forwards}' +")], judge_overlay),
     ("段时钟挂在页面加载", "c8_clock_from_load.html",
-     [("if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);",
-       "if (STAGE_ON && !stage.fault && !stageFreezesBreath()) stageTick(time);")],
+     [("if (STAGE_ON && !stage.fault && xrSessionRef) stageTick(time);",
+       "if (STAGE_ON && !stage.fault) stageTick(time);")],
      judge_clock_anchor),
+    ("收束段不跑", "c11a_gather_frozen.html",
+     [("if (STAGE_ON && !stage.fault && xrSessionRef) stageTick(time);",
+       "if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);")],
+     judge_gather_returns),
+    ("系统退出无归位", "c12a_sys_exit_nolock.html",
+     [("if (stage.exitAt === null) {", "if (false && stage.exitAt === null) {")],
+     judge_sys_exit_returns),
+    ("v0漏sin因子", "c13a_v0_no_sin.html",
+     [("""tension.v0 = TENS.firstPeak * tension.wd
+             / (Math.exp(-z * tension.wn * tauP) * Math.sin(tension.wd * tauP));""",
+       "tension.v0 = TENS.firstPeak * tension.wd / Math.exp(-z * tension.wn * tauP);")],
+     judge_peak_amplitude),
     ("默认档也挂偏移", "c9_tension_by_default.html",
      [(": QSTAGE.get('tension') === 'neg' ? -1 : 0;",
        ": QSTAGE.get('tension') === 'neg' ? -1 : 1;")], judge_tension_default),
@@ -433,6 +606,10 @@ MUTATIONS = [
      judge_tension_dynamics),
     ("段长非整数个摆", "c10c_fractional_swing.html",
      [("N: 2, zeta: 0.34, firstPeak: 0.85,", "N: 2.3, zeta: 0.34, firstPeak: 0.85,")],
+     judge_tension_dynamics),
+    ("阴阳极接反", "c10d_polarity_flipped.html",
+     [("      - (T ? tension.t * TENS.axes.yinyang.weight : 0);",
+       "      + (T ? tension.t * TENS.axes.yinyang.weight : 0);")],
      judge_tension_dynamics),
 ]
 
@@ -585,9 +762,21 @@ async def run_normal(base):
         o_pos = await collect_tension(ws, plain + "&tension=pos")
         o_neg = await collect_tension(ws, plain + "&tension=neg")
         judge_tension_dynamics(o_pos, o_neg)
+        judge_peak_amplitude(o_pos, o_neg)
         with open(os.path.join(OUT, "正跑_张力层.json"), "w", encoding="utf-8") as f:
             json.dump({"off": o_off, "s1": o_s1, "pos": o_pos, "neg": o_neg},
                       f, ensure_ascii=False, indent=1)
+        # 判据 11／12：真机 10-12 首跑顶出的两条（收束段空转／系统退出无归位）。
+        # 这两条在 2D 里"看着也对"——因为段时钟照跑、报告照出，缺的是"有没有人去归位"。
+        print("\n" + "=" * 68)
+        print("正跑：判据 11（收束段真归位）＋判据 12（系统退出路径同样归位）")
+        print("=" * 68)
+        o_g = await collect_gather(ws, plain + "&tension=pos")
+        judge_gather_returns(o_g)
+        o_sys = await collect_sys_exit(ws, plain + "&tension=pos")
+        judge_sys_exit_returns(o_sys)
+        with open(os.path.join(OUT, "正跑_收束与系统退出.json"), "w", encoding="utf-8") as f:
+            json.dump({"gather": o_g, "sys_exit": o_sys}, f, ensure_ascii=False, indent=1)
     finally:
         kill_tree(proc)
         clean_profiles()
@@ -611,6 +800,12 @@ async def run_counter():
             if name == "默认改启用":
                 o = await collect(ws, f"{url}?breath=off", do_exit=False)
                 await _quiet(judge, o)
+            elif name in GATHER_MUTANTS:
+                plain = f"{url}?variant=v4lotuspond&stage=1&breath=on&segsec=2&xrmock=1"
+                await _quiet(judge, await collect_gather(ws, plain + "&tension=pos"))
+            elif name in SYSEXIT_MUTANTS:
+                plain = f"{url}?variant=v4lotuspond&stage=1&breath=on&segsec=2&xrmock=1"
+                await _quiet(judge, await collect_sys_exit(ws, plain + "&tension=pos"))
             elif name in TENSION_MUTANTS:
                 plain = f"{url}?variant=v4lotuspond&stage=1&breath=on&segsec=2&xrmock=1"
                 s1on = f"{url}?variant=s1&stage=1&breath=on&segsec=2&xrmock=1&tension=pos"

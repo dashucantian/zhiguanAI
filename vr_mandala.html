@@ -414,9 +414,14 @@ function tensionArm() {
   tension.wn = tension.wd / Math.sqrt(1 - z * z);
   tension.k  = tension.wn * tension.wn;
   tension.c  = 2 * z * tension.wn;
-  /* v0 由「首摆幅 = firstPeak」反推：τp = atan(ω_d/(z·ω_n))/ω_d，该处包络 e^(−z·ω_n·τp) */
+  /* v0 由「首摆幅 = firstPeak」反推：τp = atan(ω_d/(z·ω_n))/ω_d，该处
+     t(τp) = e^(−z·ω_n·τp)·(v0/ω_d)·sin(ω_d·τp) ⇒ 分母须带 **sin 因子**。
+     ⚠真机 10-12 首跑顶出：漏掉它实峰恒为名义 ×√(1−z²)＝0.9399（首摆 0.798 而非 0.85），
+     且与帧率无关（72fps 欧拉复算 0.79813 vs 实测 0.7983，四位对上）。旧己档把这笔记在
+     "半隐式欧拉离散"头上，是错的——离散只占其中约 1.5%。 */
   const tauP = Math.atan(tension.wd / (z * tension.wn)) / tension.wd;
-  tension.v0 = TENS.firstPeak * tension.wd / Math.exp(-z * tension.wn * tauP);
+  tension.v0 = TENS.firstPeak * tension.wd
+             / (Math.exp(-z * tension.wn * tauP) * Math.sin(tension.wd * tauP));
   /* 速率钳位写成无量纲倍式 ⇒ 两档（默认 80s／闸门 8s）同为 maxSlew 倍余量。
      ⚠既不能写"每秒"（快档 v0 ∝ 1/段长，会被起手就钉住），也不能写"单帧"（帧率的函数）。 */
   tension.slewCap = TENS.maxSlew * TENS.firstPeak * tension.wd;
@@ -634,7 +639,20 @@ function requestExit(reason) {
 function onSessionEnd() {
   stage.endObserved = true;
   stage.endAt = performance.now();
-  if (stage.exitAt === null) { stage.exitAt = stage.endAt; stage.endCalledAt = stage.endAt; stage.fromSystem = true; }
+  if (stage.exitAt === null) {
+    stage.exitAt = stage.endAt; stage.endCalledAt = stage.endAt; stage.fromSystem = true;
+    /* 系统退出（摘头显／浏览器自带退出面板）不经 requestExit ⇒ 红线 5「退出即锁定三路」
+       原先只在按钮路径成立（真机 10-12 首跑顶出：系统那份 feedbackAtBaseline 判 FAIL、
+       锁定后仍偏 9.57%，而按钮那份 PASS 0）。此处补与按钮路径同一组动作，
+       顺序不可换——先量退出瞬间真读数，再硬锁（锁后偏差恒 0，只报锁后的等于自证通过）。 */
+    stage.deltaAtExit = baseDelta().max;
+    stage.phaseElapsedAtExit = stage.phaseAt
+      ? (stage.exitAt - stage.phaseAt) / 1000 : null;
+    stage.phaseKeyAtExit = STAGES[stage.idx].key;
+    stage.idx = STAGES.length - 1;
+    returnToBase(0, true);
+    pushEvent('exit', { reason: 'system', ourPathMs: 0 });
+  }
   finalizeReport(stage.fromSystem ? 'system' : 'button');
 }
 
@@ -659,6 +677,11 @@ function renderExitPanel(rep) {
   if (badgeEl) badgeEl.style.display = 'none';
   /* 面板 inset:0 会盖住按钮条，把按钮抬到面板之上，退出后仍可再进入 */
   document.getElementById('bar').style.zIndex = '23';
+  /* ⚠退出后「退出」按钮必须变成**看得见**的状态：它原先仍可点、点下去走 requestExit
+     首行 `idx === len-1` 的静默 return，法师 10-12 真机回报「点了没反应」即此。
+     没有反馈的按钮等于坏掉的按钮。 */
+  const be = document.getElementById('btnExit');
+  if (be) { be.disabled = true; be.textContent = '已退出'; }
 }
 
 function stageTick(timeMs) {
@@ -764,6 +787,9 @@ function armStage() {
   stage.endObserved = false; stage.fromSystem = false;
   stage.fault = false; stage.tickErr = null; stage.report = null;
   window.__stageReport = null;
+  /* 与 renderExitPanel 里"已退出"成对：再进入一次，那颗按钮要重新是活的 */
+  const be = document.getElementById('btnExit');
+  if (be) { be.disabled = false; be.textContent = '退出'; }
   tensionArm();   // 张力层与段时钟同一零点：再点一次「进入 VR」＝从零摆回第一次
   if (badgeEl) badgeEl.style.display = '';
   playEnterFade();
@@ -807,6 +833,9 @@ if (STAGE_ON) {
   btnExit.onclick = () => requestExit('button');
   window.__stageCtl = {
     exit: () => requestExit('api'),
+    /* 专供判据 12：走"系统退出"那条路（摘头显／浏览器自带退出面板）。
+       它与按钮路径不同源——不经 requestExit，原先也就不锁三路。 */
+    sysExit: () => { if (xrSessionRef) xrSessionRef.end(); },
     state: () => stage,
     report: () => stage.report,
     events: () => stage.events,
@@ -820,8 +849,12 @@ if (STAGE_ON) {
    ?breath=on 时三通道按规格更新——除此之外仍无任何 per-frame 状态更新；
    breath=off 路径与 S1 逐字节同行为（连续帧差恒 0 的"绝对安静"判据保留） */
 renderer.setAnimationLoop((time)=>{
-  /* 会话未起 ⇒ 段时钟不推进（xrSessionRef 为空即停在"未入段"，见 armStage） */
-  if (STAGE_ON && !stage.fault && xrSessionRef && !stageFreezesBreath()) stageTick(time);
+  /* 会话未起 ⇒ 段时钟不推进（xrSessionRef 为空即停在"未入段"，见 armStage）。
+     ⚠此处**不带** stageFreezesBreath 闸：收束／退出段要暂停的是"呼吸驱动"（下方那条），
+     而 returnToBase 只住在 stageTick 里——把同一个谓词套到这一行，收束段就一帧都不跑，
+     画面停在变化段末那一帧（真机 10-12 首跑顶出：对照组退出瞬间也偏 2.75%、
+     报告事件流里没有 base_returned）。冻结呼吸交给下面那条闸，职责各一半。 */
+  if (STAGE_ON && !stage.fault && xrSessionRef) stageTick(time);
 
   if (BREATH_ON && breathState.lastT !== null && !stageFreezesBreath()) {
     const t = time / 1000;
@@ -1006,6 +1039,8 @@ window.__mandalaDiag = {
     fog:   { base: BREATH.fog.base, amp: BREATH.fog.amp, period: BREATH.fog.period,
              phaseDeg: 90, tau: BREATH.fog.tau },
     opacity: { amp: BREATH.opac.amp, period: BREATH.opac.period, tau: BREATH.opac.tau,
+               /* 三层基值也须从页面读——闸里再抄一份 0.85／0.55／0.70 就是第二份清单 */
+               layerBases: breathLayers.map(L => +L.base.toFixed(4)),
                layerPhasesDeg: breathLayers.map(L =>
                  +((L.phase * 180 / Math.PI) % 360).toFixed(0)) },
     glow:  { base: BREATH.glow.base, amp: BREATH.glow.amp, period: BREATH.glow.period,
