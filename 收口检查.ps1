@@ -211,7 +211,8 @@ if (-not (Test-Path -LiteralPath $engDir)) {
     Bad "闸10：读不到信箱 engine 区 —— 目录被移动？本门不可信"
 } else {
     $todayLogs = @(Get-ChildItem -LiteralPath $engDir -Filter '巡检日志-*.txt' -ErrorAction SilentlyContinue |
-                   Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+                   Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date } |
+                   Where-Object { $_.Name -notmatch '^巡检日志-C3-' })  # 按活跃窗对齐（法师 10-14 裁 P14）：C3 值守窗系自动执行，不要求案例库提取声明
     if ($todayLogs.Count -eq 0) {
         Write-Host "[NOTE] 今日无窗己档有动静（mtime 判据）——本门前提不成立，不判 PASS 也不判告警。" -ForegroundColor Gray
     } else {
@@ -291,6 +292,98 @@ if (-not (Test-Path -LiteralPath $engDir11)) {
         }
     }
 }
+
+# ---------- 12/13/14. 开局对账与呈面纪律三闸门（2026-10-13 法师裁「P25 收窄后的四条已落，要真闸门」） ----------
+# 依据＝§二.16 四款中的可机判三款；第四款（换窗判据＝上下文体量＋任务线收口两条同成立）**属语义判断，本脚本不假称已闸**，见文末 [NOTE]。
+# 病根（10-13 实测）：①待裁单 12 行超上限却无出口动作，把候裁项挤回正文漂了 3 轮（坑 043）；
+#   ②本窗一天内两犯"空结果当不存在"（坑 044 甲乙丙），其中丙型＝拿**条目标题**判**条文存在性**，
+#     差点在规约里造出两对重复条文。判语 017 同族：写在规约里的纪律不等于生效，须挂检查点。
+Section "12. 协调窗本轮是否留了『待裁单对账』行（§二.16 第②款）"
+$engDir12 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+$today12 = (Get-Date).ToString('yyyy-MM-dd')
+$coord12 = @(Get-ChildItem -LiteralPath $engDir12 -Filter '巡检日志-W3-*.txt' -ErrorAction SilentlyContinue |
+             Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+# 生效时点＝规约正本 mtime（§二.16 落文那一刻）；早于它的不判（新制不溯及既往，坑 021／坑 041 同源）
+$cut12 = if (Test-Path -LiteralPath 'AI-开工入口.md') { (Get-Item -LiteralPath 'AI-开工入口.md').LastWriteTime } else { (Get-Date).Date }
+$coord12 = @($coord12 | Where-Object { $_.LastWriteTime -gt $cut12 })
+if ($coord12.Count -eq 0) {
+    Write-Host "[NOTE] 闸12：规约 §二.16 落文（$($cut12.ToString('HH:mm:ss'))）之后无协调窗己档动静——本门今日无可判对象。" -ForegroundColor Gray
+} else {
+    $silent12 = @()
+    foreach ($f in $coord12) {
+        $ls12 = [System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8)
+        $st12 = 0
+        for ($j = 0; $j -lt $ls12.Count; $j++) { if ($ls12[$j].StartsWith('【' + $today12)) { $st12 = $j; break } }
+        $hit12 = $false
+        for ($i = $st12; $i -lt $ls12.Count; $i++) { if ($ls12[$i].Contains('待裁单对账')) { $hit12 = $true; break } }
+        if (-not $hit12) { $silent12 += $f.Name }
+    }
+    if ($silent12.Count -eq 0) { Ok "闸12：今日 $($coord12.Count) 份协调窗己档均留「待裁单对账」行（现势行数／新增落单／漂在正文三项齐）。" }
+    else { Bad "闸12：有动静却未留对账行（§二.16②）：$($silent12 -join '、') —— 每轮收尾固定一行「待裁单对账：现势 N 行｜本轮新增落单 X 条｜漂在正文 Y 条」，Y>0 当轮补。" }
+}
+
+Section "13. 待裁单超上限是否走了上报出口（§二.16 第③款·防"少写一行自行消数"）"
+$dj13 = Join-Path (Get-Location) '01_项目管理\待裁单.md'
+if (-not (Test-Path -LiteralPath $dj13)) {
+    Bad "闸13：读不到 待裁单.md —— 目录被移动？本门不可信"
+} else {
+    $ls13 = [System.IO.File]::ReadAllLines($dj13, [System.Text.Encoding]::UTF8)
+    $rows13 = @($ls13 | Where-Object { $_ -match '^\| \*\*P[0-9]+\*\*' })
+    $head13 = ($ls13 | Select-Object -First 6) -join "`n"
+    if ($rows13.Count -le 8) {
+        Ok "闸13：待裁单活行 $($rows13.Count) 行 ≤ 上限 8，无需上报出口。"
+    } else {
+        if ($head13 -match '示删并|放宽到') {
+            Ok "闸13：待裁单活行 $($rows13.Count) 行＝超上限 $($rows13.Count - 8) 行，头部已照直上报「请您示删并或放宽」并附可合并项（§二.16③ 合规；本门不判"该不该超"，只判"有没有瞒着您消数"）。"
+        } else {
+            Bad "闸13：待裁单活行 $($rows13.Count) 行已超上限 8，但**头部六行内无「请您示删并或放宽／放宽到」上报字样** —— 正是 §二.16③ 禁止的形状：不得用"少写一行"自行消数，须照直上报并附可合并清单。"
+        }
+    }
+}
+
+Section "14. 否定断言须带取法标记（§二.16 第①款·坑 044 甲乙两型＝数值零计数型）"
+$scope14 = @(Get-ChildItem -LiteralPath $engDir12 -Filter '*.txt' -ErrorAction SilentlyContinue |
+             Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+$scope14 += @(Get-ChildItem -LiteralPath $engDir12 -Filter '*.md' -ErrorAction SilentlyContinue |
+              Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
+# 生效时点＝规约正本 mtime（§二.16 落文那一刻）。早于它的动静不判——新制首日逐窗点名＝把闸门建成噪音（坑 021），历史不回改。
+$guige14 = Join-Path (Get-Location) 'AI-开工入口.md'
+$cutoff14 = if (Test-Path -LiteralPath $guige14) { (Get-Item -LiteralPath $guige14).LastWriteTime } else { (Get-Date).Date }
+$scope14 = @($scope14 | Where-Object { $_.LastWriteTime -gt $cutoff14 })
+if ($scope14.Count -eq 0) {
+    Write-Host "[NOTE] 闸14：无生效时点（规约 §二.16 落文＝ $($cutoff14.ToString('HH:mm:ss'))）之后的动静文书——本门今日无可判对象。" -ForegroundColor Gray
+} else {
+    # 断言侧**只收数值零计数型**（这类会直接导出"那就别做了"的动作，危害最实；坑 044 甲＝grep 判据抓空、乙＝netstat 空输出）
+    #  ⛔不收「不存在／从未／盘上无／无成文」等叙述型：实测其中多数命中行是**引用别人（含自己）旧错**的元叙述，判它必误报（10-13 首跑 11 处误报 4 处）。
+    $re14 = '(零命中|0 命中|命中 ?0|＝ ?0 ?(个|处|行|件|笔)|全库 ?0|返回空|输出为空)'
+    # 证据侧按首跑误报补词：mtime／实点／实查／实跑／现跑／逐行 均为本仓通行取法标记
+    $ok14 = '(检索面|排除面|判据|grep|awk|sed|python|命令|测于|实测|实点|实查|实跑|现跑|现量|复算|口径|mtime|〔测|〔1[0-9]:| wc |ls )'
+    $n14 = 0; $miss14 = @()
+    foreach ($f in $scope14) {
+        $ls14 = [System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8)
+        $st14 = 0
+        if ($f.Extension -eq '.txt') {
+            $fd14 = -1
+            for ($j = 0; $j -lt $ls14.Count; $j++) { if ($ls14[$j].StartsWith('【' + $today12)) { $fd14 = $j; break } }
+            if ($fd14 -ge 0) { $st14 = $fd14 }
+        }
+        for ($i = $st14; $i -lt $ls14.Count; $i++) {
+            if ($ls14[$i] -match $re14) {
+                $n14++
+                if ($ls14[$i] -notmatch $ok14) { $miss14 += ('{0}:{1}' -f $f.Name, ($i + 1)) }
+            }
+        }
+    }
+    if ($n14 -eq 0) { Ok "闸14：生效时点后动静文书 $($scope14.Count) 份内未出现数值零计数型断言，无可判对象。" }
+    elseif ($miss14.Count -eq 0) { Ok "闸14：$($scope14.Count) 份文书里 $n14 处零计数断言全部自带取法标记（检索面／mtime／实点／复算…），未犯坑 044。" }
+    else {
+        $show14 = ($miss14 | Select-Object -First 8) -join '、'
+        Bad "闸14：$n14 处零计数断言中有 $($miss14.Count) 处未带取法标记（§二.16①／坑 044）：$show14$(if ($miss14.Count -gt 8) { ' …余 ' + ($miss14.Count - 8) + ' 处' }) —— 报"没有"前先做正向自检：拿一个已知存在的同类样本用同一判据抓，抓不到＝判据坏，不是东西不存在。"
+    }
+}
+
+Write-Host ""
+Write-Host "[NOTE] 闸12—14 的未覆盖面（照实声明，不假称闭环）：①§二.16 第④款「换窗判据」属语义判断，无机器判据；②坑 044 **丙型＝拿条目标题判条文存在性**，grep 类闸门结构上抓不到（它的问题不是用词，是**检索选错了层**），只能靠"立／改规则前先读该章正文"这一动作——现由 §二.16① 的"正向自检"＋法师人工复核兜，**无闸**。若要真闸，须先在规约里定"引用某规则前须 Read 该节全文"的可核验痕迹面，候法师再示。" -ForegroundColor Gray
 
 # ---------- 结论 ----------
 Write-Host ""
