@@ -27,10 +27,14 @@ API = "https://open.feishu.cn/open-apis"
 BASE_TOKEN = "X4xXbTF57acOnZs1ZzZcF4P2nJg"
 TABLE_ID = "tblLf45tgSgBoLue"
 
-# —— 列白名单（P2 默认＝三列；建新行时另允许"标识四列"，含 `状态`＝P3 默认"只同步状态列"的那一列）——
+# —— 列白名单（P2 默认＝三列；建新行时另允许"标识三列"，含 `状态`＝P3 默认"只同步状态列"的那一列）——
+# ⛔`任务编号` 已移出白名单（10-14 实测）：该列在表上是 **auto_number（自动编号）**，写进去不报错、
+#   服务端直接换成流水号 ⇒ 号与文错位一行。详见 01_项目管理/案例库/踩坑档案/049_*。
 WRITE_COLS = {"承接状态", "裁决", "AI执行窗口"}
-IDENTITY_COLS = {"任务名", "任务编号", "关联文件", "状态"}
-FORBIDDEN_COLS = {"承担者", "更新时间", "受理戳"}   # 真人名列与系统列，任何模式都不写
+IDENTITY_COLS = {"任务名", "关联文件", "状态"}
+FORBIDDEN_COLS = {"承担者", "更新时间", "受理戳", "任务编号"}   # 真人名列＋系统列＋自动编号列，任何模式都不写
+# 服务端持有的列类型（bitable v1 数字码）：22 自动编号／19 引用／20 公式／23 按钮／1001-1005 创建·修改时间与人员
+SERVER_OWNED_TYPES = {22, 19, 20, 23, 1001, 1002, 1003, 1004, 1005}
 
 ROWS_PATH = Path("01_项目管理/20261012_W3_源表候登8行_payload.json")
 
@@ -191,6 +195,22 @@ def main():
 
     pull = _load_puller()          # 复用同目录拉取器的鉴权与字段读取，不另造一套
     tk = pull["token"]()
+    # 现读列类型 ⇒ 服务端持有的列（自动编号／引用／公式／系统时间…）一律拒发。
+    # 为什么不能只靠上面的名字白名单：`任务编号` 曾被当普通文本列放进 IDENTITY_COLS，
+    # 写下去不报错、值却被服务端换掉——名字层面看不出来，必须问类型。
+    owned = {}
+    for it in pull["raw_fields"](tk):
+        if it.get("type") in SERVER_OWNED_TYPES:
+            owned[it.get("field_name")] = it.get("ui_type") or it.get("type")
+    if not owned:
+        raise SystemExit("FATAL｜读到的服务端持有列＝0 ⇒ 本闸不可信（读不到不等于通过），拒绝继续")
+    hit_owned = sorted({c for r in data["rows"] for c in r["fields"] if c in owned})
+    if hit_owned:
+        print("FATAL｜payload 往服务端持有列写了值：%s" % ["%s(%s)" % (c, owned[c]) for c in hit_owned])
+        print("       ⇒ 这些列的值会被服务端改写或忽略，写了就是假账。请从 payload 删除这些键。")
+        return 1
+    print("[只读] 服务端持有列＝%d 个（%s）⇒ 本窗口不写这些列"
+          % (len(owned), "／".join(sorted(owned))))
     opts = pull["select_options"](tk)
     print("[只读] 表内带选项的列＝%d 个：%s" % (len(opts), "／".join(sorted(opts))))
     miss = []

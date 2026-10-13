@@ -85,8 +85,9 @@ caught14 = sum(1 for t, exp in samples14 if ok14(t) == exp)
 results.append((u"C3", u"门14 词表认不认「取法」「现读」",
                 caught14 == len(samples14) and (u"取法" in words and u"现读" in words),
                 u"%d/%d" % (caught14, len(samples14)),
-                [] if u"取法" in words else [u"缺词「取法」"],
-                [] if u"现读" in words else [u"缺词「现读」"],
+                ([] if u"取法" in words else [u"缺词「取法」"])
+                + ([] if u"现读" in words else [u"缺词「现读」"]),
+                [],
                 u"词表缺字＝合规句被反复误咬（10-13 L 窗连补两轮仍红）"))
 
 # ── C4：退出码不是管道尾段（卡 047） ────────────────────────────────
@@ -121,7 +122,22 @@ results.append((u"C6", u"跑空≠不存在：同一份内容换形状就有",
                 u"阿拉伯形=0 命中／带圈形=%d 命中" % len(re.findall(good_rx, hay)),
                 [], [], u"卡 044 甲型：拿'抓不到'当'没有'"))
 
+# ── C7：取证被编码崩溃吞掉的那句，门14 词表认不认（10-14 新咬形） ───
+# 实例：写方脚本 print 一个 ⚠ 字符，GBK 控制台抛 UnicodeEncodeError，崩在 batch_create **之前**
+#       ⇒ 盘上/云上零写入。这句是**合格的取证**（讲清了崩溃点与后果），但词表里一个词都没有 ⇒ 门14 会误咬。
+crash_line = u"零写入（崩溃点在写调用之前：GBK 控制台 UnicodeEncodeError，非未执行）"
+c7_ok = ok14(crash_line)
+results.append((u"C7", u"门14 词表认不认「崩溃点在写调用之前」这类取证句", c7_ok,
+                u"命中词＝%s" % (u"、".join([w for w in words if w in crash_line]) or u"无"),
+                [] if c7_ok else [u"词表缺「崩溃」／「写调用」，合规句会被误咬"],
+                [], u"10-14 实测第三次 GBK 崩溃；与 C3 同族＝词表窄，不是判据松"))
+
 # ── 汇总 ───────────────────────────────────────────────────────────
+# ── 机器口：--ids 只打漏抓编号（给闸门做基线比对用，不打印人读面）──
+if "--ids" in sys.argv:
+    print(u",".join(sorted(cid for cid, d, ok, c, m, f, n in results if not ok)))
+    sys.exit(0)
+
 ts = datetime.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
 print(u"=== 闸门诱饵集（独立版·只读） %s ===" % ts)
 print(u"判据来源：%s（现读源文件抠正则，未复制副本、未改脚本）" % GATE)

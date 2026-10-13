@@ -346,12 +346,22 @@ $scope14 = @(Get-ChildItem -LiteralPath $engDir12 -Filter '*.txt' -ErrorAction S
              Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
 $scope14 += @(Get-ChildItem -LiteralPath $engDir12 -Filter '*.md' -ErrorAction SilentlyContinue |
               Where-Object { $_.LastWriteTime.Date -eq (Get-Date).Date })
-# 生效时点＝规约正本 mtime（§二.16 落文那一刻）。早于它的动静不判——新制首日逐窗点名＝把闸门建成噪音（坑 021），历史不回改。
+# 生效时点＝§二.16 入库那一次提交的作者时刻（`git log --reverse -S` 现取，--reverse 钉住最早一条 ⇒ 历史事实，不随后续加注漂移）。
+# ⛔旧写法＝取 AI-开工入口.md 的 mtime：任何窗在规约里加一行注记就把时点推后 ⇒ 本门检查面静默缩小，
+#   且缩小后报 NOTE 不报 FAIL（10-13 实证：改一次规约，8 处零计数告警当场消失＝坑 030「门14 致盲」形；法师 10-14 裁「三条都做」＝本行准修字）。
 $guige14 = Join-Path (Get-Location) 'AI-开工入口.md'
-$cutoff14 = if (Test-Path -LiteralPath $guige14) { (Get-Item -LiteralPath $guige14).LastWriteTime } else { (Get-Date).Date }
+$raw14 = ''
+if (Test-Path -LiteralPath $guige14) {
+    $raw14 = (@(git log --reverse --format='%ct|%h' -S'开局对账与呈面纪律' -- 'AI-开工入口.md' 2>$null) | Select-Object -First 1)
+}
+$cutoff14 = (Get-Date).Date; $anchor14 = '回退＝今日零点（取不到 §二.16 入库提交）'
+if ($raw14 -and $raw14 -match '^(\d+)\|(\w+)') {
+    $cutoff14 = [datetimeoffset]::FromUnixTimeSeconds([long]$Matches[1]).LocalDateTime
+    $anchor14 = '§二.16 入库提交 ' + $Matches[2] + '＝' + $cutoff14.ToString('MM-dd HH:mm:ss') + '（git --reverse -S 现取）'
+}
 $scope14 = @($scope14 | Where-Object { $_.LastWriteTime -gt $cutoff14 })
 if ($scope14.Count -eq 0) {
-    Write-Host "[NOTE] 闸14：无生效时点（规约 §二.16 落文＝ $($cutoff14.ToString('HH:mm:ss'))）之后的动静文书——本门今日无可判对象。" -ForegroundColor Gray
+    Write-Host "[NOTE] 闸14：无生效时点（$anchor14）之后的动静文书——本门今日无可判对象。" -ForegroundColor Gray
 } else {
     # 断言侧**只收数值零计数型**（这类会直接导出"那就别做了"的动作，危害最实；坑 044 甲＝grep 判据抓空、乙＝netstat 空输出）
     #  ⛔不收「不存在／从未／盘上无／无成文」等叙述型：实测其中多数命中行是**引用别人（含自己）旧错**的元叙述，判它必误报（10-13 首跑 11 处误报 4 处）。
@@ -379,6 +389,46 @@ if ($scope14.Count -eq 0) {
     else {
         $show14 = ($miss14 | Select-Object -First 8) -join '、'
         Bad "闸14：$n14 处零计数断言中有 $($miss14.Count) 处未带取法标记（§二.16①／坑 044）：$show14$(if ($miss14.Count -gt 8) { ' …余 ' + ($miss14.Count - 8) + ' 处' }) —— 报"没有"前先做正向自检：拿一个已知存在的同类样本用同一判据抓，抓不到＝判据坏，不是东西不存在。"
+    }
+}
+
+# ---------- 判据自检：闸门自己有没有被改盲（法师 10-14 裁「三条都做」之第三条） ----------
+# 触发条件＝本脚本的 mtime 晚于基线文件（＝"改过闸门，且改后还没重新记过盲区"）。平时只两个 stat，零成本。
+# 为什么这样触发：诱饵集 0.18 秒、判据从本文件现读——只在"判据动过"之后跑，正好覆盖回归风险，不必每次提交都跑。
+$canary15 = Join-Path (Get-Location) '01_项目管理\语料工程\闸门诱饵集\canary.py'
+$base15 = Join-Path (Get-Location) '01_项目管理\语料工程\闸门诱饵集\已知盲区.json'
+$gateSelf = if ($PSCommandPath) { $PSCommandPath } else { Join-Path (Get-Location) '收口检查.ps1' }
+if ((Test-Path -LiteralPath $canary15) -and (Test-Path -LiteralPath $base15) -and (Test-Path -LiteralPath $gateSelf) -and
+    ((Get-Item -LiteralPath $gateSelf).LastWriteTime -gt (Get-Item -LiteralPath $base15).LastWriteTime)) {
+    $env:PYTHONIOENCODING = 'utf-8'
+    $out15 = ''
+    try { $out15 = (@(& python $canary15 --ids 2>$null) -join '') } catch { $out15 = '' }
+    if ("$out15".Trim() -eq '') {
+        Bad "诱饵集没跑起来（python 调不到／脚本改名／抠不到判据）⇒ 本自检静默失效，按未过处理，不许当绿灯。"
+    } else {
+        $now15 = @("$out15".Trim() -split ',' | ForEach-Object { "$_".Trim() } | Where-Object { $_ })
+        # ⚠必须显式 -Encoding UTF8：基线是无 BOM 的 UTF-8，Windows PowerShell 5.1 缺省按 GBK 解⇒
+        #   多字节被两两吞掉、反斜杠消失 ⇒ ConvertFrom-Json 报"无效"⇒ 基线读成 0 条＝假称"全是新盲区"。（同族＝门4 编码坑）
+        $known15 = @()
+        try {
+            $known15 = @(((Get-Content -Raw -Encoding UTF8 -LiteralPath $base15) | ConvertFrom-Json).PSObject.Properties.Name |
+                         Where-Object { $_ -notmatch '^_' })
+        } catch { $known15 = @() }
+        # ⛔这里绝不能用 `return`：脚本级 return 会直接结束整个闸门 ⇒ 下面的"结论"与 exit 码都不执行
+        #   ⇒ 收口脚本自己造出一个假绿灯（改完当轮就踩过一次，故在此留字）。
+        if ($known15.Count -eq 0) {
+            Bad "诱饵集基线读不出来（0 条＝$base15 解析失败或为空）⇒ 本自检不可信，不许当绿灯；先看编码／JSON 形。"
+        } else {
+            $newBlind = @($now15 | Where-Object { $known15 -notcontains $_ })
+            $healed = @($known15 | Where-Object { $now15 -notcontains $_ })
+            if ($newBlind.Count -gt 0) {
+                Bad "诱饵集：本次改动闸门后出现**基线外新盲区** $((($newBlind | Sort-Object) -join '、'))（基线 $($known15.Count) 条）⇒ 判据被改盲了，须复核改动。"
+            } elseif ($healed.Count -gt 0) {
+                Ok "诱饵集：基线内 $((($healed | Sort-Object) -join '、')) 条盲区已消失＝判据修好了 ⇒ 请把 已知盲区.json 对应行删掉（留着＝免检牌）。"
+            } else {
+                Ok "诱饵集：改闸门后盲区集与基线一致（$($known15.Count) 条：$((($now15 | Sort-Object) -join '、'))）。"
+            }
+        }
     }
 }
 
