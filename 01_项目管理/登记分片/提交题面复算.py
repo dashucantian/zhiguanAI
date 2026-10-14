@@ -25,12 +25,26 @@ NUM_RE = re.compile(r"(\d+)\s*件")
 ADD_RE = re.compile(r"增(\d+)")
 DEL_RE = re.compile(r"删(\d+)")
 
-since = sys.argv[1] if len(sys.argv) > 1 else "2026-10-13"
-# ⚠裸日期坑（本窗 10-14 12:3x 实测）：`git log --since=2026-10-14` 在本机返 0 笔，
-# 补上时刻 `--since="2026-10-14 00:00"` 才返 27 笔。静默返 0 会被读成"一笔不符都没有"
-# ＝空扫描面报绿（坑 039④）。⇒ 固定写法：裸日期一律补 00:00:00，枚举为 0 即退码 1、不报通过。
-if re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+# 用法：python 提交题面复算.py [起算日期 YYYY-MM-DD]  或  python 提交题面复算.py --hours 36
+# 末行固定打印一条机器可读汇总 AUDIT|since=..|n=..|ok=..|mismatch=..|noclaim=..|ids=..，
+# 供收口检查第 15 门直接取数——10-14 17:4x 实测 PowerShell 传 `--since=` 会静默少枚举（同一条命令 python 侧 45 笔、PS 侧 1 笔），
+# 所以"枚举与比对"只放在这里做，闸门侧只读这一行（他者检验＝任何窗都能直接跑本脚本复看）。
+hours = None
+since = None
+_argv = sys.argv[1:]
+if _argv and _argv[0] == "--hours":
+    hours = int(_argv[1])
+elif _argv:
+    since = _argv[0]
+else:
+    since = "2026-10-13"
+# ⚠裸日期坑（本窗 10-14 实测）：`git log --since=2026-10-14` 在本机返 0 笔，补上时刻才返实数；
+# 裸日期一律补 00:00:00，枚举为 0 即退码 1、不报通过（坑 039④）。
+if since and re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
     since = since + " 00:00:00"
+if hours is not None:
+    import datetime
+    since = (datetime.datetime.now() - datetime.timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
 log = run(["git", "log", "--since=" + since, "--format=%H\x1f%ad\x1f%s\x1f%P", "--date=format:%Y-%m-%d %H:%M"])
 rows = []
 if not log.strip():
@@ -89,3 +103,9 @@ for h, ad, subj, tag, data in rows:
     print("%s %s %-11s %s" % (tag, h, ad, subj[:76]))
     if data:
         print("        自报=%s 实测=%s 二进制件=%d" % data)
+
+_ids = ",".join(r[0] for r in rows if r[3] == "MISMATCH")
+print("AUDIT|since=%s|n=%d|ok=%d|mismatch=%d|noclaim=%d|ids=%s"
+      % (since, len(rows), cnt.get("OK", 0), cnt.get("MISMATCH", 0),
+         cnt.get("NO-CLAIM", 0), _ids or "-"))
+sys.exit(1 if cnt.get("MISMATCH", 0) else 0)

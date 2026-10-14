@@ -333,10 +333,18 @@ if (-not (Test-Path -LiteralPath $dj13)) {
     #   12:0x 又**第二次擅改**成"两侧对账"判据（一句"换行首形状"的放行被连改两回）。两处均于 14:48:02 撤回到最小授权态（mtime 实取）。
     #   立案凭据＝`01_项目管理/登记分片/KZ-1014-W3COORD-542dc2cda.md` §四⑰（私自改规矩·项目开工以来第一起）。
     #   "数到 0 条该怎么判"（真没有待裁 vs 页面形制又改了＝哑闸）**候法师裁，见待裁单 P39**——本窗不再自裁。
+    # 两侧对照那格＝法师 10-14 17:39 令「准许你现在模拟-代入主体责任人这个角色来做」＋待裁单 P39 本窗代裁＝乙案。
+    # 逐句并排凭据＝`01_项目管理/登记分片/D-1014-W3COORD-542dc2cdd.md` §三；回滚＝法师回「P39 甲」，本窗一笔撤回到只数行首形状。
+    # 判据＝页头自报「现 N 条待裁」必须等于行首尺数出的活行数：相等时数到 0 也报绿（健康态）；不等或页头无自报＝形制与判据脱节，报红。
     $rows13 = @($ls13 | Where-Object { $_ -match '^## P[0-9]+ ' })
     $head13 = ($ls13 | Select-Object -First 6) -join "`n"
-    if ($rows13.Count -le 8) {
-        Ok "闸13：待裁单活行 $($rows13.Count) 行 ≤ 上限 8，无需上报出口。"
+    $rep13 = [regex]::Match($head13, '现\s*(\d+)\s*条待裁')
+    if (-not $rep13.Success) {
+        Bad "闸13：页头六行内没有自报「现 N 条待裁」，本门无从对账——那行是 §二.16⑦ 的常设形制，被删或被改都要当轮补回页面，⛔不许改判据来迁就。行首尺数到 $($rows13.Count) 条。"
+    } elseif ([int]$rep13.Groups[1].Value -ne $rows13.Count) {
+        Bad "闸13：两侧对不上——页头自报 $($rep13.Groups[1].Value) 条，行首尺（^## P数字＋空格）数到 $($rows13.Count) 条。不得各报各的；当轮查清是页面漏写自报数还是条目形制漂了，**修页面不修判据**。"
+    } elseif ($rows13.Count -le 8) {
+        Ok "闸13：待裁单活行 $($rows13.Count) 行 ≤ 上限 8，页头自报与行首尺两侧一致（数到 0 亦为真 0，不是判据坏）。"
     } else {
         if ($head13 -match '示删并|放宽到') {
             Ok "闸13：待裁单活行 $($rows13.Count) 行＝超上限 $($rows13.Count - 8) 行，头部已照直上报「请您示删并或放宽」并附可合并项（§二.16③ 合规；本门不判"该不该超"，只判"有没有瞒着您消数"）。"
@@ -439,6 +447,34 @@ if ((Test-Path -LiteralPath $canary15) -and (Test-Path -LiteralPath $base15) -an
 
 Write-Host ""
 Write-Host "[NOTE] 闸12—14 的未覆盖面（照实声明，不假称闭环）：①§二.16 第④款「换窗判据」属语义判断，无机器判据；②坑 044 **丙型＝拿条目标题判条文存在性**，grep 类闸门结构上抓不到（它的问题不是用词，是**检索选错了层**），只能靠"立／改规则前先读该章正文"这一动作——现由 §二.16① 的"正向自检"＋法师人工复核兜，**无闸**。若要真闸，须先在规约里定"引用某规则前须 Read 该节全文"的可核验痕迹面，候法师再示。" -ForegroundColor Gray
+
+Section "15. 提交题面自报的件数行数与 git 实测是否相符（§二.18『接受他者检验』·代裁 P38）"
+# 枚举与比对**不在本脚本里做**：10-14 17:4x 实测 PowerShell 传 `--since=` 会静默少枚举（同一命令 python 侧 45 笔、PS 侧 1 笔）
+# ⇒ 正解＝调已验的 `提交题面复算.py`，只读它末行的机器可读汇总 AUDIT|n=..|ok=..|mismatch=..|noclaim=..|ids=..
+$aud15 = ""
+try {
+    $aud15 = (& python "01_项目管理/登记分片/提交题面复算.py" --hours 36 2>$null | Select-String -Pattern "^AUDIT\|" | Select-Object -Last 1).ToString()
+} catch {
+    $aud15 = ""
+}
+if ([string]::IsNullOrWhiteSpace($aud15)) {
+    Bad "闸15：取不到 AUDIT 汇总行——python 不可达或复算器报错。**零输出＝本门未检**，不得当通过（坑 039④）。手工跑：python 01_项目管理/登记分片/提交题面复算.py --hours 36"
+} else {
+    $kv = @{}
+    foreach ($piece in ($aud15 -split "\|")) {
+        if ($piece -match "=") { $k, $v = $piece -split "=", 2; $kv[$k] = $v }
+    }
+    $n15 = [int]$kv["n"]; $bad15 = [int]$kv["mismatch"]; $noc15 = [int]$kv["noclaim"]; $ids15 = $kv["ids"]
+    if ($n15 -eq 0) {
+        Bad "闸15：复算器近 36 小时枚举到 0 笔提交——本门不可信（空扫描面不等于通过）。先查 git 通路。"
+    } elseif ($bad15 -gt 0) {
+        Bad "闸15：题面自报数与 git 实测不符 $bad15 笔（近 36 小时共 $n15 笔）＝$ids15。历史笔不回改（禁 amend），当轮补订正记入己档（§二.12）；明细见 python 01_项目管理/登记分片/提交题面复算.py --hours 36"
+    } else {
+        $extra15 = ""
+        if ($noc15 -gt 0) { $extra15 = "；另有 $noc15 笔标题未带增删数（形制未落地，提交件数核对钩子已就同一格发警告）" }
+        Ok "闸15：近 36 小时 $n15 笔提交题面数与 git 实测全符$extra15。"
+    }
+}
 
 # ---------- 结论 ----------
 Write-Host ""
