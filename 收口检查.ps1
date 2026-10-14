@@ -339,7 +339,36 @@ if (-not (Test-Path -LiteralPath $dj13)) {
     $rows13 = @($ls13 | Where-Object { $_ -match '^## P[0-9]+ ' })
     $head13 = ($ls13 | Select-Object -First 6) -join "`n"
     $rep13 = [regex]::Match($head13, '现\s*(\d+)\s*条待裁')
-    if (-not $rep13.Success) {
+    # 副尺＝活条区里「没有标题领着的正文段」（法师 10-14 21:1x 裁待裁单 P46「要」）。
+    # 病灶实证＝本窗 20:0x 销 P41—P43 的脚本只摘掉标题行、三段正文留在原地；页头自报 0 条、行首尺也数到 0 条，
+    #          两侧一致 ⇒ 主尺当场报绿。**一致性检验对"两边同时少算同一批东西"没有抵抗力**（KZ-1014 §六㉔）。
+    # 取法＝两条 `---` 之间为活条区；空行后的第一非空行是段首，段首既不是 `^## P数字␣` 也不是占位说明行 `^（` ⇒ 孤儿段。
+    $i13a = -1; $i13b = -1
+    for ($j = 0; $j -lt $ls13.Count; $j++) {
+        if ($ls13[$j] -match '^---\s*$') { if ($i13a -lt 0) { $i13a = $j } elseif ($i13b -lt 0) { $i13b = $j; break } }
+    }
+    $orph13 = @()
+    if ($i13a -ge 0 -and $i13b -gt $i13a) {
+        # 段＝以空行分开的连续非空行；健康页在活条区里是「标题段 → 正文段」严格相间（正文允许跨多行）。
+        # 孤儿＝**前面没有标题段领着**的正文段（含"标题被删、正文留下"那一形，以及段落之间漏了标题的夹带）。
+        $prevHead13 = $false; $paraHead13 = $true; $paraLine13 = 0
+        for ($j = $i13a + 1; $j -lt $i13b; $j++) {
+            $l13 = $ls13[$j]
+            if ($l13 -match '^\s*$') { $paraHead13 = $true; continue }
+            if ($paraHead13) {
+                $paraHead13 = $false; $paraLine13 = $j + 1
+                if ($l13 -match '^## P[0-9]+ ') { $prevHead13 = $true }
+                elseif ($l13 -match '^（') { $prevHead13 = $false }
+                elseif ($prevHead13) { $prevHead13 = $false }
+                else { $orph13 += "$($j + 1)"; $prevHead13 = $false }
+            }
+        }
+    }
+    if ($i13a -lt 0 -or $i13b -lt 0) {
+        Bad "闸13·副尺：活条区边界取不到（只找到 $(if ($i13a -ge 0) { 1 } else { 0 }) 条 ---），副尺本轮**未检**——不得当通过；页面形制（页头/活条区/已决区三段用 --- 分隔）被改，当轮查回来（§二.16⑦）。行首尺另报 $($rows13.Count) 条。"
+    } elseif ($orph13.Count -gt 0) {
+        Bad "闸13·副尺：活条区有 $($orph13.Count) 段正文没有标题领著（起始行：$(($orph13 | Select-Object -First 6) -join '、')）——这属 P46 那格：页头与行首尺**同时**看不见被删掉的标题，所以两侧一致而页面是坏的。当轮**修页面**（补回标题行或整段搬走），⛔不许改判据来迁就。现势活行 $($rows13.Count) 条。"
+    } elseif (-not $rep13.Success) {
         Bad "闸13：页头六行内没有自报「现 N 条待裁」，本门无从对账——那行是 §二.16⑦ 的常设形制，被删或被改都要当轮补回页面，⛔不许改判据来迁就。行首尺数到 $($rows13.Count) 条。"
     } elseif ([int]$rep13.Groups[1].Value -ne $rows13.Count) {
         Bad "闸13：两侧对不上——页头自报 $($rep13.Groups[1].Value) 条，行首尺（^## P数字＋空格）数到 $($rows13.Count) 条。不得各报各的；当轮查清是页面漏写自报数还是条目形制漂了，**修页面不修判据**。"
