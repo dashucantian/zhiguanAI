@@ -328,9 +328,13 @@ if (-not (Test-Path -LiteralPath $dj13)) {
     Bad "闸13：读不到 待裁单.md —— 目录被移动？本门不可信"
 } else {
     $ls13 = [System.IO.File]::ReadAllLines($dj13, [System.Text.Encoding]::UTF8)
-    $rows13 = @($ls13 | Where-Object { $_ -match '^\| \*\*P[0-9]+\*\*' })
+    # 10-14 09:0x 法师裁 P35「准」：待裁单改版为纯文本条目，行首形状由表格式（^\| \*\*P）换为标题式（^## P）。
+    # 同批加零命中闸（坑 039④：空扫描面不得等于 PASS）——数到 0 条即本门失配、不可信，报 Bad 不报绿。
+    $rows13 = @($ls13 | Where-Object { $_ -match '^## P[0-9]+ ' })
     $head13 = ($ls13 | Select-Object -First 6) -join "`n"
-    if ($rows13.Count -le 8) {
+    if ($rows13.Count -eq 0) {
+        Bad "闸13：待裁单一条待裁都没数到（判据＝行首「## P数字＋空格」）—— 页面形制又改了？本门失配即不可信，须现读页首并同步本行判据。"
+    } elseif ($rows13.Count -le 8) {
         Ok "闸13：待裁单活行 $($rows13.Count) 行 ≤ 上限 8，无需上报出口。"
     } else {
         if ($head13 -match '示删并|放宽到') {
