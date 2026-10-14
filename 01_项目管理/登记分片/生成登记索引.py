@@ -6,12 +6,40 @@
   C 遗留决策日志（只读扫描 D 编号行）
   D 工作日志（扫描各文件标题行 NNN 号；早期无号者计数注明）
 原则：本脚本只读输入、只写 00_总索引.md；输入缺哪个 section 就标注缺失，不崩。
+
+规约第 15 条「数绑对象」（2026-10-12 法师收录＋「要注意跟踪，看看后续实际的效果」）：
+凡输出「最老一条／最大值／计数」类汇总行，必须自动带上持有者（文件名＋行号或任务编号）
+与本轮测量时刻（行尾 〔测于 …｜持有者＝…〕，由 stamp() 统一落）；缺持有者＝报错并非零退出，
+不静默降级。写前审计 audit_summaries() 复核：命中汇总模式的行缺〔测于…持有者＝…〕即拦下。
 """
-import io, os, re, datetime
+import io, os, re, datetime, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 OUT = os.path.join(HERE, "00_总索引.md")
+
+# ---- 规约第 15 条：数绑对象（汇总行强制持有者＋本轮测量时刻） ----
+NOW = datetime.datetime.now()
+_viol = []
+
+def stamp(holder):
+    if not holder or not str(holder).strip():
+        _viol.append("汇总行缺持有者（规约第 15 条「数绑对象」）")
+        holder = "？？缺持有者"
+    return "〔测于 %s｜持有者＝%s〕" % (NOW.strftime("%m-%d %H:%M"), holder)
+
+SUMMARY_PAT = re.compile(r"\d+\s*(?:条|件|处|个)|去重数＝|末号")
+# 豁免＝自带持有者的条目行（`文件:行号` 起／「挂 N 天」行／统计行以外的表格行／标题行）
+_EXEMPT_PAT = re.compile(r"^(?:\| (?!统计)|- `|- 挂 |#)")
+
+def audit_summaries(text_lines, where):
+    bad = []
+    for i, ln in enumerate(text_lines, 1):
+        if _EXEMPT_PAT.match(ln):
+            continue
+        if SUMMARY_PAT.search(ln) and ("测于" not in ln or "持有者＝" not in ln or "？？" in ln):
+            bad.append("%s:%d｜%s" % (where, i, ln[:70]))
+    return bad
 
 def read(p):
     try:
@@ -39,11 +67,17 @@ lines.append("")
 # B. 遗留 KZ
 tz = read(os.path.join(ROOT, "01_项目管理", "书稿勘误与订正台账.md"))
 kz_head = []
+_TZ_NAME = "书稿勘误与订正台账.md"
 if tz:
     for m in re.finditer(r"^#+\s*(KZ-\d{3})[：: ]*(.*)$", tz, re.M):
         kz_head.append(f"| {m.group(1)} | {m.group(2).strip()[:40]} |（旧大文件）")
-    cnt = len(set(re.findall(r"KZ-(\d{3})", tz)))
-    kz_head.insert(0, f"| 统计 | 台账内 KZ 引用去重数＝{cnt}，最大号见正文 | |")
+    _kz_occ = [(int(m.group(1)), tz[:m.start()].count("\n") + 1) for m in re.finditer(r"KZ-(\d{3})", tz)]
+    cnt = len(set(n for n, _ in _kz_occ))
+    if _kz_occ:
+        _mxn, _mxl = max(_kz_occ)
+        kz_head.insert(0, f"| 统计 | 台账内 KZ 引用去重数＝{cnt}，最大号 KZ-{_mxn:03d}＝{_TZ_NAME}:{_mxl} {stamp(_TZ_NAME + ':%d（全文枚举 KZ-NNN，计数口径同前版 findall 去重）' % _mxl)} | |")
+    else:
+        kz_head.insert(0, f"| 统计 | 台账内 KZ 引用去重数＝0，最大号＝无 {stamp(_TZ_NAME + '（全文枚举零命中，反证见检索面）')} | |")
 lines += ["## B. 遗留 KZ 台账（只读，冻结）", "", "| 编号 | 标题摘要 | 载体 |", "|---|---|---|"]
 lines += kz_head if kz_head else ["| ？ | 台账文件不可读，未静默跳过：请检查路径 | — |"]
 lines.append("")
@@ -63,7 +97,7 @@ lines += ["## C. 遗留决策日志（只读，冻结；列最近 12 条）", ""
 if fj and dh:
     for n, t in dh[-12:]:
         lines.append(f"| D{n} | {t[:38]} |（旧大文件）")
-    lines.append(f"| 统计 | 共 {len(dh)} 条 D 编号行 |")
+    lines.append(f"| 统计 | 共 {len(dh)} 条 D 编号行 {stamp('止观AI项目分工与决策日志.md（全文枚举 D 行，去重取首见）')} |")
 else:
     lines.append("| ？ | 决策日志不可读或无 D 行命中，未静默跳过：请人工核查 | — |")
 lines.append("")
@@ -71,18 +105,27 @@ lines.append("")
 # D. 工作日志（文件本身即分片；编号双通道：新日志标题带 NNN，旧日志无号只在 README 有行）
 wl = os.path.join(ROOT, "01_项目管理", "工作日志")
 nums, nohead = [], 0
+_num_src, _nohead_names = {}, []
 for fn in sorted(os.listdir(wl)):
     if fn.endswith(".md") and fn.startswith("止观AI工作日志") and fn != "README.md":
         t = read(os.path.join(wl, fn)) or ""
         m = re.search(r"^#\s*止观AI\s*工作日志\s*(\d{3})", t, re.M)
-        if m: nums.append(int(m.group(1)))
-        else: nohead += 1
+        if m:
+            n = int(m.group(1))
+            nums.append(n)
+            _num_src[n] = fn
+        else:
+            nohead += 1
+            _nohead_names.append(fn)
 nums = sorted(set(nums))
+_maxfn = _num_src.get(max(nums)) if nums else None
+_nohead_show = "、".join(x[:-3] for x in _nohead_names[:3]) + ("…" if len(_nohead_names) > 3 else "")
+_wl_holder = "01_项目管理/工作日志/ 目录枚举 %d 件" % len([f for f in os.listdir(wl) if f.endswith(".md") and f.startswith("止观AI工作日志")])
 gaps = [n for n in range(1, (max(nums)+1 if nums else 1)) if n not in nums]
 lines += ["## D. 工作日志（文件天然分片）", "",
-          f"- 标题带编号的实体：{len(nums)} 个（001 起补号制后新增者自带），末号 {max(nums) if nums else '—'}",
-          f"- 早期无号日志（编号仅存 README 行）：{nohead} 个",
-          f"- 标题号缺号：{('、'.join(f'{n:03d}' for n in gaps)) if gaps else '无（缺号者多为无号旧档，属预期）'}",
+          f"- 标题带编号的实体：{len(nums)} 个（001 起补号制后新增者自带），末号 {max(nums) if nums else '—'}{('＝' + _maxfn) if _maxfn else ''} {stamp(_wl_holder + ('；末号持有者＝' + _maxfn if _maxfn else ''))}",
+          f"- 早期无号日志（编号仅存 README 行）：{nohead} 个（{_nohead_show}） {stamp(_wl_holder + '；无号件名如括注')}",
+          f"- 标题号缺号：{('、'.join(f'{n:03d}' for n in gaps)) if gaps else '无（缺号者多为无号旧档，属预期）'} {stamp(_wl_holder + '；缺号＝编号序列内空位，无独立持有者')}",
           "- 标题级总索引仍以 `工作日志\\README.md` §七 为冻结载体；今后新日志不再手写该表，由本生成器汇总（后续版本接入）。", ""]
 
 # E. 分片署名行核查（D-1009-W3b 新制）
@@ -136,8 +179,9 @@ else:
         if not SIG.search(read(os.path.join(HERE, fn)) or ""):
             miss.append(fn[:-3])
     lines += ["## E. 署名行核查（`署｜任务号｜窗别｜会话短号｜AI号`）", "",
-              f"- 裁定时刻＝{EFFECTIVE}｜本制后应署 **{req}** 件，缺署名行 **{len(miss)}** 件｜制前豁免 **{exempt}** 件",
-              f"- 缺项清单：{('、'.join(miss)) if miss else '无'}",
+              f"- 裁定时刻＝{EFFECTIVE}｜本制后应署 **{req}** 件，缺署名行 **{len(miss)}** 件｜制前豁免 **{exempt}** 件 "
+              f"{stamp('登记分片/KZ-*、D-* 枚举 %d 件（判据＝git 首次入库时刻 vs 裁定时刻）；缺项逐件见下行' % (req + exempt))}",
+              f"- 缺项清单：{('、'.join(miss)) if miss else '无'} {stamp('下行逐件即持有者' if miss else '缺项＝零（枚举面同上行）')}",
               "- 本项为**旁路提示，非提交闸门**（法师 2026-10-09 裁「不加 `收口检查.ps1` 闸门」，接受会漂）；缺项者下批提交前补一行即可，历史件不回改。", ""]
 
 # F. 悬案清单（D-1010-W3COORD-0b5dfd98 §四；坑 022 的机器载体）
@@ -196,7 +240,7 @@ _LOGFILE = re.compile(r"^巡检日志")
 # 格式一行一条：`文件名[:行号]｜已裁|已撤｜日期｜依据`；不带行号＝整件销账。# 起行与空行忽略。
 # ⚠白名单本身也会烂：写了却一处未命中 ⇒ 必是自消音（措辞变了／行号漂了），故**未命中条数照实报出**，不当零处理。
 SOLD_PATH = os.path.join(HERE, "悬案已销.txt")
-_sold_exact, _sold_file, _sold_bad, _sold_n = {}, {}, [], 0
+_sold_exact, _sold_file, _sold_fp, _sold_bad, _sold_n = {}, {}, {}, [], 0
 if os.path.isfile(SOLD_PATH):
     for _sl in (read(SOLD_PATH) or "").splitlines():
         _sl = _sl.strip()
@@ -207,7 +251,16 @@ if os.path.isfile(SOLD_PATH):
             _sold_bad.append(_sl[:40])
             continue
         _sold_n += 1
-        if ":" in _f[0]:
+        if "#" in _f[0]:
+            # 内容指纹锚（法师 10-14 裁 P26②）：`文件名#片段`，片段＝该行去装饰后的连续子串。
+            # 为什么不用行号：坑 020 实测半衰期以小时计（本文件里有一条键写下不到一小时就漂了 66 行），
+            # 而规则要求的行为（往同一件里追加记录）本身就是抬高行号的那个动作。
+            _k, _fp = _f[0].split("#", 1)
+            if _fp.strip():
+                _sold_fp.setdefault(_k.strip(), []).append((_fp.strip(), _f[1]))
+            else:
+                _sold_bad.append(_sl[:40]); _sold_n -= 1
+        elif ":" in _f[0]:
             _k, _ln = _f[0].rsplit(":", 1)
             try:
                 _sold_exact[(_k, int(_ln))] = _f[1]
@@ -217,8 +270,20 @@ if os.path.isfile(SOLD_PATH):
         else:
             _sold_file[_f[0]] = _f[1]
 
-def _sold_state(_fn, _i):
-    return _sold_exact.get((_fn, _i)) or _sold_file.get(_fn)
+def _sold_match(_fn, _i, _txt=None):
+    """返回（终态, 命中的键本身）。键必须逐条回传——`_sold_used` 是个 set，
+    若只回文件名，同一件里多条指纹键会被折成一个元素，未命中数当场虚高（10-14 实测 10 条）。"""
+    if _sold_exact.get((_fn, _i)):
+        return _sold_exact[(_fn, _i)], (_fn, _i)
+    for _fp, _st in _sold_fp.get(_fn, []):
+        if _txt and _fp in _txt:
+            return _st, (_fn, "#", _fp)
+    if _sold_file.get(_fn):
+        return _sold_file[_fn], _fn
+    return None, None
+
+def _sold_state(_fn, _i, _txt=None):
+    return _sold_match(_fn, _i, _txt)[0]
 
 for _p in PEND_TARGETS:
     _txt = read(_p)
@@ -252,21 +317,28 @@ for _p in PEND_TARGETS:
         if _mtime_today(_p):
             _freshmap[(_fn, _i)] = True
 # 层C：分流为「现势悬案」与「已销」
-_sold_hits = [h for h in _hits if _sold_state(h[1], h[2])]
+_sold_hits = [h for h in _hits if _sold_state(h[1], h[2], h[3])]
 if _sold_hits:
-    _hits = [h for h in _hits if not _sold_state(h[1], h[2])]
+    _hits = [h for h in _hits if not _sold_state(h[1], h[2], h[3])]
 _sold_used = set()
 for _d, _fn, _i, _s in _sold_hits:
-    _sold_used.add((_fn, _i) if (_fn, _i) in _sold_exact else _fn)
+    _k = _sold_match(_fn, _i, _s)[1]
+    if _k is not None:
+        _sold_used.add(_k)
 _sold_idle = _sold_n - len(_sold_used)
 # ⚠2026-10-11 补：警报原先只报"未命中 N 条"，**不说是哪 N 条**，查出成本全落在人身上，
 #   实测一轮里本窗为定位 1 条漂移交了两次重跑。点名不改任何计数口径（坑 023 教训 4「中途不换量具」），
 #   只是让这道已有的警报**可执行**。键形态：`文件名:行号` 或 `文件名（整件）`。
-_sold_idle_keys = ["%s:%d" % k if isinstance(k, tuple) else "%s（整件）" % k
-                   for k in list(_sold_exact) + list(_sold_file) if k not in _sold_used]
+_all_sold_keys = (list(_sold_exact) + list(_sold_file)
+                  + [(_fn, "#", _fp) for _fn, _lst in _sold_fp.items() for _fp, _ in _lst])
+def _keyname(_k):
+    if isinstance(_k, tuple):
+        return ("%s:%d" % (_k[0], _k[1])) if len(_k) == 2 else ("%s#%s" % (_k[0], _k[2]))
+    return "%s（整件）" % _k
+_sold_idle_keys = [_keyname(k) for k in _all_sold_keys if k not in _sold_used]
 _sold_cnt = {"已裁": 0, "已撤": 0}
 for _h in _sold_hits:
-    _sold_cnt[_sold_state(_h[1], _h[2])] += 1
+    _sold_cnt[_sold_state(_h[1], _h[2], _h[3])] += 1
 _hits.sort(key=lambda x: (-x[0], x[1]))
 lines += ["## F. 悬案清单（「候裁／候另示／候一句」全量枚举，按挂了几天倒序）", ""]
 if not os.path.isfile(SOLD_PATH):
@@ -274,30 +346,36 @@ if not os.path.isfile(SOLD_PATH):
               "不可读作「悬案全都还活着」（层C 未生效）。", ""]
 else:
     lines += ["- 销账：白名单有效 %d 条（另有无效行 %d 条%s）｜命中现势悬案 **%d 处**（已裁 %d／已撤 %d）｜"
-              "**未命中 %d 条**%s%s"
+              "**未命中 %d 条**%s%s %s"
               % (_sold_n, len(_sold_bad), ("：" + "；".join(_sold_bad[:3])) if _sold_bad else "",
                  len(_sold_hits), _sold_cnt["已裁"], _sold_cnt["已撤"], _sold_idle,
                  "（⚠白名单自消音：措辞变了或行号漂了，须逐条复核，**不得当作已清**）" if _sold_idle > 0 else "",
                  "　点名：" + "；".join("`%s`" % k for k in _sold_idle_keys[:5])
-                 + ("…" if len(_sold_idle_keys) > 5 else "") if _sold_idle_keys else ""), ""]
+                 + ("…" if len(_sold_idle_keys) > 5 else "") if _sold_idle_keys else "",
+                 stamp("悬案已销.txt（%d 条，未命中已逐条点名）；命中数＝扫描面 %d 件枚举" % (_sold_n, len(PEND_TARGETS)))), ""]
 if not _hits:
-    lines += ["- ⚠**本轮一个悬案标记都没读到**（扫了 %d 件）。**这不是「已清零」**——最可能是标记措辞变了或文件被移动，"
-              "**本项不可信，请人工核查**（同坑 017 恒空转、坑 022 不自知）。" % len(PEND_TARGETS), ""]
+    lines += ["- ⚠**本轮一个悬案标记都没读到**（扫了 %d 件 %s）。**这不是「已清零」**——最可能是标记措辞变了或文件被移动，"
+              "**本项不可信，请人工核查**（同坑 017 恒空转、坑 022 不自知）。"
+              % (len(PEND_TARGETS), stamp("PEND_TARGETS 扫描面 %d 件枚举（零命中＝反证，检索面同 §四说明）" % len(PEND_TARGETS))), ""]
 else:
     _old = [h for h in _hits if h[0] >= 3]
     lines += ["- 扫 %d 件｜命中 **%d** 处｜**挂 ≥3 天的 %d 处**（这些是最危险的一档：没人再提就等于放弃了）"
-              % (len(PEND_TARGETS), len(_hits), len(_old)),
+              "｜最老一条＝`%s`:%d %s"
+              % (len(PEND_TARGETS), len(_hits), len(_old), _hits[0][1], _hits[0][2],
+                 stamp("PEND_TARGETS 扫描面 %d 件枚举；最老一条持有者＝%s:%d" % (len(PEND_TARGETS), _hits[0][1], _hits[0][2]))),
               "- 判据来源＝文件**首次入库日**（非文中日期，同 §25.4.3 的教训）。尚未入库者无此日 ⇒ 标「未知」排末位（**不等于不危险，只是无据可算**）。",
               "- **结案口径**：法师给字＝结案；本窗撤案＝也须写明撤与理由。**不得静默消失**（坑 022 解法 1）。",
               "- ⚠**词表盲区（量化报出，不当零）**：另有 **%d 处**用了本词表之外的说法（如「候法师给开工号／明示／一个字」），"
               "**本表抓不到**。不扩词表的理由＝扩了 %d→%d（+%.0f%%）且混进大量已裁定原文的叙述行，"
-              "等于中途换量具。**要全量须人工 grep「候法师」**。"
-              % (_blind, len(_hits), len(_hits) + _blind, 100.0 * _blind / max(len(_hits), 1)), ""]
+              "等于中途换量具。**要全量须人工 grep「候法师」**。 %s"
+              % (_blind, len(_hits), len(_hits) + _blind, 100.0 * _blind / max(len(_hits), 1),
+                 stamp("PEND_TARGETS 扫描面（同上行）；盲区逐条落盘＝C3-盲区全量-%s.md" % _today.strftime("%m%d"))), ""]
     for _d, _fn, _i, _s in _hits[:14]:
         _lab = "未知" if _d < 0 else str(_d)
         lines.append("- 挂 %s 天｜`%s`:%d｜%s" % (_lab, _fn, _i, _s))
     if len(_hits) > 14:
-        lines.append("- …其余 %d 处未列（本项限 14 行以压认知负荷；全量请 grep）" % (len(_hits) - 14))
+        lines.append("- …其余 %d 处未列（本项限 14 行以压认知负荷；全量请 grep） %s"
+                     % (len(_hits) - 14, stamp("F 行集全量（%d 处，逐条持有者＝文件:行号，见上文与 00_总索引同源扫描）" % len(_hits))))
     # ⚠2026-10-10 本窗第二处自曝的设计缺陷：只按"最老"倒序 ⇒ 本轮**刚写的**悬案（未入库＝age 未知）
     #   全沉到底、在 14 行截断之外永远不可见——而恰恰是这些最该被看见。故另开一段单列。
     # ⚠2026-10-10 本窗第三处自曝：首版把"未入库"一律当 age 未知，扩面后 455 条全落此档 ⇒ F′ 等于没筛。
@@ -318,13 +396,15 @@ else:
         _today8 = PENDING_TODAY.strftime("%Y%m%d")
         for _fn in sorted(_by, key=lambda x: (1 if _LOGFILE.match(x) else 0, 0 if x.startswith(_today8) else 1, x))[:20]:
             _its = _by[_fn]
-            lines.append("- `%s`｜%d 处｜首条 :%d %s" % (_fn, len(_its), _its[0][0], _its[0][1]))
-        lines.append("- （F′ 共 %d 处、%d 件；本表按件铺、**今日日头件排最前**，全文请 grep「候裁」）" % (len(_new), len(_by)))
+            lines.append("- `%s`｜%d 处｜首条 :%d %s %s" % (_fn, len(_its), _its[0][0], _its[0][1],
+                                                          stamp("`%s`:%d" % (_fn, _its[0][0]))))
+        lines.append("- （F′ 共 %d 处、%d 件；本表按件铺、**今日日头件排最前**，全文请 grep「候裁」） %s"
+                     % (len(_new), len(_by), stamp("F′ 行集（mtime 判据，逐条持有者＝上行各文件）")))
     if _unreadable:
         lines.append("- ⚠读不到而跳过的件：%s" % "、".join(_unreadable[:6]))
 lines += ["- ⚠**旁路提示非闸门**（法师 10-09 裁「不加 `收口检查.ps1` 闸门」未被覆盖）。每次收口**须逐条重列于提请清单**，否则即坑 022 复发。", ""]
 
-io.open(OUT, "w", encoding="utf-8", newline="\n").write("\n".join(lines).replace("\n\n\n", "\n\n"))
+# （写入统一挪到文末：三份派生视图全部通过规约第 15 条审计后才落盘）
 
 # ---- 层A（法师 2026-10-11「前3准」第1条）：只给法师看的 ≤8 行悬案短表 ----
 # 停催令禁的是"AI 催 AI"，没禁"把法师自己该看见的东西送到他面前"⇒ 受众只有法师，不催任何窗。
@@ -332,9 +412,12 @@ io.open(OUT, "w", encoding="utf-8", newline="\n").write("\n".join(lines).replace
 #   脚本随开工必跑（§二bis 第5序），故这张表**只要今天有任何一扇窗开过工就必然存在**。
 REMIND = os.path.join(HERE, "C3-悬案提醒-%s.md" % _today.strftime("%m%d"))
 _r = ["# C3 悬案提醒｜%s（自动生成，勿手改；受众＝法师一人，不催任何窗）" % _today.isoformat(), "",
-      "> 源：`生成登记索引.py` section F／F′。全量 %d 处现势悬案，此表只列 8 行；其余见 `00_总索引.md`。" % len(_hits),
-      "> 销账：已裁 %d／已撤 %d（白名单 `悬案已销.txt`）。**结案请回该文件加一行，不要删原文。**" % (_sold_cnt["已裁"], _sold_cnt["已撤"]),
-      "> ⚠词表盲区另有 **%d 处**（写法如「候法师给开工号」）本表抓不到 ⇒ 本表**不是全量**，零行更不等于清零。" % _blind, ""]
+      "> 源：`生成登记索引.py` section F／F′。全量 %d 处现势悬案，此表只列 8 行；其余见 `00_总索引.md`。 %s"
+      % (len(_hits), stamp("00_总索引.md section F（本轮同源重算，非转抄）")),
+      "> 销账：已裁 %d／已撤 %d（白名单 `悬案已销.txt`）。**结案请回该文件加一行，不要删原文。** %s"
+      % (_sold_cnt["已裁"], _sold_cnt["已撤"], stamp("悬案已销.txt（白名单对账）")),
+      "> ⚠词表盲区另有 **%d 处**（写法如「候法师给开工号」）本表抓不到 ⇒ 本表**不是全量**，零行更不等于清零。 %s"
+      % (_blind, stamp("C3-盲区全量-%s.md（本轮同源重算）" % _today.strftime("%m%d"))), ""]
 _old8 = [h for h in _hits if h[0] >= 3][:4]
 _r.append("## 一、挂最久的四条（恐已烂：没人再提≠已放弃）")
 _r.append("")
@@ -352,19 +435,21 @@ _t8 = _today.strftime("%Y%m%d")
 _byf = {k: v for k, v in _byf.items() if not _LOGFILE.match(k)}
 for _fn in sorted(_byf, key=lambda x: (0 if x.startswith(_t8) else 1, x))[:4]:
     _its = _byf[_fn]
-    _r.append("- `%s`｜%d 处｜首条 :%d %s" % (_fn, len(_its), _its[0][0], _its[0][1]))
+    _r.append("- `%s`｜%d 处｜首条 :%d %s %s" % (_fn, len(_its), _its[0][0], _its[0][1],
+                                                stamp("`%s`:%d" % (_fn, _its[0][0]))))
 if not _byf:
     _r.append("- （最近 24 小时无新写改的悬案件）")
 _r += ["", "---",
-       "- 另有 %d 处未列（≥3 天共 %d 处／近 24h 件共 %d 件）。**本表不是全量，零行也不等于清零。**"
+       "- 另有 %d 处未列（≥3 天共 %d 处／近 24h 件共 %d 件）。**本表不是全量，零行也不等于清零。** %s"
        % (len(_hits) - len(_old8) - sum(len(v) for v in list(_byf.values())[:4]),
-          len([h for h in _hits if h[0] >= 3]), len(_byf)),
+          len([h for h in _hits if h[0] >= 3]), len(_byf),
+          stamp("00_总索引.md section F／F′（本轮同源重算）")),
        "- ⚠已知局限（如实留档，本窗到此停手不再调显示启发式）：①己档与历史文书里的「候裁」字样"
        "**分不清是活悬案还是当时留痕**，故本表把己档整类排除；**排除不等于其中无活悬案**，"
        "全量仍见 `00_总索引.md` section F。②**累积型正本**（协调正本 2000 行）因长期被改写，"
        "在「近 24 小时」这一档里几乎永远占掉一格且首条常是表格残行——本窗判其为**次优非错**，"
        "故只记不改（再调下去就正是坑 022 里那个「不停调显示启发式」的形态）。"]
-io.open(REMIND, "w", encoding="utf-8", newline="\n").write("\n".join(_r) + "\n")
+# （三份派生视图的写入统一在文末：全部通过规约第 15 条审计后才落盘）
 
 # ---- 盲区全量清单（法师 2026-10-11「5、需要」）----
 # 缘起：法师不用命令行，故 `00_总索引.md` 里那句"要全量须人工 grep「候法师」"对他等于"看不了"。
@@ -387,13 +472,27 @@ _b = ["# C3 盲区全量清单｜%s（自动生成，勿手改；受众＝法师
       "（多为已裁定原文的叙述行、历史留痕、规则条文自身），故不逐条判状态、不进销账白名单；"
       "③不是全量真相——扫描面只含 `01_项目管理` 顶层文书、登记分片、信箱 engine 区与协调正本，**代码与其它目录不在面内**。",
       "> **要结案**仍回 `悬案已销.txt` 加一行（`文件名:行号｜状态｜日期｜依据`），**不要删原文**。", "",
-      "**共 %d 处，分布在 %d 个文件**（按处数倒序）。" % (len(_blind_hits), len(_byfile)), ""]
+      "**共 %d 处，分布在 %d 个文件**（按处数倒序）。 %s"
+      % (len(_blind_hits), len(_byfile),
+         stamp("PEND_TARGETS 扫描面（同 00_总索引.md §F；分布逐件见下）")), ""]
 for _fn in sorted(_byfile, key=lambda x: (-len(_byfile[x]), x)):
     _its = _byfile[_fn]
-    _b += ["## `%s`（%d 处）" % (_fn, len(_its)), ""]
+    _b += ["## `%s`（%d 处） %s" % (_fn, len(_its), stamp("`%s`（首条 :%d；逐条行号见下）" % (_fn, sorted(_its)[0][0]))), ""]
     for _i, _bs in sorted(_its):
         _b.append("- `:%d`｜%s" % (_i, _bs))
     _b.append("")
+# ---- 规约第 15 条·写前审计：汇总行缺〔测于…持有者＝…〕即报错非零退出，不静默降级 ----
+_bad = list(_viol)
+for _txt, _where in ((lines, OUT), (_r, REMIND), (_b, BLINDOUT)):
+    _bad += audit_summaries(_txt, os.path.basename(_where))
+if _bad:
+    sys.stderr.write("❌ 规约第15条「数绑对象」审计不过（%d 处），已拦下、未写任何派生视图：\n" % len(_bad))
+    for b in _bad:
+        sys.stderr.write("  - " + b + "\n")
+    sys.exit(1)
+
+io.open(OUT, "w", encoding="utf-8", newline="\n").write("\n".join(lines).replace("\n\n\n", "\n\n"))
+io.open(REMIND, "w", encoding="utf-8", newline="\n").write("\n".join(_r) + "\n")
 io.open(BLINDOUT, "w", encoding="utf-8", newline="\n").write("\n".join(_b) + "\n")
 
 print("盲区全量", BLINDOUT, len(_b), "行｜", len(_blind_hits), "处／", len(_byfile), "文件")
