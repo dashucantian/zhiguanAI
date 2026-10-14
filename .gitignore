@@ -165,6 +165,8 @@ diagnostics/
 # 〔2026-10-10 协调窗 0b5dfd98 令·6c7d4751 执行〕空行探针自 _analysis_tmp 迁入正源：
 #   原址命中 /_analysis_tmp/*.mjs，不入正源、随时可丢，而共用闸门要引它＝闸门建在沙上。
 !05_产品与开发/架构可视化/validate-anchors.mjs
+# 〔2026-10-13 协调窗 542dc2cd 放行·6c7d4751 执行〕双键探针的正反用例自检，与探针同批入库：
+!05_产品与开发/架构可视化/validate-anchors.selftest.mjs
 !05_产品与开发/架构可视化/qgraphflow/
 05_产品与开发/架构可视化/qgraphflow/*
 !05_产品与开发/架构可视化/qgraphflow/zhiguan-console-architecture.graph.json
