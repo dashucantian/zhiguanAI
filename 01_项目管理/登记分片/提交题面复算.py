@@ -26,8 +26,17 @@ ADD_RE = re.compile(r"增(\d+)")
 DEL_RE = re.compile(r"删(\d+)")
 
 since = sys.argv[1] if len(sys.argv) > 1 else "2026-10-13"
+# ⚠裸日期坑（本窗 10-14 12:3x 实测）：`git log --since=2026-10-14` 在本机返 0 笔，
+# 补上时刻 `--since="2026-10-14 00:00"` 才返 27 笔。静默返 0 会被读成"一笔不符都没有"
+# ＝空扫描面报绿（坑 039④）。⇒ 固定写法：裸日期一律补 00:00:00，枚举为 0 即退码 1、不报通过。
+if re.fullmatch(r"\d{4}-\d{2}-\d{2}", since):
+    since = since + " 00:00:00"
 log = run(["git", "log", "--since=" + since, "--format=%H\x1f%ad\x1f%s\x1f%P", "--date=format:%Y-%m-%d %H:%M"])
 rows = []
+if not log.strip():
+    print("BAD 起算 %s 枚举到 0 笔——本复算不可信：要么该时段确无提交，要么取法又被 git 吞了一层。"
+          "先用 git log --oneline | head 换个取法复核，再跑本脚本。" % since)
+    sys.exit(1)
 for line in log.splitlines():
     if not line.strip():
         continue
@@ -35,10 +44,17 @@ for line in log.splitlines():
     if len(parents.split()) > 1:  # merge commit，git show 不列改动，跳过并点名
         rows.append((h[:7], ad, subj, "MERGE-SKIP", None))
         continue
-    n = norm(subj[subj.find("件") - 6:] if "件" in subj else subj)
-    mnum = NUM_RE.search(n)
-    madd = ADD_RE.search(n)
-    mdel = DEL_RE.search(n)
+    # 解析锚点（10-14 12:3x 自纠）：原先取"第一个「件」字前 6 个字符"起截，会把标题正文里的
+    # 「在途 0 件」「21 件已点」这类话当成自报数 ⇒ 造假 MISMATCH。改成尾段锚定：
+    # 优先看最后一段「——」之后的部分，段内取最后一个"N 件"，增删数只在该 N 件之后找。
+    tail = subj.rsplit("——", 1)[-1] if "——" in subj else subj
+    tn = norm(tail)
+    cand = list(re.finditer(r"(\d+)件", tn)) or list(re.finditer(r"(\d+)件", norm(subj)))
+    mnum = cand[-1] if cand else None
+    rest = (tn if cand and re.search(r"\d+件", tn) else norm(subj))
+    rest = rest[mnum.end():] if mnum else ""
+    madd = ADD_RE.search(rest)
+    mdel = DEL_RE.search(rest)
     if not (mnum and madd):
         rows.append((h[:7], ad, subj, "NO-CLAIM", None))
         continue
