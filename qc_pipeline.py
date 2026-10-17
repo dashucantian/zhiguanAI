@@ -35,7 +35,7 @@ from datetime import datetime
 # ── 版本与阈值（写进 qc.json，回答"这条质检是哪个阈值版本产生的"）────────
 
 QC_VERSION = "1.1"
-THRESHOLD_VERSION = "20260920"
+THRESHOLD_VERSION = "20261013"   # 2026-10-13 法师亲裁「接入 准」：通道级降权入判定链（原 20260920）
 
 # 分段口径：沿用报告模板既有值（10 s 窗 / 5 s 步长），**不改判据只改取值来源**
 EPOCH_SECONDS = 10.0
@@ -379,7 +379,23 @@ def assess(npz_path, thresholds=None):
                           "iaf_hz": None}
     bad = [ch for ch, v in (metrics.get("channel_quality") or {}).items()
            if isinstance(v, dict) and v.get("state") == "bad"]
-    if bad:
+    # 通道级降权（THRESHOLD_VERSION 20261013；2026-10-13 法师亲裁「接入 准」，
+    # 影子依据＝2026-10-12 件C 差集表：单道连坐 3 坐 85.6 分钟全 Oz 饱和、零放水反证过）。
+    # 生效＝三条同时满足：①bad 道数＝1（多道一律不降）；②纯连坐（通道外 reasons 为空，
+    # 混合否决不降）；③坏因∈电极级三判据（平线/饱和/幅值过高；工频 warn 本不在拦截面）。
+    # 降权＝该道不追加「通道质量不合格」reason，整坐不再因此否决；该道质检值与降权事实
+    # 照实落盘（metrics.downweighted），数据一个字节不动。bad≥2 维持整坐否决（件C 反证闸）。
+    _dw = None
+    if len(bad) == 1 and not reasons:
+        _info = metrics["channel_quality"][bad[0]]
+        _cause = str(_info.get("reason") or "")
+        if _cause.startswith(("平线", "疑似饱和", "幅值过高")):
+            _dw = {"channel": bad[0], "cause": _cause,
+                   "std_uv": _info.get("std_uv"), "rms_uv": _info.get("rms_uv"),
+                   "max_abs_uv": _info.get("max_abs_uv")}
+    if _dw:
+        metrics["downweighted"] = _dw
+    elif bad:
         reasons.append(f"通道质量不合格：{'、'.join(bad)}")
 
     # 稳定指纹：同 npz 连算两次必须一致（Gate-A 的 A3）
