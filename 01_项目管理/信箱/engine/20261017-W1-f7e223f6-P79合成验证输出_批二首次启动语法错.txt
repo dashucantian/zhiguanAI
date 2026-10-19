@@ -1,0 +1,4 @@
+  File "D:\Project\zhiguanAI\01_项目管理\信箱\engine\20261017-W1-f7e223f6-P79回写器更新支路合成验证.py", line 441
+    return ("合成新建行带 `任务编号` ⇒ rc=1、点名越列（逐字：%s）。本轮**未读真实候登稿**，""
+                                                             ^
+SyntaxError: unterminated string literal (detected at line 441)

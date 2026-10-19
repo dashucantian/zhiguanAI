@@ -1,0 +1,346 @@
+diff --git a/01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py b/01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py
+index b855cb0..90cb03f 100644
+--- a/01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py
++++ b/01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py
+@@ -3,18 +3,30 @@
+ 
+ 职责：把仓库里"已发生但源表没记"的两类事实写回飞书多维表格（任务真身）：
+   ① **建新行**（N1 准）＝8 个只在文书里出现的 ZG 号（`ZG-063`／`ZG-074`～`ZG-080`）；
+-  ② **只同步状态列**（P2 默认面）＝`承接状态`／`裁决`／`AI执行窗口` 三列，**禁改表结构、禁删行、禁写 `承担者`**。
++  ② **只同步状态列**（P2 默认面）＝`承接状态`／`裁决`／`AI执行窗口` 三列，**禁改表结构、禁删行、禁写 `承担者`**；
++  ③ **按稳定 record_id 更新已有行**（P79 甲＝2026-10-17 法师裁＋W3 派工）＝改既有行的那四列，
++     与 ① 明确区分：更新须带 `record_id`＋写前旧值 `expect_old`，写后逐列回读复核。
+ 
+-安全设计（四条，写进代码而不是写进承诺）：
++payload 形制（rows 内每条）：
++  {"ref":"ZG-070","op":"create","fields":{…}}                        # 缺 op ⇒ 按 create 处理（旧候登稿不回归）
++  {"ref":"ZG-070","op":"update","record_id":"recXXXX",
++   "fields":{"承接状态":"进行中"},"expect_old":{"承接状态":"待启动"}}    # 要改哪几列，先报哪几列的旧值
++
++安全设计（五条，写进代码而不是写进承诺）：
+   1. **默认 dry-run**：不带 `--落笔` 一律只打印 payload 并做本地校验，**一次网络调用都不发**；
+   2. 列白名单硬编码：payload 里出现白名单外的键（尤其 `承担者`）⇒ 直接退出码 1，不降级继续；
+   3. 跑前打印 diff（逐行逐列"旧值→新值"），跑后**重拉一次做校验和**：新行号命中即 PASS，未命中即 exit 1；
+-  4. 凭据只读本机配置（同 `20261007_W3_维那快照拉取_v1.py`），密钥驻内存、不回显、不落盘、不写日志。
++  4. 凭据只读本机配置（同 `20261007_W3_维那快照拉取_v1.py`），密钥驻内存、不回显、不落盘、不写日志；
++  5. 更新支路三道硬闸：**无 `record_id` 的更新直接拒**（不把更新降为新建）、**越出 UPDATE_COLS 四列直接拒**
++     （含 `AI执行记录`，本支路不扩列）、**`expect_old` 与盘上现值不符直接拒且整批不写**。
++     写后回读**先验记录存在**（读不到＝失败，不折成空字段来比），值比较**不做首尾裁剪**
++     （无字段协议依据；P79 退补函 10-17 02:0x 两条点名）。
+ 
+ 用法：
+   python 01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py --dry-run
+   python 01_项目管理/任务关系图/20261012_W3_维那源表回写器_v1.py --落笔 --what rows      # 法师给「落笔」后才允许
+   python ... --落笔 --what fields --rows 01_项目管理/20261012_W3_源表候登8行_payload.json
++  python ... --dry-run --rows <含 op=update 的 payload>      # 预演更新支路，不发网络
+ """
+ import argparse
+ import io
+@@ -33,6 +45,9 @@ TABLE_ID = "tblLf45tgSgBoLue"
+ # 10-14 22:2x 法师裁待裁单 P47「状态列与建新行」⇒ 状态列入白名单（早先 §三 与本脚本两套范围不一致，本次合一）。
+ # 越出这四列仍需法师新的字；`承担者／更新时间／受理戳／任务编号` 在下面 FORBIDDEN_COLS 里硬拒。
+ WRITE_COLS = {"承接状态", "裁决", "AI执行窗口", "状态"}
++# P79 甲（10-17 法师裁＋W3 派工）：更新已有行**只许这四列**，与 P47 合一后的白名单同尺；
++# ⛔不随本支路扩列——`AI执行记录` 一类"看着顺手就该同步"的列，要另写法师的字才进得来。
++UPDATE_COLS = {"承接状态", "裁决", "AI执行窗口", "状态"}
+ IDENTITY_COLS = {"任务名", "关联文件", "状态"}
+ FORBIDDEN_COLS = {"承担者", "更新时间", "受理戳", "任务编号"}   # 真人名列＋系统列＋自动编号列，任何模式都不写
+ # 服务端持有的列类型（bitable v1 数字码）：22 自动编号／19 引用／20 公式／23 按钮／1001-1005 创建·修改时间与人员
+@@ -41,6 +56,56 @@ SERVER_OWNED_TYPES = {22, 19, 20, 23, 1001, 1002, 1003, 1004, 1005}
+ ROWS_PATH = Path("01_项目管理/20261012_W3_源表候登8行_payload.json")
+ 
+ 
++# ── 操作类型与更新支路的结构校验（P79 甲）─────────────────────────────
++# 这一段全部是**本地**判断，不发网络；联网那一步只在 --check-remote／--落笔 里做旧值核对。
++
++def row_op(r):
++    """op 缺省＝create（旧候登稿不回归）；显式写了就必须是 create／update 二选一。"""
++    op = r.get("op")
++    if op is None:
++        return "create" if not r.get("record_id") else None
++    return op if op in ("create", "update") else None
++
++
++def validate_ops(data):
++    """逐条判 op／record_id／更新列／expect_old 形制；返回错误列表（空＝结构过关）。"""
++    errs = []
++    for r in data.get("rows", []):
++        ref = r.get("ref", "(无ref)")
++        op = row_op(r)
++        rid = r.get("record_id")
++        if op is None:
++            if r.get("op") not in (None, "create", "update"):
++                errs.append("%s｜op＝%r 不认识，只接受 create／update" % (ref, r.get("op")))
++            elif r.get("op") is None and rid:
++                # 有 record_id 却没写 op ⇒ 不猜意图（"缺 record_id 不降为新建"的反面同一条纪律）
++                errs.append("%s｜带 record_id 但未标 op ⇒ 拒绝猜测，更新须显式写 \"op\":\"update\"" % ref)
++            else:
++                errs.append("%s｜op 与 record_id 组合不合法" % ref)
++            continue
++        fields = r.get("fields") or {}
++        if op == "create":
++            if rid:
++                errs.append("%s｜新建行不该带 record_id（%s）⇒ 更新与新建必须明确区分" % (ref, rid))
++            continue
++        # ── 以下 op == "update" ──
++        if not isinstance(rid, str) or not rid.strip():
++            errs.append("%s｜更新缺稳定 record_id ⇒ 拒绝，**不把更新降为新建**" % ref)
++        if not fields:
++            errs.append("%s｜更新没有任何新值列 ⇒ 拒绝" % ref)
++        over = sorted(set(fields) - UPDATE_COLS)
++        if over:
++            errs.append("%s｜更新越列 %s ⇒ 更新只许这四列：%s"
++                        % (ref, over, "／".join(sorted(UPDATE_COLS))))
++        exp = r.get("expect_old")
++        if not isinstance(exp, dict):
++            errs.append("%s｜更新缺 expect_old（写前旧值核对的根据）⇒ 拒绝" % ref)
++        elif set(exp) != set(fields):
++            errs.append("%s｜expect_old 键 %s 与要改的列 %s 不一致 ⇒ 改哪几列就先报哪几列旧值"
++                        % (ref, sorted(exp), sorted(fields)))
++    return errs
++
++
+ def load_payload(p):
+     if not p.is_file():
+         print("FATAL｜payload 文件不存在：%s（先跑 --dry-run 生成候登稿）" % p)
+@@ -49,9 +114,17 @@ def load_payload(p):
+     bad = []
+     for r in data.get("rows", []):
+         keys = set(r.get("fields", {}).keys())
+-        over = sorted(keys - WRITE_COLS - IDENTITY_COLS)
+-        if over:                      # 只在真越列时点名（空列表不算越，别把合规的行报成违规）
+-            bad.append("%s：越列 %s" % (r.get("ref"), over))
++        op = row_op(r)
++        if op == "update":
++            # 更新面另收口：越出 UPDATE_COLS 四列即拒（IDENTITY_COLS 也不给更新用）
++            over = sorted(keys - UPDATE_COLS)
++            if over:
++                bad.append("%s［update］：越列 %s（更新只许 %s）"
++                           % (r.get("ref"), over, "／".join(sorted(UPDATE_COLS))))
++        else:
++            over = sorted(keys - WRITE_COLS - IDENTITY_COLS)
++            if over:                      # 只在真越列时点名（空列表不算越，别把合规的行报成违规）
++                bad.append("%s：越列 %s" % (r.get("ref"), over))
+     if bad:
+         print("FATAL｜列白名单被越（规约 §二.3／法师 P2 收窄面）：")
+         for b in bad:
+@@ -62,20 +135,55 @@ def load_payload(p):
+         if k:
+             print("FATAL｜禁写列出现在 payload：%s（%s）" % (sorted(k), r.get("ref")))
+             return None
++    errs = validate_ops(data)              # P79 甲：op／record_id／更新列／expect_old 结构闸
++    if errs:
++        print("FATAL｜操作类型与更新形制不过关（更新与新建必须明确区分）：")
++        for e in errs:
++            print("   ", e)
++        return None
+     return data
+ 
+ 
+ def show(data):
+-    print("候登行数＝%d｜表＝%s/%s" % (len(data["rows"]), BASE_TOKEN[:6] + "…", TABLE_ID))
+-    for r in data["rows"]:
++    rows = data["rows"]
++    n_c = sum(1 for r in rows if row_op(r) == "create")
++    print("候登行数＝%d（新建 %d／更新 %d）｜表＝%s/%s"
++          % (len(rows), n_c, len(rows) - n_c, BASE_TOKEN[:6] + "…", TABLE_ID))
++    for r in rows:
+         f = r["fields"]
+-        print("  %-8s｜%s" % (r["ref"], f.get("任务名", "（改行）")))
+-        print("           状态＝%s｜承接＝%s｜窗口＝%s｜出处＝%s"
+-              % (f.get("状态", "—"), f.get("承接状态", "—"), f.get("AI执行窗口", "—"),
+-                 f.get("关联文件", "—")))
++        if row_op(r) == "update":
++            print("  %-8s｜［更新］record_id＝%s" % (r["ref"], r.get("record_id")))
++            for col in sorted(f):
++                print("           %s：申报旧值 %r → 拟写新值 %r"
++                      % (col, (r.get("expect_old") or {}).get(col), f[col]))
++        else:
++            print("  %-8s｜［新建］%s" % (r["ref"], f.get("任务名", "（改行）")))
++            print("           状态＝%s｜承接＝%s｜窗口＝%s｜出处＝%s"
++                  % (f.get("状态", "—"), f.get("承接状态", "—"), f.get("AI执行窗口", "—"),
++                     f.get("关联文件", "—")))
+     print("合计字符数（校验和用）＝%d" % len(json.dumps(data, ensure_ascii=False)))
+ 
+ 
++def _norm_val(v):
++    """把"服务端返回的列值"归一成可比较的字面串：单选／文本可能是 str，也可能是
++    [{'text':…}]／[str,…] 结构；不猜嵌套层，展平成文本再比。旧值核对与写后回读都用它，
++    免得两处各写一套比较口径（同一件事两把尺＝必漂）。
++
++    ⛔**不做首尾裁剪**。早先这里对字符串一律 `strip()`，等于私自规定"服务端会去掉空格"——
++    本表没有任何字段协议依据支持这句（`AI执行窗口` 一类列就承载文本，申报值带首尾空格与盘上
++    现值本就是两个值）。W3 复核 P79 指出该处会把不等判成相等，17 日退补函点名要撤。
++    只保留有协议依据的结构展平：None→空串、列表按｜拼接、字典取 text／name。
++    缺记录这件事**不在这里判**，由调用方先验存在性（见写后回读那段）。
++    """
++    if v is None:
++        return ""
++    if isinstance(v, list):
++        return "｜".join(_norm_val(x) for x in v)
++    if isinstance(v, dict):
++        return _norm_val(v.get("text") if "text" in v else (v.get("name") or ""))
++    return str(v)
++
++
+ def _load_puller():
+     """复用同目录 10-07 拉取器的鉴权与 HTTP 面（不另造第二套凭据取法）。
+ 
+@@ -148,6 +256,19 @@ def _load_puller():
+         url = "%s/bitable/v1/apps/%s/tables/%s/records/batch_create" % (API, BASE_TOKEN, TABLE_ID)
+         return _call(url, "POST", tk, {"records": recs})
+ 
++    # ── P79 甲·更新已有行的两个口子：按 record_id 读回一条、按 record_id 改一条 ──
++    # 端点形制与本文件既有 batch_create 同族（bitable v1 records 面）；本轮不连飞书，
++    # 真实改表阶段以合成验证里断言的 URL 原文交 W3 对官方文档复核后才用。
++    def fetch_record(tk, record_id):
++        url = "%s/bitable/v1/apps/%s/tables/%s/records/%s" % (
++            API, BASE_TOKEN, TABLE_ID, record_id)
++        return _call(url, "GET", tk)
++
++    def update_record(tk, record_id, fields):
++        url = "%s/bitable/v1/apps/%s/tables/%s/records/%s" % (
++            API, BASE_TOKEN, TABLE_ID, record_id)
++        return _call(url, "PUT", tk, {"fields": fields})
++
+     def verify(tk, numbers):
+         """跑前与跑后都调它：全表分页读原始 record 的 fields["任务编号"]，命中才计数。"""
+         url = "%s/bitable/v1/apps/%s/tables/%s/records/search?page_size=500" % (
+@@ -173,14 +294,16 @@ def _load_puller():
+         return hit, len(have)
+ 
+     return {"token": token, "select_options": select_options, "raw_fields": raw_fields,
+-            "batch_create": batch_create, "verify": verify}
++            "batch_create": batch_create, "verify": verify,
++            "fetch_record": fetch_record, "update_record": update_record}
+ 
+ 
+ 
+ def main():
+     ap = argparse.ArgumentParser(description="维那源表回写器（默认 dry-run，不发网络）")
+     ap.add_argument("--dry-run", action="store_true", help="只本地校验并打印 payload（缺省行为）")
+-    ap.add_argument("--落笔", dest="fire", action="store_true", help="法师给字后才可用：真调 batch_create")
++    ap.add_argument("--落笔", dest="fire", action="store_true",
++                    help="法师给字后才可用：真调 batch_create（新建）与按 record_id 的 PUT 更新")
+     ap.add_argument("--check-remote", dest="check", action="store_true",
+                     help="只读联网：拉字段表校验每个单选值是否存在（不写）")
+     ap.add_argument("--rows", type=Path, default=ROWS_PATH)
+@@ -228,32 +351,99 @@ def main():
+         return 1
+     print("[只读校验通过] 所有单选值均在表内选项之中")
+ 
+-    numbers = [r["fields"].get("任务编号") for r in data["rows"]]
+-    hit0, total0 = pull["verify"](tk, numbers)
+-    print("[写前基线] 表内带号记录 %d 条｜这 %d 个号当前已存在 %d 条（应为 0，否则＝重复登表）"
+-          % (total0, len(numbers), hit0))
+-    if hit0:
+-        print("FATAL｜候登号里有已在表上的 ⇒ 先查清是哪几条，**不重复建行**")
+-        return 1
++    creates = [r for r in data["rows"] if row_op(r) == "create"]
++    updates = [r for r in data["rows"] if row_op(r) == "update"]
++
++    numbers = [r["fields"].get("任务编号") for r in creates]
++    if numbers:
++        hit0, total0 = pull["verify"](tk, numbers)
++        print("[写前基线] 表内带号记录 %d 条｜这 %d 个号当前已存在 %d 条（应为 0，否则＝重复登表）"
++              % (total0, len(numbers), hit0))
++        if hit0:
++            print("FATAL｜候登号里有已在表上的 ⇒ 先查清是哪几条，**不重复建行**")
++            return 1
++    else:
++        total0 = 0
++        print("[写前基线] 本批无新建行 ⇒ 不做查号（更新支路不建行，号查重只约束新建）")
++
++    # ── P79 甲：更新支路的写前旧值核对（全程只读；有一处不符 ⇒ 整批不写，含新建）──
++    conflicts = []
++    for r in updates:
++        rid = r["record_id"]
++        rec = (pull["fetch_record"](tk, rid) or {}).get("record") or {}
++        if not rec:
++            conflicts.append("%s｜record_id＝%s 在表上读不到 ⇒ 更新无从落，**不改建为新建**"
++                             % (r["ref"], rid))
++            continue
++        now = rec.get("fields") or {}
++        for col, want in sorted(r["expect_old"].items()):
++            got, exp = _norm_val(now.get(col)), _norm_val(want)
++            if got != exp:
++                conflicts.append("%s｜列「%s」盘上现值＝%r，与申报旧值 %r 不符 ⇒ 可能被别处改过或读错行"
++                                 % (r["ref"], col, got, exp))
++    if updates:
++        if conflicts:
++            print("[写前旧值核对] 更新 %d 条｜%d 处不符" % (len(updates), len(conflicts)))
++            print("FATAL｜旧值冲突 ⇒ **整批不写**（新建一并扣住），不降级、不跳行继续：")
++            for c in conflicts:
++                print("   ", c)
++            return 1
++        print("[写前旧值核对] 更新 %d 条：申报旧值与盘上现值逐列相符" % len(updates))
++
+     if not a.fire:
+-        print("═══ CHECK-REMOTE 通过（全程只读，未发写调用）。")
++        print("═══ CHECK-REMOTE 通过（全程只读，未发写调用）：新建 %d 条候落、更新 %d 条旧值相符。"
++              % (len(creates), len(updates)))
+         return 0
+ 
+-    print("⚠「落笔」模式：即将向飞书发出 batch_create（删行需人工，非自动可回收）。")
++    parts = []
++    if creates:
++        parts.append("新建 %d 条（一次 batch_create）" % len(creates))
++    if updates:
++        parts.append("%d 次按 record_id 的 PUT（更新）" % len(updates))
++    print("⚠「落笔」模式：即将向飞书发出 %s（删行需人工，非自动可回收）。" % "＋".join(parts))
+     if os.environ.get("ZIGUAN_WRITE_OK") != "1":
+         print("FATAL｜环境变量 ZIGUAN_WRITE_OK=1 未设 ⇒ 拒绝写。")
+         print("       这道双闸是故意的：脚本被误跑、被别的窗拿去跑，都不会改到您那张表。")
+         return 1
+-    res = pull["batch_create"](tk, [{"fields": r["fields"]} for r in data["rows"]])
+-    created = res.get("records") or []
+-    print("[已写] 接口返回 %d 条 record" % len(created))
+-    hit1, total1 = pull["verify"](pull["token"](), numbers)
+-    print("[跑后校验和] 表内带号记录 %d 条（写前 %d）｜候登 %d 号命中 **%d／%d**"
+-          % (total1, total0, len(numbers), hit1, len(numbers)))
+-    if hit1 != len(numbers):
+-        print("FATAL｜写后盘侧复核未全命中 ⇒ 立即上呈，**不静默、不重跑碰运气**")
+-        return 1
+-    print("═══ 落笔完成：8 行已进表；写前写后两次盘侧复核一致。")
++    if creates:
++        res = pull["batch_create"](tk, [{"fields": r["fields"]} for r in creates])
++        created = res.get("records") or []
++        print("[已写] 接口返回 %d 条 record" % len(created))
++        hit1, total1 = pull["verify"](pull["token"](), numbers)
++        print("[跑后校验和] 表内带号记录 %d 条（写前 %d）｜候登 %d 号命中 **%d／%d**"
++              % (total1, total0, len(numbers), hit1, len(numbers)))
++        if hit1 != len(numbers):
++            print("FATAL｜写后盘侧复核未全命中 ⇒ 立即上呈，**不静默、不重跑碰运气**")
++            return 1
++
++    # ── P79 甲：更新落笔＋写后逐列回读复核 ──
++    for r in updates:
++        pull["update_record"](tk, r["record_id"], r["fields"])
++    if updates:
++        bad = []
++        for r in updates:
++            rec = (pull["fetch_record"](pull["token"](), r["record_id"]) or {}).get("record")
++            if not rec:
++                # 记录根本读不到 ⇒ 存在性未证实。**不许**把它折成空字段再比——
++                # 拟写值本身是空串／None 时，"空 vs 空"会报成逐列一致（W3 退补函第 1 条）。
++                bad.append("%s｜record_id＝%s 写后回读不到记录 ⇒ 存在性未证实，不拿空字段顶替"
++                           % (r["ref"], r["record_id"]))
++                continue
++            now = rec.get("fields") or {}
++            for col, want in sorted(r["fields"].items()):
++                got = _norm_val(now.get(col))
++                if got != _norm_val(want):
++                    bad.append("%s｜record_id＝%s 的「%s」写后回读＝%r，拟写＝%r"
++                               % (r["ref"], r["record_id"], col, got, _norm_val(want)))
++        if bad:
++            print("FATAL｜写后回读未对上 ⇒ 立即上呈，**不静默、不重跑碰运气**：")
++            for b in bad:
++                print("   ", b)
++            return 1
++        print("[写后回读] 更新 %d 条逐列复核一致（列范围＝%s）"
++              % (len(updates), "／".join(sorted(UPDATE_COLS))))
++    print("═══ 落笔完成：新建 %d 条、更新 %d 条；写前写后两次盘侧复核一致。"
++          % (len(creates), len(updates)))
+     return 0
+ 
+ 
