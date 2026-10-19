@@ -132,6 +132,13 @@ const VARIANTS = {
     tension: {
       N: 2, zeta: 0.34, firstPeak: 0.85,       // 段内摆回数／阻尼比／首摆幅（|t| 上限 1）
       maxT: 1, maxSlew: 1.8,                   // 钳位：|t|≤maxT；|vt|≤maxSlew·firstPeak·ω_d
+      /* 四轴权重＝已认可 ×1 基线（10-12 首跑那一版）。10-13 法师裁「丙」的调幅
+         **不进本表**：只经 `?tensionamp=<倍率>` 显式介入（离线候选，W3 10-15 复核约束：
+         不宣称肉眼可辨、不宣称舒适通过、不进真机默认）。轴输出钳位与 tension_clipped 事件：
+         显隐（材质透明度 0~1）与阴阳（雾密度下界 0）**已补**（法师 10-18 23:2x 裁「补实现」）；
+         明暗与动静**仍未实现**——缺的是"界定在哪"的依据，未实现面在 tensors.axisUnimplemented
+         与退出报告里如实标出，不拿改设计承诺代答。另：|t| 与 |vt| 那道钳位属**张力状态层**，
+         与轴输出层分列，两边读数不得互推（×3 时轴输出越 1 而 clipped 仍为 false 即为反例）。 */
       axes: {
         dongjing: { channel: 'phaseRate', weight: 0.10,   unit: '相对' },
         yinyang:  { channel: 'fog',       weight: 0.0035, unit: '绝对' },
@@ -360,10 +367,38 @@ const MOCK_END_MS = parseFloat(QSTAGE.get('mockend') || '0');
 /* 张力层（段3 运相）：只有 ?stage=1 且 ?tension=pos|neg 才介入。
    **默认 URL 永远是零点**＝本窗自约，法师 10-12 追认「成立」（底账 §八.8 销案）；
    变体若未配 tension 节（如 v5stupa 留档）⇒ TENS 为空、本层结构上不可能介入。 */
-const TENS = STAGE_ON ? (spec.tension || null) : null;
+/* 丙调幅的**离线候选**通道：`?tensionamp=3` ＝四轴权重整体 ×3（10-13 法师裁「丙」的实现位）；
+   `?tensionamp=<轴>:<倍率>` ＝只放大单轴（诊断用，隔离变量测渲染边界）。
+   缺省＝1＝已认可 ×1 基线 ⇒ 注册表权重表不因候选漂移、真机默认路径与本改动无关
+   （W3 10-15 复核约束：候选隔离、勿覆盖默认）。非法值一律回落 1。
+   实现法＝TENS 取按 amp 缩放的**副本**、四处用点字面不动——共享闸 c10d 反证锚的是
+   雾偏移那一行原文，改字面即打断反证。 */
+const TAMP = (function () {
+  const raw = (QSTAGE.get('tensionamp') || '1').trim();
+  const single = raw.match(/^([a-z]+):([\d.]+)$/i);   // 单轴形式＝诊断用（只放大一轴，隔离变量）
+  if (single) {
+    const a = parseFloat(single[2]);
+    const o = { dongjing: 1, yinyang: 1, mingan: 1, xianyin: 1 };
+    if (Number.isFinite(a) && a > 0 && (single[1].toLowerCase() in o)) o[single[1].toLowerCase()] = a;
+    return o;
+  }
+  const v = parseFloat(raw);
+  const all = Number.isFinite(v) && v > 0 ? v : 1;
+  return { dongjing: all, yinyang: all, mingan: all, xianyin: all };
+})();
+const TENS_REG = STAGE_ON ? (spec.tension || null) : null;   // 注册表原值（diag 报这个，不因候选漂移）
 const TSIGN = QSTAGE.get('tension') === 'pos' ? 1
             : QSTAGE.get('tension') === 'neg' ? -1 : 0;
-const TENSION_ON = !!(TENS && TSIGN !== 0);
+const TENSION_ON = !!(TENS_REG && TSIGN !== 0);
+const TENS = (function () {
+  if (!TENS_REG) return null;
+  const same = Object.values(TAMP).every(a => a === 1);
+  if (same) return TENS_REG;
+  const c = Object.assign({}, TENS_REG);
+  c.axes = Object.fromEntries(Object.entries(TENS_REG.axes)
+    .map(([k, v]) => [k, Object.assign({}, v, { weight: v.weight * (TAMP[k] || 1) })]));
+  return c;
+})();
 
 const STAGES = STAGE_ON ? [
   { key: 'enter',  cn: '进入', dur: ENTER_S },
@@ -400,6 +435,13 @@ let xrSessionRef = null;
 const tension = TENSION_ON ? {
   on: true, t: 0, tRaw: 0, vt: 0, started: false,
   flips: 0, lastSign: 0, maxAbsT: 0, clipped: false, phiInit: false,
+  /* 轴输出层记账（法师 10-18 23:2x 裁「补实现」）：与上面那道 t／vt 层的 clipped **分列**——
+     那道记张力状态越界，这两样记轴输出越界（越界拍数＋上升沿标志）。 */
+  axisClip: { xianyin: 0, yinyang: 0 },        // 越界**调用**次数（路×帧；显隐路一帧可三层）
+  axisFrames: { xianyin: 0, yinyang: 0 },      // 有越界的**帧**数（与上面那个口径分开读）
+  axisHeld: { xianyin: false, yinyang: false }, // 上一帧是否钉在界上——帧末沿判定用
+  frameClip: { xianyin: false, yinyang: false },
+  frameClipRaw: {},
   phi: { fog: 0, layer: 0, glow: 0 },
   seg: STAGES[2].dur, wd: 0, wn: 0, k: 0, c: 0, v0: 0, slewCap: 0,
 } : { on: false };
@@ -428,6 +470,11 @@ function tensionArm() {
   tension.t = 0; tension.tRaw = 0; tension.vt = 0; tension.started = false;
   tension.flips = 0; tension.lastSign = 0; tension.maxAbsT = 0;
   tension.clipped = false; tension.phiInit = false;
+  tension.axisClip = { xianyin: 0, yinyang: 0 };
+  tension.axisFrames = { xianyin: 0, yinyang: 0 };
+  tension.axisHeld = { xianyin: false, yinyang: false };
+  tension.frameClip = { xianyin: false, yinyang: false };
+  tension.frameClipRaw = {};
 }
 
 function tensionTick(dt) {
@@ -449,6 +496,47 @@ function tensionTick(dt) {
   }
 }
 
+/* 轴输出层钳位（法师 10-18 23:2x 裁「补实现」＝这一格按补做，不按改承诺做）。
+   语义与设计稿 §五.4 ③ 那句一致：越界即**钉在边界**，并发一条 `tension_clipped` 事件。
+   事件只在**上升沿**发（每段每轴一条），越界拍数另计数进读数——逐拍发会把退出报告刷屏。
+   lo／hi 给 null ＝**该向盘上无定义界，本窗不自行造界**（如实留 null，不是漏实现）。
+   ⚠ 默认档（不带 ?tension）走不到这里：tension.on 为假即原值返回，S1／S2 回归锚不动。 */
+function clipAxis(name, v, lo, hi) {
+  if (!tension.on) return v;
+  let held = v;
+  if (lo !== null && v < lo) held = lo;
+  else if (hi !== null && v > hi) held = hi;
+  else return v;
+  /* ⚠ 沿判定**不在这里做**：一帧内三层材质会各调一次本函数（显隐路），若在调用点置标志，
+     中层／外层会把手势复位——首轮就是这么写的，结果 345 帧发了 345 条事件（逐拍刷屏），
+     与"只在上升沿发"自相矛盾。改由帧末 noteAxisClips() 统一判沿。 */
+  tension.axisClip[name] += 1;                       // 口径一：越界调用次数（路×帧）
+  if (!tension.frameClip[name]) {
+    tension.frameClip[name] = true;
+    tension.axisFrames[name] += 1;                   // 口径二：有越界的帧数
+    tension.frameClipRaw[name] = { raw: +v.toFixed(6), held: +held.toFixed(6), lo: lo, hi: hi };
+  }
+  return held;
+}
+
+/* 帧末统一判沿：该帧确有越界、且上一帧没有 ⇒ 发一条 tension_clipped。
+   事件取该帧**首次**越界那一路的原始值与钉住值；lo／hi 为 null＝该向盘上无定义界。 */
+function noteAxisClips() {
+  if (!tension.on) return;
+  ['xianyin', 'yinyang'].forEach(function (name) {
+    const on = tension.frameClip[name];
+    if (on && !tension.axisHeld[name]) {
+      const r = tension.frameClipRaw[name] || {};
+      pushEvent('tension_clipped', {
+        axis: name, raw: r.raw, held: r.held, lo: r.lo === undefined ? null : r.lo,
+        hi: r.hi === undefined ? null : r.hi,
+      });
+    }
+    tension.axisHeld[name] = on;
+    tension.frameClip[name] = false;
+  });
+}
+
 function tensionReadout() {
   if (!tension.on) return null;
   return {
@@ -456,6 +544,17 @@ function tensionReadout() {
     measure: +tension.tRaw.toFixed(4), suggest: null, output: +tension.t.toFixed(4),
     vt: +tension.vt.toFixed(4), flips: tension.flips, maxAbsT: +tension.maxAbsT.toFixed(4),
     clipped: tension.clipped, started: tension.started,
+    /* 已补＝显隐（材质透明度 0~1）与阴阳（雾密度下界 0，上界盘上无定义故不设）；
+       未实现＝明暗（光晕尺度倍率无有效域定义）与动静（相位推进倍率；"周期 ≥20 s"
+       是否管既有呼吸通道尚未获指明）。缺的是**定界依据**，本窗不拿改承诺代答。 */
+    axisClip: Object.assign({}, tension.axisClip),        // 路×帧
+    axisFrames: Object.assign({}, tension.axisFrames),    // 帧
+    axisClipped: Object.fromEntries(Object.entries(tension.axisClip)
+      .map(([k, n]) => [k, n > 0])),
+    axisImplemented: ['xianyin', 'yinyang'],
+    axisUnimplemented: ['mingan', 'dongjing'],
+    axisGapReason: '明暗＝glow 尺度倍率，盘上无有效域定义；动静＝相位推进倍率，'
+                 + '"周期 ≥20 s"这条界是否管既有呼吸通道未获指明（10-17 已提请候字）',
     k: +tension.k.toFixed(4), c: +tension.c.toFixed(4),
     v0: +tension.v0.toFixed(4), wd: +tension.wd.toFixed(4),
     slewCap: +tension.slewCap.toFixed(4), seg: tension.seg,
@@ -579,6 +678,13 @@ function finalizeReport(reason) {
     variant: VARIANT_KEY, variantLabel: spec.label,
     measured: false,                 // 本场景全程不接脑电，无测量
     synthOnly: SYNTH_ON,
+    /* 轴输出层这一格的现势（10-18 裁「补实现」）：已补两路与仍缺两路都写进报告，
+       未实现＝缺定界依据，不是本窗自行缩范围。默认档不挂张力⇒记 null，不造新值。 */
+    axisGap: tension.on ? {
+      implemented: ['xianyin', 'yinyang'], unimplemented: ['mingan', 'dongjing'],
+      clipCalls: Object.assign({}, tension.axisClip),    // 路×帧
+      clipFrames: Object.assign({}, tension.axisFrames), // 帧
+    } : null,
     reason,
     conditions: {
       xrSessionEnded: xr,
@@ -889,7 +995,11 @@ renderer.setAnimationLoop((time)=>{
     const fogTarget = BREATH.fog.base
       + BREATH.fog.amp * Math.sin(phFog)
       - (T ? tension.t * TENS.axes.yinyang.weight : 0);
-    breathState.fog += (fogTarget - breathState.fog) * follow(BREATH.fog.tau);
+    /* 轴输出层钳位（10-18 裁「补实现」）：雾是**密度**，下界 0（穿零＝无雾，负值无物理意义）；
+       上界盘上无定义 ⇒ 不设。⚠ 上面那行的**符号字面不得改**——共享闸 c10d「阴阳极接反」的
+       改动反证锚钉的正是那一行原文，改字面即打断反证。 */
+    breathState.fog += (clipAxis('yinyang', fogTarget, 0, null) - breathState.fog)
+      * follow(BREATH.fog.tau);
     scene.fog.density = breathState.fog;
     /* 乙 · 坛城明暗（近身呼吸载体；三层错相 120°，读作"空间在呼吸"非"整块在闪"）
        显隐轴＝三层**共同相对**倍率：保持 0.85／0.55／0.70 的既有比例（属已认可构图，
@@ -899,6 +1009,10 @@ renderer.setAnimationLoop((time)=>{
       const opTarget = L.base * (1 + BREATH.opac.amp
         * Math.sin(phLay + L.phase)) * opMul;
       L.cur += (opTarget - L.cur) * follow(BREATH.opac.tau);
+      /* 轴输出层钳位（10-18 裁「补实现」）：材质透明度有效域 0~1，越界即钉边界＋发事件。
+         界不是本窗新造的——依据＝丙 v2 §三.4「不进饱和区」判据（内层全程 ≤1）与 10-15
+         钳位探针实测（跨 1 后画面**非干净封顶**，仍有 1.134% 像素在漂），故 1 就是有效上界。 */
+      L.cur = clipAxis('xianyin', L.cur, 0, 1);
       L.mesh.material.opacity = L.cur;
     }
     /* 丙 · 中心光晕尺度（所缘的呼吸暗示；非坛城本体）＝明暗轴的相对倍率 */
@@ -907,6 +1021,7 @@ renderer.setAnimationLoop((time)=>{
       * Math.sin(phGlow)) * glowMul;
     breathState.glow += (glowTarget - breathState.glow) * follow(BREATH.glow.tau);
     glow.scale.setScalar(breathState.glow);
+    noteAxisClips();   // 帧末沿判定（本帧四路都算完了才判，缺的两路在此不产事件，见 axisUnimplemented）
   } else if (BREATH_ON) {
     breathState.lastT = time / 1000;   // 首帧只记基准时刻，次帧起呼吸
   }
@@ -1021,12 +1136,14 @@ window.__mandalaDiag = {
               + '张力层（?tension=pos|neg）为第四条载体候选，见 20261012_W1 设计稿',
     /* 张力层自述＋实时读数：`tensors` 用 getter，闸每次求值都取当前值而非快照。
        读数一律从注册表 spec.tension 来（单一正源），闸不得另写一份清单。 */
-    tension: TENS ? {
+    tension: TENS_REG ? {
       enabled: TENSION_ON, mode: TSIGN > 0 ? 'pos' : 'neg',
-      N: TENS.N, zeta: TENS.zeta, firstPeak: TENS.firstPeak,
-      maxT: TENS.maxT, maxSlew: TENS.maxSlew, changeSegSec: STAGES[2].dur,
-      axes: Object.fromEntries(Object.entries(TENS.axes)
-        .map(([k, v]) => [k, { weight: v.weight, unit: v.unit, channel: v.channel }])),
+      N: TENS_REG.N, zeta: TENS_REG.zeta, firstPeak: TENS_REG.firstPeak,
+      maxT: TENS_REG.maxT, maxSlew: TENS_REG.maxSlew, changeSegSec: STAGES[2].dur,
+      amp: Object.assign({}, TAMP),   // 全 1＝已认可基线；否则＝丙调幅离线候选（?tensionamp=）
+      axes: Object.fromEntries(Object.entries(TENS_REG.axes)
+        .map(([k, v]) => [k, { weight: v.weight, effWeight: +(v.weight * (TAMP[k] || 1)).toFixed(6),
+                               unit: v.unit, channel: v.channel }])),
       reserved: '苦乐／得失／善恶／美丑 四对依法师 10-12 追认「可」留空，不进参数字典',
     } : null,
     get tensors() { return tensionReadout(); },
