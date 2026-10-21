@@ -63,9 +63,12 @@ $tr = git log -1 --format='%b'
 foreach ($k in @('Session: ', 'Window: ', 'Model: ')) {
     if ($tr -match "(?m)^$k") { Ok "最新提交含 trailer $k" } else { Bad "最新提交缺 trailer $k（§二.3 六件套）" }
 }
-$dirty = @(git status --porcelain | Where-Object { $_ -match '^.[MD]' })
-if ($dirty.Count -eq 0) { Ok "工作区无未提交的已跟踪文件改动。" }
-else { Write-Host "[提示] 尚有 $($dirty.Count) 项已跟踪改动未提交——若是他窗口在途文件，按纪律④不代提交、只报告：" -ForegroundColor White; $dirty | ForEach-Object { Write-Host "  $_" } }
+$st4 = @(git status --porcelain 2>&1)
+$rc4 = $LASTEXITCODE
+if ($rc4 -ne 0) { Bad "闸4：取数被拒或 git 不可用（退码 $rc4）⇒ 工作区状态**未检**，不得当通过（法师 2026-10-21 裁 TM-1：只解禁这一处）。" }
+$dirty = @($st4 | Where-Object { $_ -match '^.[MD]' })
+if ($rc4 -eq 0 -and $dirty.Count -eq 0) { Ok "工作区无未提交的已跟踪文件改动（取数退码 0，非"取空当无"）。" }
+if ($rc4 -eq 0 -and $dirty.Count -gt 0) { Write-Host "[提示] 尚有 $($dirty.Count) 项已跟踪改动未提交——若是他窗口在途文件，按纪律④不代提交、只报告：" -ForegroundColor White; $dirty | ForEach-Object { Write-Host "  $_" } }
 
 # ---------- 5. 提交信息 BOM 闸门（坑010-W / ZG-065 / D-0925-W3a） ----------
 Section "5. 近 5 笔提交原始对象 subject 首三字节禁 BOM（EF BB BF）"
@@ -351,13 +354,15 @@ if (-not (Test-Path -LiteralPath $dj13)) {
     if ($i13a -ge 0 -and $i13b -gt $i13a) {
         # 段＝以空行分开的连续非空行；健康页在活条区里是「标题段 → 正文段」严格相间（正文允许跨多行）。
         # 孤儿＝**前面没有标题段领着**的正文段（含"标题被删、正文留下"那一形，以及段落之间漏了标题的夹带）。
-        $prevHead13 = $false; $paraHead13 = $true; $paraLine13 = 0
+        $prevHead13 = $false; $paraHead13 = $true; $paraLine13 = 0  # 2026-10-21 法师裁 TM-4：表格形页面按表内行计，不按段计
         for ($j = $i13a + 1; $j -lt $i13b; $j++) {
             $l13 = $ls13[$j]
             if ($l13 -match '^\s*$') { $paraHead13 = $true; continue }
             if ($paraHead13) {
                 $paraHead13 = $false; $paraLine13 = $j + 1
                 if ($l13 -match '^## P[0-9]+ ') { $prevHead13 = $true }
+                elseif ($l13 -match '^#{2,4} ') { $prevHead13 = $true }
+                elseif ($l13 -match '^\|') { $prevHead13 = $false }
                 elseif ($l13 -match '^（') { $prevHead13 = $false }
                 elseif ($prevHead13) { $prevHead13 = $false }
                 else { $orph13 += "$($j + 1)"; $prevHead13 = $false }
@@ -505,6 +510,23 @@ if ([string]::IsNullOrWhiteSpace($aud15)) {
     }
 }
 
+# ---------- 16. 读数三要素（复刻体反哺；法师 2026-10-22 准） ----------
+Section "16. 自动件读数三要素：时刻＋尺名＋出处"
+$autoReadings = @(
+    @{ N = 'flow_tick.log';     P = (Join-Path (Get-Location) '_analysis_tmp\flow_tick.log') },
+    @{ N = 'c3_archive.log';    P = (Join-Path (Get-Location) '_analysis_tmp\c3_archive.log') },
+    @{ N = 'continuous_state.json'; P = (Join-Path (Get-Location) '_analysis_tmp\continuous_state.json') }
+)
+foreach ($x in $autoReadings) {
+    if (-not (Test-Path $x.P)) { Bad "闸16：$($x.N) 不存在 ⇒ 该件读数**未检**，不得当通过。" ; continue }
+    if ($x.N -like '*.json') { try { $j16 = Get-Content $x.P -Raw -Encoding UTF8 | ConvertFrom-Json; $tail16 = [string]$j16.runAt } catch { $tail16 = '' } } else { $tail16 = (Get-Content $x.P -Encoding UTF8 -Tail 1) -join ' ' }
+    if ($tail16 -match '\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}') { Ok "闸16 $($x.N)：末行带时刻，尺名＝文件名本身、出处＝_analysis_tmp。" }
+    else { Bad "闸16：$($x.N) 末行缺时刻（尺名与出处无从核）——报数不带时刻即为印象（§二.13）。" }
+}
+$skips16 = @()
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) { $skips16 += 'python 面（调不到 python 可执行体）' }
+if (-not (Test-Path (Join-Path (Get-Location) '_analysis_tmp\诱饵集'))) { $skips16 += '诱饵集（目录不在盘）' }
+if ($skips16.Count -gt 0) { Write-Host ("[SKIP 报因] 本轮**未检**的门：" + ($skips16 -join '；') + " —— 未检≠通过（§二.16④／坑 044）。") -ForegroundColor Yellow }
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
