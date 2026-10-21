@@ -30,7 +30,9 @@ if (Test-Path $lockFile) {
 }
 Set-Content -Path $lockFile -Value (T) -Encoding UTF8
 
-$r = [ordered]@{ runAt = (T); steps = @(); flags = @(); hardFail = 0 }
+$prev = $null
+if (Test-Path $stateFile) { try { $prev = Get-Content $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $prev = $null } }
+$r = [ordered]@{ runAt = (T); steps = @(); flags = @(); hardFail = 0; lastFullGate = $(if ($prev) { $prev.lastFullGate } else { $null }) }
 
 function Step($no, $name, $body) {
   $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -94,11 +96,14 @@ Step 6 '闸' {
   $g1 = Join-Path $root '交接面检查.ps1'
   $g2 = Join-Path $repo '收口检查.ps1'
   $r1 = 0; $r2 = 0
+  $dueFull = $true
+  if ($r.lastFullGate) { try { $dueFull = (((Get-Date) - [datetime]$r.lastFullGate).TotalHours -ge 6) } catch { $dueFull = $true } }
   if (Test-Path $g1) { & powershell -NoProfile -ExecutionPolicy Bypass -File $g1 2>&1 | Out-Null; $r1 = $LASTEXITCODE }
-  if (Test-Path $g2) { $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $g2 2>&1) -join "`n"; $r2 = $LASTEXITCODE
+  if ((Test-Path $g2) -and $dueFull) { $o = (& powershell -NoProfile -ExecutionPolicy Bypass -File $g2 2>&1) -join "`n"; $r2 = $LASTEXITCODE; $r.lastFullGate = (T)
     if ($o -match '结论：\[([^\]]+)\]') { $r.flags += ('主闸：' + $Matches[1]) }
     if ($o -match '(\d+) 项告警') { $r.flags += ('主闸告警 ' + $Matches[1] + ' 项') } }
   if ($r1 -ne 0) { $r.hardFail++ }
+  if (-not $dueFull) { return ('交接面 rc=' + $r1 + '／主闸本轮跳过（距上次整跑未满 6 小时；上次 ' + $r.lastFullGate + '）') }
   return ('交接面 rc=' + $r1 + '／主闸 rc=' + $r2)
 }
 
