@@ -527,6 +527,36 @@ $skips16 = @()
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) { $skips16 += 'python 面（调不到 python 可执行体）' }
 if (-not (Test-Path (Join-Path (Get-Location) '_analysis_tmp\诱饵集'))) { $skips16 += '诱饵集（目录不在盘）' }
 if ($skips16.Count -gt 0) { Write-Host ("[SKIP 报因] 本轮**未检**的门：" + ($skips16 -join '；') + " —— 未检≠通过（§二.16④／坑 044）。") -ForegroundColor Yellow }
+# ---------- 17. 新条必配案例卡（坑 073 根治；法师 2026-10-23「21、22 该入案例库」） ----------
+Section "17. 规约新条是否都有案例卡（§六 三同步）"
+try {
+    $rule = Join-Path (Get-Location) 'AI-开工入口.md'
+    $ledger = Join-Path (Get-Location) '01_项目管理\规约条_案例覆盖台账_v1.md'
+    if (-not (Test-Path $ledger)) { Bad "闸17：规约条·案例覆盖台账不存在 ⇒ 本条**未检**，不得当通过。" }
+    else {
+        $rl = [System.IO.File]::ReadAllLines($rule, [System.Text.Encoding]::UTF8)
+        $ia = -1; $ib = -1
+        for ($i = 0; $i -lt $rl.Count; $i++) {
+            if ($rl[$i] -match '^## 二、') { $ia = $i }
+            if ($ia -ge 0 -and $rl[$i] -match '^## 二bis、') { $ib = $i; break }
+        }
+        $nums = @()
+        if ($ia -ge 0 -and $ib -gt $ia) { for ($i = $ia; $i -lt $ib; $i++) { if ($rl[$i] -match '^([0-9]+)\. \*\*') { $nums += [int]$Matches[1] } } }
+        $lg = [System.IO.File]::ReadAllLines($ledger, [System.Text.Encoding]::UTF8)
+        $lgnums = @($lg | ForEach-Object { if ($_ -match '^\|\s*(\d+)\s*\|') { [int]$Matches[1] } })
+        $missLedger = @($nums | Where-Object { $lgnums -notcontains $_ })
+        $newArts = @($nums | Where-Object { $_ -ge 21 })
+        $noCard = @()
+        foreach ($n in $newArts) {
+            $row = @($lg | Where-Object { $_ -match ('^\|\s*' + $n + '\s*\|') }) | Select-Object -First 1
+            if (-not $row) { $noCard += [string]$n; continue }
+            if ($row -match '\*\*无\*\*') { $noCard += [string]$n }
+        }
+        if ($missLedger.Count -gt 0) { Bad ("闸17：台账缺号 {0}（规约加了条没登记案例状态）" -f (($missLedger | Select-Object -First 8) -join '、')) }
+        elseif ($noCard.Count -gt 0) { Bad ("闸17：新条无案例卡 {0}——按 §六 三同步缺②，视为未落地" -f (($noCard | Select-Object -First 8) -join '、')) }
+        else { Ok ("闸17：规约 {0} 条与台账一一对应；新条 {1} 条（{2}）均有案例引用" -f $nums.Count, $newArts.Count, (($newArts | Select-Object -First 6) -join '、')) }
+    }
+} catch { Bad ('闸17 取数失败 ⇒ 未检：' + $_.Exception.Message) }
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
