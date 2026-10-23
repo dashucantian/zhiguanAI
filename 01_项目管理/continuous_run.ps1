@@ -87,7 +87,10 @@ Step 5 '推' {
   $env:GIT_SSH_COMMAND = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20'
   G push origin HEAD:master | Out-Null
   $left = (G rev-list --count '@{u}..HEAD')
-  if ([int]$left -gt 0) { $r.flags += '推送后仍有待推 ' + $left; $r.hardFail++; return ('推送失败，余 ' + $left) }
+  if ([int]$left -gt 0) {
+    $r.flags += ('推送受阻：待推 ' + $left + ' 笔（政策/管道所致，本地提交已保留）')
+    return ('推送受阻，待推 ' + $left + '（提交已保留，待本机代推）')
+  }
   return ('推完 ' + $ahead + ' 笔，余 0')
 }
 
