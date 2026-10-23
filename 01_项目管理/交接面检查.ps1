@@ -117,6 +117,26 @@ try {
   if ($claim -lt 0) { Say 'WARN' 'M1 未取到页头自报数 ⇒ 未验' }
   elseif ($claim -eq $liveRows) { Say 'OK' ("M1 账实同源：页头自报 {0} 条＝表内活行 {0} 条" -f $claim) }
   else { Say 'FAIL' ("M1 账实同源破：页头 {0} vs 表内活行 {1}" -f $claim, $liveRows) }
+  # ── C-06（法师 2026-10-23「准」）：M1b 正文「本轮 N 条」／M1c 机器尺，一并纳入
+  $round = -1
+  if ($hd -match '本轮\s*\*{0,2}(\d+)\*{0,2}\s*条') { $round = [int]$Matches[1] }
+  if ($round -ge 0 -and $claim -ge 0 -and $round -ne $claim) {
+    Say 'WARN' ("M1b 页头自述不一：正文「本轮 {0} 条」vs 须您一句 {1} 条 ⇒ 未归一" -f $round, $claim)
+  }
+  $rulerP = -1; $rulerCP = -1
+  if ($hd -match '\*\*P\*{0,2}`?\s*行\s*(\d+)') { $rulerP = [int]$Matches[1] }
+  if ($hd -match '\*\*C-P\*{0,2}`?\s*行\s*(\d+)') { $rulerCP = [int]$Matches[1] }
+  $actP = @($tl | Where-Object { $_ -match '^\|\s*\*\*P\d' }).Count
+  $actCP = @($tl | Where-Object { $_ -match '^\|\s*\*\*C-P' }).Count
+  if ($rulerP -lt 0 -and $rulerCP -lt 0) {
+    Say 'WARN' 'M1c 机器尺未取到 P／C-P 计数 ⇒ 未验'
+  } else {
+    $bad = @()
+    if ($rulerP -ge 0 -and $rulerP -ne $actP) { $bad += ("P 记 {0} 实 {1}" -f $rulerP, $actP) }
+    if ($rulerCP -ge 0 -and $rulerCP -ne $actCP) { $bad += ("C-P 记 {0} 实 {1}" -f $rulerCP, $actCP) }
+    if ($bad.Count -eq 0) { Say 'OK' ("M1c 机器尺对齐：P {0}／C-P {1}" -f $actP, $actCP) }
+    else { Say 'WARN' ('M1c 机器尺与实数不一：' + ($bad -join '；')) }
+  }
 } catch { Say 'WARN' ('M1 未取到待裁单 ⇒ 未验：' + $_.Exception.Message) }
 try {
   $sd = Join-Path $mroot '登记分片'
@@ -130,7 +150,8 @@ try {
     $hit = @(Get-ChildItem $od -File -Filter ('*待提交单*' + $id + '*') -ErrorAction SilentlyContinue)
     if ($hit.Count -eq 0) { $miss += $id }
   }
-  if ($miss.Count -eq 0) { Say 'OK' ("M2 片单对齐：满线 {0} 枚，枚枚有单" -f $ov.Count) }
+  if ($ov.Count -eq 0) { Say 'WARN' ("M2 无样本：满线 0 枚（窗口自 {0:yyyy-MM-dd} 起）⇒ 不判通过" -f $cut) }
+  elseif ($miss.Count -eq 0) { Say 'OK' ("M2 片单对齐：满线 {0} 枚，枚枚有单" -f $ov.Count) }
   else { Say 'FAIL' ("M2 片单对齐破：满线 {0} 枚中 {1} 枚无单（{2}）" -f $ov.Count, $miss.Count, (($miss | Select-Object -First 5) -join '／')) }
 } catch { Say 'WARN' ('M2 未取到分片目录 ⇒ 未验：' + $_.Exception.Message) }
 try {
