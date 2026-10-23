@@ -118,5 +118,16 @@ if g:
     if "±4%" in g:
         w("CuD-03 文件内仍存「±4%」字样（头注留痕，已裁“以执行式为准”）——引用时不得写成对称 ±4%")
 
+# ── 交叉 4：共享 .ps1 的 BOM（K-11；10-24 补，机核条数 4→5）──────────────
+KH = ROOT / "01_项目管理" / "交接面检查.ps1"
+try:
+    head3 = KH.read_bytes()[:3]
+    if head3 == b"\xef\xbb\xbf":
+        o("K-11 共享脚本 BOM 在：交接面检查.ps1 前三字节 EF BB BF")
+    else:
+        f(f"K-11 共享脚本 BOM 丢失（前三字节 {head3.hex()}）⇒ PS 5.1 会按 GBK 解析崩")
+except Exception as e:  # noqa: BLE001
+    w(f"K-11 读不到共享脚本 ⇒ 未验：{type(e).__name__}")
+
 print("[END] fail=%d warn=%d ok=%d" % (len(fail), len(warn), len(ok)))
 sys.exit(1 if fail else 0)
