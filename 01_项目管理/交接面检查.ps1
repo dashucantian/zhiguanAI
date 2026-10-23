@@ -103,5 +103,44 @@ if ($Handover -and (Test-Path (Join-Path $Root $Handover))) {
   Say 'WARN' '未给 -Handover：收口五件无法核（不判绿）'
 }
 
+# ── M 面三断言（MN-2；法师 2026-10-23 准改脚本）
+$mroot = $PSScriptRoot
+Say 'GATE' 'M 面三断言（账实同源／片单对齐／取不到即未验）'
+try {
+  $tl = [System.IO.File]::ReadAllLines((Join-Path $mroot '待裁单.md'), [System.Text.Encoding]::UTF8)
+  $hd = ($tl | Select-Object -First 9) -join "`n"
+  $claim = -1
+  if ($hd -match '须您一句[:：]?\s*\*\*(\d+) 条\*\*') { $claim = [int]$Matches[1] }
+  elseif ($hd -match '活 \*\*(\d+) 条\*\*') { $claim = [int]$Matches[1] }
+  elseif ($hd -match '现\s*(\d+)\s*条待裁') { $claim = [int]$Matches[1] }
+  $liveRows = @($tl | Where-Object { $_ -match '^\| \*\*C-\d+' -and $_ -match '\|\s*\|\s*$' }).Count
+  if ($claim -lt 0) { Say 'WARN' 'M1 未取到页头自报数 ⇒ 未验' }
+  elseif ($claim -eq $liveRows) { Say 'OK' ("M1 账实同源：页头自报 {0} 条＝表内活行 {0} 条" -f $claim) }
+  else { Say 'FAIL' ("M1 账实同源破：页头 {0} vs 表内活行 {1}" -f $claim, $liveRows) }
+} catch { Say 'WARN' ('M1 未取到待裁单 ⇒ 未验：' + $_.Exception.Message) }
+try {
+  $sd = Join-Path $mroot '登记分片'
+  $od = Join-Path $mroot '交接试跑_20261019\DSH-fc2ce735'
+  $sh = @(Get-ChildItem $sd -File -Filter 'C3-值守-*.md' -ErrorAction SilentlyContinue)
+  $cut = Get-Date '2026-10-21 00:00:00'
+  $ov = @($sh | Where-Object { ((Get-Date) - $_.LastWriteTime).TotalSeconds -ge 86400 -and $_.LastWriteTime -ge $cut })
+  $miss = @()
+  foreach ($x in $ov) {
+    $id = ($x.BaseName -replace '^C3-值守-', '')
+    $hit = @(Get-ChildItem $od -File -Filter ('*待提交单*' + $id + '*') -ErrorAction SilentlyContinue)
+    if ($hit.Count -eq 0) { $miss += $id }
+  }
+  if ($miss.Count -eq 0) { Say 'OK' ("M2 片单对齐：满线 {0} 枚，枚枚有单" -f $ov.Count) }
+  else { Say 'FAIL' ("M2 片单对齐破：满线 {0} 枚中 {1} 枚无单（{2}）" -f $ov.Count, $miss.Count, (($miss | Select-Object -First 5) -join '／')) }
+} catch { Say 'WARN' ('M2 未取到分片目录 ⇒ 未验：' + $_.Exception.Message) }
+try {
+  $lg = Join-Path $mroot '任务关系图\源表早晚校验日志.txt'
+  if (-not (Test-Path $lg)) { Say 'WARN' 'M3 源表日志不在盘 ⇒ 未验（不得当通过）' }
+  else {
+    $last = (Get-Content $lg -Encoding UTF8 -Tail 1) -join ' '
+    if ($last -match '(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})') { Say 'OK' ("M3 取数在：源表末拍 {0}" -f $Matches[1]) }
+    else { Say 'WARN' 'M3 源表日志末行无时刻 ⇒ 未验' }
+  }
+} catch { Say 'WARN' ('M3 读源表日志失败 ⇒ 未验：' + $_.Exception.Message) }
 Say 'END' ("fail={0}" -f $fail)
 exit ([int]($fail -gt 0))
