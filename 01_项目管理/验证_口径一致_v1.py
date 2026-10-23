@@ -129,5 +129,53 @@ try:
 except Exception as e:  # noqa: BLE001
     w(f"K-11 读不到共享脚本 ⇒ 未验：{type(e).__name__}")
 
+# ── ML-3：我方设备剖面自检（结构完整／与 CuD-01 02 一致／差异显式）──────────
+OURP = ROOT / "01_项目管理" / "configs" / "neuradock-v1.md"
+op = read(OURP)
+oj = None
+if op:
+    try:
+        m = re.search(r"```json\s*(\{.*?\})\s*```", op, re.S)
+        if not m:
+            f("ML-3 剖面 md 里未找到 ```json 块")
+        else:
+            oj = json.loads(m.group(1))
+    except Exception as e:  # noqa: BLE001
+        f(f"ML-3 我方剖面解析失败：{type(e).__name__}")
+
+if oj:
+    sig = oj.get("signal", {})
+    ok_ours = (
+        sig.get("sampling_rate_hz") == 250
+        and sig.get("channel_count") == 7
+        and list(sig.get("channels", [])) == ["CP5", "CP6", "PO3", "PO4", "O1", "Oz", "O2"]
+        and str(sig.get("amplitude_unit", "")).lower() == "uv"
+    )
+    if ok_ours:
+        o("ML-3 我方剖面 signal 段与 CuD-01 一致（7 通道／250 Hz／µV）")
+    else:
+        f(f"ML-3 我方剖面 signal 段与 CuD-01 不一：{sig}")
+    tcp = oj.get("tcp", {})
+    if tcp.get("default_port") == 9600:
+        o("ML-3 我方剖面入口与 CuD-02 一致（9600）")
+    else:
+        f(f"ML-3 我方剖面端口与 CuD-02 不一：{tcp.get('default_port')}")
+    gates = oj.get("quality_gates_ours", {})
+    if gates.get("thresholds_version") == "20261013":
+        o("ML-3 我方剖面质量阈值版本与 CuD-04 一致（20261013）")
+    else:
+        f(f"ML-3 质量阈值版本与 CuD-04 不一：{gates.get('thresholds_version')}")
+    diffs = oj.get("diff_vs_reference", [])
+    bad = [d for d in diffs if not d.get("source")]
+    if len(diffs) < 3:
+        f(f"ML-3 差异节过少（{len(diffs)} 条，应 ≥3）⇒ 疑为『无差异』式偷懒")
+    elif bad:
+        f(f"ML-3 差异节有 {len(bad)} 条缺 source（无法回源）")
+    else:
+        o(f"ML-3 差异节 {len(diffs)} 条、条条带 source")
+    alpha = gates.get("bands_hz", {}).get("alpha")
+    if alpha == [8.0, 12.0]:
+        w("ML-3 提示：我方 alpha 用 8–12 Hz，对方用 8–13 Hz（差异已列，引用须带带宽）")
+
 print("[END] fail=%d warn=%d ok=%d" % (len(fail), len(warn), len(ok)))
 sys.exit(1 if fail else 0)
