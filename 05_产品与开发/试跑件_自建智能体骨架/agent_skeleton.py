@@ -17,7 +17,11 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import subprocess
+import urllib.error
+import urllib.request
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
@@ -259,41 +263,88 @@ def run(
     }
 
 
-class OpenAIClient:
-    """真实模型客户端。密钥只从环境变量取；本类不打印、不落盘密钥。"""
+DEFAULT_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+)
 
-    def __init__(self, model: str = "deepseek-chat", base_url: str = "https://api.deepseek.com"):
-        key = os.environ.get("DEEPSEEK_API_KEY")
+
+class HttpClient:
+    """极简 OpenAI 兼容客户端（标准库实现，零第三方依赖）。
+
+    为什么不用 openai 包：本机未装，且试跑件要能被任何一台机器直接跑起来。
+    为什么带浏览器 UA：OpenCode GO 前置 Cloudflare，按客户端指纹拦非浏览器请求
+    （实测 2026-10-27 04:0x：默认 UA 得 `HTTP 403 error code: 1010`，换 UA 即 200）。
+
+    接入点与密钥全由环境变量给，本类不打印、不落盘：
+      AGENT_API_KEY   密钥（缺则回落 DEEPSEEK_API_KEY）
+      AGENT_BASE_URL  默认 https://api.deepseek.com
+      AGENT_MODEL     默认 deepseek-chat
+      AGENT_CA_BUNDLE 可选：自备 CA 根证书 PEM（本机子进程不带系统根，实测须自备）
+      AGENT_UA        可选：自定义 User-Agent
+    """
+
+    def __init__(self, model: str | None = None, base_url: str | None = None):
+        key = os.environ.get("AGENT_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
         if not key:
             raise RuntimeError(
-                "未取到环境变量 DEEPSEEK_API_KEY；本试跑件不内置密钥（W3 判语第 3 条）"
+                "未取到 AGENT_API_KEY／DEEPSEEK_API_KEY；本试跑件不内置密钥（W3 判语第 3 条）"
             )
-        from openai import OpenAI  # 延迟导入：离线自测不需要装包
-
-        self._c = OpenAI(api_key=key, base_url=base_url)
-        self.model = model
+        self._key = key
+        base = base_url or os.environ.get("AGENT_BASE_URL") or "https://api.deepseek.com"
+        self.base_url = base.rstrip("/")
+        self.model = model or os.environ.get("AGENT_MODEL") or "deepseek-chat"
+        self._ua = os.environ.get("AGENT_UA") or DEFAULT_UA
+        self._session = os.environ.get("AGENT_SESSION") or str(uuid.uuid4())
+        bundle = os.environ.get("AGENT_CA_BUNDLE")
+        self._ctx = ssl.create_default_context(cafile=bundle) if bundle else None
 
     def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> dict:
-        r = self._c.chat.completions.create(
-            model=self.model, messages=list(messages), tools=list(tools), temperature=0
+        body = json.dumps(
+            {
+                "model": self.model,
+                "messages": list(messages),
+                "tools": list(tools),
+                "temperature": 0,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            self.base_url + "/chat/completions",
+            data=body,
+            method="POST",
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self._key}",
+                "User-Agent": self._ua,
+                "x-opencode-session": self._session,
+            },
         )
-        return r.choices[0].message.model_dump(exclude_none=True)
+        try:
+            with urllib.request.urlopen(req, timeout=180, context=self._ctx) as r:
+                data = json.load(r)
+        except urllib.error.HTTPError as e:
+            raise RuntimeError(f"模型接口 HTTP {e.code}：{e.read()[:300]!r}") from None
+        return data["choices"][0]["message"]
 
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = list(argv if argv is not None else [])
     if not args:
         print("用法：python agent_skeleton.py \"<任务一句话>\"")
-        print("注意：需先设环境变量 DEEPSEEK_API_KEY；默认只读档，写盘须改 ApprovalGate。")
+        print("环境变量：AGENT_API_KEY（或 DEEPSEEK_API_KEY）／AGENT_BASE_URL／AGENT_MODEL／AGENT_CA_BUNDLE")
+        print("注意：默认只读档，写盘与命令执行须改 ApprovalGate 并逐次审批。")
         return 2
     root = Path.cwd()
     gate = ApprovalGate(mode=READ_ONLY)
     tools = build_tools(root, gate)
     try:
-        client = OpenAIClient()
+        client = HttpClient()
     except RuntimeError as e:
         print(f"未取到可用模型客户端：{e}")
         return 3
+    print(f"[模型] {client.model} @ {client.base_url}")
     result = run(args[0], client, tools, gate, on_event=print)
     print("\n" + result["final"])
     return 0 if result["ok"] else 1

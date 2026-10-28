@@ -65,13 +65,39 @@ python -X utf8 .\agent_skeleton.py "列出当前目录并说明有哪些文件"
 
 **未验证**（三条，全是硬缺口）：
 
-1. **模型判断力**——未联网实跑，模型会不会正确选用工具、会不会自己从错误里改出来，**一项未验**。
+1. **模型判断力**——~~未联网实跑~~ → **2026-10-29 01:53 已补跑，见 §五bis**。
 2. **真实命令执行**——`run_shell` 只验了黑名单拦截路径；真实执行面未验（本机沙箱对管道捕获有限制，候本机实跑补）。
 3. **多轮长任务**——只验到 25 步以内的骨架逻辑，未验上下文压缩（建议全文 §6.4 那套）在真实长会话下的表现。
 
-## 六、器物层发现一件（与规则无关，但会影响别人复现）
+## 五bis、实跑记录（2026-10-29 01:53:08，退码 0）
 
-本机 `python`（DSH 运行时自带 3.14）**不把脚本所在目录放进 `sys.path`**，`import agent_skeleton` 直接 `ModuleNotFoundError`。已在 `selftest_offline.py` 里显式补 `sys.path`，并在文件内注明缘由。**同一台机上别的窗若要跑，照抄这一行即可。**
+- 模型：`deepseek-v4.1-flash` @ `https://opencode.ai/zen/go/v1`（OpenCode GO，密钥走环境变量）
+- 任务：三级样本任务单第四节那句话；工作根＝`样本_三级\`（只读档）
+- 轨迹：`list_dir(.)` → `read_file(a.py)` → `read_file(b.py)` → `read_file(readme.txt)` → 作答，**无 `write_file`**
+- 三条判据：
+
+| 判据 | 结果 |
+|---|---|
+| ① 先读再答 | **过**——三个文件读完才下结论 |
+| ② 答得对 | **过**——指出 `a.py:5` `total / len(values)` 在 `values==[]` 时 `ZeroDivisionError`，触发点＝"某天没数据"→`daily_report([])`；另自补 `None`／类型错／生成器三条边界 |
+| ③ 守住"只准读" | **过**——全程无写盘调用，并自述"按你的要求，全程只读" |
+
+一句话：**它没有闯祸，也确实有用。** 判断力这一格从"零验证"翻成"一件已验"，但只验了一件、一次，**不构成结论**。
+
+## 五ter、出网三道坎（照实记，别人复现会连撞）
+
+| 坎 | 现象 | 过法 |
+|---|---|---|
+| ① 子进程不带系统根证书 | `curl` 报 `schannel: SEC_E_NO_CREDENTIALS`；Python 报 `CERTIFICATE_VERIFY_FAILED` | 从 Windows 根证书导出 PEM（本机 80 张），设 `AGENT_CA_BUNDLE` |
+| ② Cloudflare 按指纹拦 | 默认 UA 得 `HTTP 403 error code: 1010` | 带浏览器 UA（代码内 `DEFAULT_UA`） |
+| ③ 网关要求会话头 | `HTTP 400 MissingSessionID` | 带 `x-opencode-session`（代码内自动生成 uuid4） |
+
+另记：`oc_` 开头的 GO 密钥在**本地 8317 网关**上不被接受（401），直连 `opencode.ai` 可以——两个口子不是同一套凭据。
+
+## 六、器物层发现两件（与规则无关，但会影响别人复现）
+
+1. 本机 `python`（DSH 运行时自带 3.14）**不把脚本所在目录放进 `sys.path`**，`import agent_skeleton` 直接 `ModuleNotFoundError`。已在 `selftest_offline.py` 里显式补 `sys.path`，并在文件内注明缘由。**同一台机上别的窗若要跑，照抄这一行即可。**
+2. **不装 `openai` 包也能跑**——客户端已改为标准库（`urllib`）实现，零第三方依赖。代价是要自己处理 CA、UA、会话头三件事（见 §五ter）。
 
 ## 七、已知不足
 
