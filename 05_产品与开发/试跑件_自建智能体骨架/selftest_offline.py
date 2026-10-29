@@ -59,7 +59,10 @@ class ScriptedClient:
         self.seen_tools: list = []
 
     def chat(self, messages, tools):
-        self.seen_tools = list(tools)
+        self.seen_tools = list(tools) if tools is not None else []
+        for m in messages:
+            if m.get("role") == "system" and "压缩成要点" in (m.get("content") or ""):
+                return final("要点：任务进行中；已读文件若干；关键事实见各步工具结果。")
         if self.i >= len(self.script):
             return final("（脚本用尽）")
         msg = self.script[self.i]
@@ -81,11 +84,14 @@ def check(name: str, fn) -> None:
         RESULTS.append((name, False, traceback.format_exc(limit=2).replace("\n", " ")))
 
 
-def new_run(script: list[dict], mode: str = sk.READ_ONLY, asker=None, max_steps: int = 25):
+def new_run(script: list[dict], mode: str = sk.READ_ONLY, asker=None, max_steps: int = 25,
+            budget: int = 0, spill: bool = False):
     gate = sk.ApprovalGate(mode=mode, asker=asker)
     tools = sk.build_tools(ROOT, gate)
     client = ScriptedClient(script)
-    result = sk.run("自测任务", client, tools, gate, max_steps=max_steps)
+    spill_dir = ROOT / "_spill" if spill else None
+    result = sk.run("自测任务", client, tools, gate, max_steps=max_steps,
+                    budget_chars=budget, spill_dir=spill_dir)
     return result, gate, client
 
 
@@ -229,6 +235,57 @@ def t15_glob_escape_filtered():
     assert outs and outs[0].startswith("命中 0 件"), outs
 
 
+def _mk_big_files(n: int = 3, size: int = 2000, char: str = "甲"):
+    for k in range(1, n + 1):
+        (TMP / f"big{k}.txt").write_text(char * size, encoding="utf-8")
+
+
+def _user_texts(result: dict) -> list[str]:
+    return [m.get("content") or "" for m in result["messages"] if m.get("role") == "user"]
+
+
+def t16_compaction_triggers_and_keeps_head():
+    _mk_big_files()
+    script = [call("read_file", {"path": f"_selftest_tmp/big{k}.txt"}) for k in (1, 2, 3)] + [final("完成")]
+    r, _, _ = new_run(script, budget=5000)
+    assert r["ok"] is True and r["final"] == "完成", r
+    texts = _user_texts(r)
+    assert any("〔历史摘要〕" in t for t in texts), "超预算该压没压"
+    assert r["messages"][0]["role"] == "system", "压缩后系统提示词应在首位"
+    assert r["messages"][1]["content"] == "自测任务", "压缩后任务原话应保留在头部"
+
+
+def t17_compaction_summary_injected_once():
+    _mk_big_files(n=5)
+    script = [call("read_file", {"path": f"_selftest_tmp/big{k}.txt"}) for k in range(1, 6)] + [final("完成")]
+    r, _, _ = new_run(script, budget=2000)
+    texts = _user_texts(r)
+    assert sum(1 for t in texts if "〔历史摘要〕" in t) >= 1, "低预算长链至少压一次"
+    assert r["ok"] is True, r
+
+
+def t18_no_compaction_when_under_budget():
+    (TMP / "small.txt").write_text("丁" * 500, encoding="utf-8")
+    r, _, _ = new_run([call("read_file", {"path": "_selftest_tmp/small.txt"}), final("完成")],
+                      budget=10_000_000)
+    texts = _user_texts(r)
+    assert not any("〔历史摘要〕" in t for t in texts), "没超预算不该压"
+
+
+def t19_spill_full_content_to_disk():
+    content = "乙" * 20000
+    (TMP / "huge.txt").write_text(content, encoding="utf-8")
+    r, _, _ = new_run([call("read_file", {"path": "_selftest_tmp/huge.txt"}), final("结束")], spill=True)
+    outs = tool_outputs(r)
+    assert outs and "已完整落盘" in outs[0], outs
+    assert "取回" in outs[0], outs
+    spill_dir = ROOT / "_spill"
+    files = list(spill_dir.glob("*.txt")) if spill_dir.exists() else []
+    assert files, "落盘文件不存在"
+    assert any(p.read_text(encoding="utf-8") == content for p in files), "落盘内容应逐字完整"
+    shutil.rmtree(spill_dir, ignore_errors=True)
+
+
 CHECKS = [
     ("T1 路径越界被拦", t1_path_escape),
     ("T2 危险命令被拦", t2_dangerous_command),
@@ -245,6 +302,10 @@ CHECKS = [
     ("T13 通配列文件", t13_glob_files),
     ("T14 检索截断报总数", t14_grep_max_hits),
     ("T15 通配越界被滤", t15_glob_escape_filtered),
+    ("T16 压缩触发与头部保留", t16_compaction_triggers_and_keeps_head),
+    ("T17 低预算长链至少压一次", t17_compaction_summary_injected_once),
+    ("T18 未超预算不压", t18_no_compaction_when_under_budget),
+    ("T19 超长输出落盘取回", t19_spill_full_content_to_disk),
 ]
 
 

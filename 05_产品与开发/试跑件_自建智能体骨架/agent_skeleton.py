@@ -72,6 +72,23 @@ def clip(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
     return text[:limit] + TRUNC_NOTE.format(n=len(text), m=limit)
 
 
+def clip_or_spill(text: str, spill_dir: Path | None, limit: int = MAX_TOOL_OUTPUT) -> str:
+    """超限三件套之一二：能落盘就落盘（原文完整），不能落盘才砍尾。
+
+    落盘是骨架自己记账，不是模型的 write_file——故默认关（AGENT_SPILL=1 才开），
+    只读档的纯净性不受它破坏；落盘点在 `_spill/`，read_file 可照路径取回。
+    """
+    if len(text) <= limit or not spill_dir:
+        return clip(text, limit)
+    spill_dir.mkdir(parents=True, exist_ok=True)
+    name = f"{uuid.uuid4().hex[:8]}.txt"
+    (spill_dir / name).write_text(text, encoding="utf-8")
+    return (
+        text[:limit]
+        + f"\n…〔原文 {len(text)} 字符已完整落盘 `_spill/{name}`，需要时用 read_file 按该路径取回〕"
+    )
+
+
 @dataclass
 class Tool:
     name: str
@@ -288,6 +305,49 @@ def execute(tools: dict[str, Tool], gate: ApprovalGate, name: str, args: dict) -
         return f"工具执行失败：{type(e).__name__}: {e}"
 
 
+def context_chars(messages: Sequence[dict]) -> int:
+    """上下文体量的粗估（字符数）。
+
+    中英混排下字符数 ≈ token（词元）的 2–4 倍，只当压缩阈值用，不冒充精度。
+    """
+    total = 0
+    for m in messages:
+        total += len(m.get("content") or "")
+        for tc in m.get("tool_calls") or []:
+            fn = tc.get("function") or {}
+            total += len(fn.get("name") or "") + len(fn.get("arguments") or "")
+    return total
+
+
+COMPACT_SYSTEM = (
+    "把下面的对话历史压缩成要点清单。保留：任务目标、每一步用了什么工具、"
+    "工具返回的关键事实与数字、已做决定、未解决事项。不要虚构，不要继续任务。"
+)
+
+
+def compact(
+    messages: list[dict],
+    client: Any,
+    keep_head: int = 2,
+    keep_tail: int = 4,
+) -> list[dict]:
+    """上下文压缩（三件套之三）：头部（系统＋任务）与最近几条原样留，中间段交给模型压成摘要。"""
+    if len(messages) <= keep_head + keep_tail:
+        return messages
+    head, tail = messages[:keep_head], messages[-keep_tail:]
+    middle = messages[keep_head:-keep_tail]
+    serialized = "\n".join(json.dumps(m, ensure_ascii=False) for m in middle)
+    reply = client.chat(
+        [
+            {"role": "system", "content": COMPACT_SYSTEM},
+            {"role": "user", "content": serialized},
+        ],
+        None,
+    )
+    summary = (reply.get("content") or "").strip() or "（压缩调用未返回内容）"
+    return head + [{"role": "user", "content": f"〔历史摘要〕\n{summary}"}] + tail
+
+
 def run(
     task: str,
     client: Any,
@@ -296,8 +356,13 @@ def run(
     max_steps: int = 25,
     system: str = SYSTEM,
     on_event: Callable[[str], None] | None = None,
+    budget_chars: int = 0,
+    spill_dir: Path | None = None,
 ) -> dict:
     """主循环：组装上下文 → 调模型 → 执行工具 → 结果回填 → 再调。
+
+    budget_chars>0 时，每轮调模型前查上下文粗估，超限即先压缩（头部＋尾部留、中段压成摘要）。
+    spill_dir 非空时，超长工具输出完整落盘并只回前段＋取回指引。
 
     返回 {ok, final, steps, messages}。ok=False 表示撞了最大步数。
     """
@@ -310,6 +375,10 @@ def run(
     history: list[tuple] = []
 
     for step in range(1, max_steps + 1):
+        if budget_chars and context_chars(messages) > budget_chars:
+            before = context_chars(messages)
+            messages = compact(messages, client)
+            say(f"〔压缩 {before} → {context_chars(messages)} 字符〕")
         reply = client.chat(messages, schemas)
         messages.append(reply)
         calls = reply.get("tool_calls") or []
@@ -340,7 +409,7 @@ def run(
                 {
                     "role": "tool",
                     "tool_call_id": call.get("id") or "",
-                    "content": clip(out),
+                    "content": clip_or_spill(out, spill_dir),
                 }
             )
 
@@ -388,16 +457,15 @@ class HttpClient:
         bundle = os.environ.get("AGENT_CA_BUNDLE")
         self._ctx = ssl.create_default_context(cafile=bundle) if bundle else None
 
-    def chat(self, messages: Sequence[dict], tools: Sequence[dict]) -> dict:
-        body = json.dumps(
-            {
-                "model": self.model,
-                "messages": list(messages),
-                "tools": list(tools),
-                "temperature": 0,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
+    def chat(self, messages: Sequence[dict], tools: Sequence[dict] | None) -> dict:
+        payload: dict = {
+            "model": self.model,
+            "messages": list(messages),
+            "temperature": 0,
+        }
+        if tools:
+            payload["tools"] = list(tools)
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
             self.base_url + "/chat/completions",
             data=body,
@@ -422,7 +490,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = list(argv if argv is not None else [])
     if not args:
         print("用法：python agent_skeleton.py \"<任务一句话>\"")
-        print("环境变量：AGENT_API_KEY（或 DEEPSEEK_API_KEY）／AGENT_BASE_URL／AGENT_MODEL／AGENT_CA_BUNDLE")
+        print("环境变量：AGENT_API_KEY（或 DEEPSEEK_API_KEY）／AGENT_BASE_URL／AGENT_MODEL／AGENT_CA_BUNDLE／AGENT_BUDGET_CHARS／AGENT_SPILL")
         print("注意：默认只读档，写盘与命令执行须改 ApprovalGate 并逐次审批。")
         return 2
     root = Path.cwd()
@@ -433,8 +501,17 @@ def main(argv: Iterable[str] | None = None) -> int:
     except RuntimeError as e:
         print(f"未取到可用模型客户端：{e}")
         return 3
+    budget = int(os.environ.get("AGENT_BUDGET_CHARS", "0") or 0)
+    spill = Path("_spill") if os.environ.get("AGENT_SPILL") == "1" else None
     print(f"[模型] {client.model} @ {client.base_url}")
-    result = run(args[0], client, tools, gate, on_event=print)
+    if budget:
+        print(f"[压缩阈值] {budget} 字符（超限自动压中段为摘要）")
+    if spill:
+        print("[落盘] 超长工具输出完整落盘 _spill/")
+    result = run(
+        args[0], client, tools, gate, on_event=print,
+        budget_chars=budget, spill_dir=spill,
+    )
     print("\n" + result["final"])
     return 0 if result["ok"] else 1
 
