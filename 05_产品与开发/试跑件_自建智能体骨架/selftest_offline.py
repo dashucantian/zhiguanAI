@@ -171,6 +171,64 @@ def t10_normal_finish():
     assert client.seen_tools, "工具清单没传给模型"
 
 
+def _mk_fixtures():
+    """检索工具的自造样本：每次重建，避免与前项互相污染。"""
+    d = TMP / "fix"
+    if d.exists():
+        shutil.rmtree(d)
+    (d / "sub").mkdir(parents=True)
+    (d / "sub" / "a.py").write_text(
+        "def mean(rows):\n    return sum(rows) / len(rows)\n", encoding="utf-8")
+    (d / "sub" / "b.txt").write_text(
+        "first line\nTODO fix this\nthird\n", encoding="utf-8")
+    (d / "many.txt").write_text(
+        "\n".join(f"hit {i}" for i in range(120)), encoding="utf-8")
+
+
+def t11_grep_hit_and_context():
+    _mk_fixtures()
+    r, _, _ = new_run([
+        call("grep", {"pattern": "def mean", "path": "_selftest_tmp/fix"}),
+        call("grep", {"pattern": "def mean", "path": "_selftest_tmp/fix", "context": 1}),
+        final("结束"),
+    ])
+    outs = tool_outputs(r)
+    assert len(outs) == 2, outs
+    assert "命中 1 处" in outs[0], outs
+    assert "a.py:1: def mean(rows):" in outs[0], outs
+    assert "a.py:2:" in outs[1] and "return sum(rows) / len(rows)" in outs[1], outs
+    assert "> " in outs[1], "上下文行应带命中标记"
+
+
+def t12_grep_bad_regex():
+    _mk_fixtures()
+    r, _, _ = new_run([call("grep", {"pattern": "([", "path": "_selftest_tmp/fix"}), final("结束")])
+    outs = tool_outputs(r)
+    assert outs and "工具执行失败" in outs[0] and "无效正则" in outs[0], outs
+
+
+def t13_glob_files():
+    _mk_fixtures()
+    r, _, _ = new_run([call("glob", {"pattern": "**/*.txt", "path": "_selftest_tmp/fix"}), final("结束")])
+    outs = tool_outputs(r)
+    assert outs and "命中 2 件" in outs[0], outs
+    assert "b.txt" in outs[0] and "many.txt" in outs[0], outs
+
+
+def t14_grep_max_hits():
+    _mk_fixtures()
+    r, _, _ = new_run([call("grep", {"pattern": "hit", "path": "_selftest_tmp/fix", "max_hits": 10}), final("结束")])
+    outs = tool_outputs(r)
+    assert outs and "命中 120 处" in outs[0], outs
+    assert "仅示前 10" in outs[0], outs
+
+
+def t15_glob_escape_filtered():
+    r, _, _ = new_run([call("glob", {"pattern": "../../../../*", "path": "_selftest_tmp/fix"}), final("结束")])
+    outs = tool_outputs(r)
+    assert outs and outs[0].startswith("命中 0 件"), outs
+
+
 CHECKS = [
     ("T1 路径越界被拦", t1_path_escape),
     ("T2 危险命令被拦", t2_dangerous_command),
@@ -182,6 +240,11 @@ CHECKS = [
     ("T8 最大步数生效", t8_max_steps),
     ("T9 超长输出截断", t9_truncation),
     ("T10 正常两步行收尾", t10_normal_finish),
+    ("T11 检索命中与上下文", t11_grep_hit_and_context),
+    ("T12 坏正则回填", t12_grep_bad_regex),
+    ("T13 通配列文件", t13_glob_files),
+    ("T14 检索截断报总数", t14_grep_max_hits),
+    ("T15 通配越界被滤", t15_glob_escape_filtered),
 ]
 
 

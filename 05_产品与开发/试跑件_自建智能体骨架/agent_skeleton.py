@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import json
 import os
+import fnmatch
+import glob as _globmod
+import re
 import ssl
 import subprocess
 import urllib.error
@@ -33,7 +36,7 @@ MAX_TOOL_OUTPUT = 8000
 TRUNC_NOTE = "\n…〔已截断：原文 {n} 字符，只回前 {m} 字符〕"
 
 SYSTEM = """你是一个命令行助手。规则：
-1. 需要看文件就调用 read_file，不要凭猜测说文件内容。
+1. 需要看文件就调用 read_file，不要凭猜测说文件内容；找文件用 glob，找内容用 grep——能精确命中就别整目录读。
 2. 改文件用 write_file，且必须先读过再写。
 3. 每次只做一小步，做完看结果再决定下一步。
 4. 命令失败时读错误信息、换一种方式重试，最多三次。
@@ -135,6 +138,69 @@ def build_tools(root: Path, gate: ApprovalGate) -> dict[str, Tool]:
             sorted(x.name + ("/" if x.is_dir() else "") for x in p.iterdir())
         )
 
+    def _grep(pattern: str, path: str = ".", include: str = "", max_hits: int = 50, context: int = 0) -> str:
+        """正则检索。找内容用它，别整目录读——这是省钱第一原则。"""
+        base = resolve_safe(root, path)
+        try:
+            rx = re.compile(pattern)
+        except re.error as e:
+            raise ValueError(f"无效正则：{e}") from None
+        if base.is_file():
+            files = [base]
+        else:
+            files = [p for p in sorted(base.rglob("*")) if p.is_file()]
+        if include:
+            files = [
+                p
+                for p in files
+                if fnmatch.fnmatch(p.name, include)
+                or fnmatch.fnmatch(str(p.relative_to(root)), include)
+            ]
+        total = 0
+        shown: list[str] = []
+        for f in files:
+            try:
+                if f.stat().st_size > 2_000_000:
+                    continue  # 超大件（疑似二进制/数据）跳过，防炸上下文
+                lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+            except OSError:
+                continue
+            for i, line in enumerate(lines, 1):
+                if rx.search(line):
+                    total += 1
+                    if total <= max_hits:
+                        rel = str(f.relative_to(root))
+                        if context > 0:
+                            lo, hi = max(1, i - context), min(len(lines), i + context)
+                            for j in range(lo, hi + 1):
+                                mark = ">" if j == i else " "
+                                shown.append(f"{rel}:{j}:{mark} {lines[j - 1]}")
+                        else:
+                            shown.append(f"{rel}:{i}: {line}")
+        head = f"命中 {total} 处"
+        if total > max_hits:
+            head += f"（仅示前 {max_hits}）"
+        return head + ("\n" + "\n".join(shown) if shown else "")
+
+    def _glob(pattern: str, path: str = ".") -> str:
+        """按通配符列文件。找文件用它。"""
+        base = resolve_safe(root, path)
+        try:
+            matches = _globmod.glob(str(base / pattern), recursive=True)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"通配符无法解析：{e}") from None
+        rels = []
+        for m in matches:
+            p = Path(m).resolve()
+            if p == root or root in p.parents:  # 通配符里带 .. 想越界？滤掉
+                rels.append(str(p.relative_to(root)))
+        rels = sorted(set(rels))
+        shown = rels[:200]
+        head = f"命中 {len(rels)} 件"
+        if len(rels) > 200:
+            head += "（仅示前 200）"
+        return head + ("\n" + "\n".join(shown) if shown else "")
+
     def _write_file(path: str, content: str) -> str:
         p = resolve_safe(root, path)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -164,6 +230,29 @@ def build_tools(root: Path, gate: ApprovalGate) -> dict[str, Tool]:
             "列出目录下的文件与子目录。",
             _list_dir,
             {"path": {"type": "string", "description": "相对工作根的目录，默认当前目录"}},
+        ),
+        Tool(
+            "grep",
+            "在指定目录或单个文件里按正则检索文本，返回「文件:行号: 该行」。超过 2MB 的文件跳过；命中数超限只示前若干并报总数。找内容用它，别整目录读。",
+            _grep,
+            {
+                "pattern": {"type": "string", "description": "正则表达式，例如 def mean\\( 或 TODO"},
+                "path": {"type": "string", "description": "目录或文件，默认当前目录"},
+                "include": {"type": "string", "description": "可选：只搜文件名匹配该通配的文件，如 *.py"},
+                "max_hits": {"type": "integer", "description": "最多回报条数，默认 50"},
+                "context": {"type": "integer", "description": "可选：每条命中前后各附几行，默认 0"},
+            },
+            ("pattern",),
+        ),
+        Tool(
+            "glob",
+            "按通配符列文件（支持 ** 递归），返回排序后的相对路径。找文件用它。",
+            _glob,
+            {
+                "pattern": {"type": "string", "description": "通配符，如 **/*.py 或 *.md"},
+                "path": {"type": "string", "description": "起始目录，默认当前目录"},
+            },
+            ("pattern",),
         ),
         Tool(
             "write_file",
