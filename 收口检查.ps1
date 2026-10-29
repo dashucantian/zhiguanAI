@@ -557,6 +557,21 @@ try {
         else { Ok ("闸17：规约 {0} 条与台账一一对应；新条 {1} 条（{2}）均有案例引用" -f $nums.Count, $newArts.Count, (($newArts | Select-Object -First 6) -join '、')) }
     }
 } catch { Bad ('闸17 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+# ---------- 18. 必读体量即报（F5；法师 2026-10-29「准改脚本」×2） ----------
+Section "18. 必读两件体量（全部字符尺＝ReadAllText.Length）"
+$f5s = Join-Path (Get-Location) '00_当前状态.md'
+$f5a = Join-Path (Get-Location) 'AI-开工入口.md'
+if (-not (Test-Path $f5s)) { Bad "闸18：状态页不在盘 ⇒ 未检" }
+else {
+    $lenS = ([System.IO.File]::ReadAllText($f5s, [System.Text.Encoding]::UTF8)).Length
+    $judge = 1578
+    if ($lenS -gt $judge) { Bad ("闸18：状态页 " + $lenS + " 字符（全部字符尺），判据 ≤" + $judge + " ⇒ 超 " + [math]::Round($lenS / $judge, 1) + " 倍；按瘦身方案下沉或二次瘦身") }
+    else { Ok ("闸18：状态页 " + $lenS + " ≤ " + $judge) }
+}
+if (Test-Path $f5a) {
+    $lenA = ([System.IO.File]::ReadAllText($f5a, [System.Text.Encoding]::UTF8)).Length
+    Write-Host ("[NOTE] 闸18 开工入口 " + $lenA + " 字符（表内无其 F5 判据行，只报不判）") -ForegroundColor Gray
+}
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
