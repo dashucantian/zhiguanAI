@@ -6,6 +6,7 @@ import sys
 
 from workbench.client import BasicAuthClient, check_health, format_log_line
 from workbench.config import ConfigError, load_config
+from workbench.lifecycle import check_lifecycle
 from workbench.sessions import SessionError, list_sessions
 
 
@@ -62,6 +63,27 @@ def cmd_sessions(args) -> int:
     return 0
 
 
+def cmd_lifecycle(args) -> int:
+    config = _load_config()
+    if config is None:
+        return 4
+
+    if args.dry_run:
+        print(f"dry-run: would check {config.safe_url} timeout={config.timeout}s")
+        return 0
+
+    result = check_lifecycle(config)
+    print(
+        f"port_before={result.port_before} port_after={result.port_after} "
+        f"exit_code={result.exit_code}"
+    )
+    if result.health_status is not None:
+        print(f"health_http={result.health_status} version={result.health_version}")
+    if result.error:
+        print(f"lifecycle error: {result.error}", file=sys.stderr)
+    return result.exit_code
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only workbench skeleton for the OpenCode serve API."
@@ -74,6 +96,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="send the request without Basic auth (expected 401)",
     )
     sub.add_parser("sessions", help="GET /session metadata only (read-only)")
+    lifecycle = sub.add_parser(
+        "lifecycle",
+        help="check an existing serve port (never starts or stops the service)",
+    )
+    lifecycle.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the plan only; no network calls",
+    )
     return parser
 
 
@@ -84,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_health(args)
     if args.command == "sessions":
         return cmd_sessions(args)
+    if args.command == "lifecycle":
+        return cmd_lifecycle(args)
     return 4
 
 

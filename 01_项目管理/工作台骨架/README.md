@@ -10,7 +10,7 @@
 |---|---|---|---|---|---|
 | S1 | 读配置（服务地址／端口／口令来源）→ Basic Auth → `/global/health` → 一行日志 | `workbench/config.py`、`workbench/client.py` | `python run_workbench.py health` | `python tests/selftest_s1.py` | 已实现 |
 | S2 | `GET /session` 只解析元数据允许字段，拒收 `title`／`summary`；错误留原句 | `workbench/sessions.py` | `python run_workbench.py sessions` | `python tests/selftest_s2.py` | 已实现 |
-| S3 | 连接既有端口（不代起服务）、超时 5s、退出码与端口确认、`--dry-run` 只打印 | `workbench/lifecycle.py` | `python run_workbench.py lifecycle --dry-run` | `python tests/selftest_s3.py` | 待做 |
+| S3 | 连接既有端口（不代起服务）、超时 5s、退出码与端口确认、`--dry-run` 只打印 | `workbench/lifecycle.py` | `python run_workbench.py lifecycle --dry-run` | `python tests/selftest_s3.py` | 已实现 |
 
 ## 二、配置与口令来源
 
@@ -36,7 +36,9 @@ python run_workbench.py health --no-auth
 - `health`：带凭据调 `/global/health`，成功打印 `version=...` 与一行日志；退出码 0。
 - `health --no-auth`：不带凭据，期望 401；退出码 2。
 - `sessions`：带凭据调 `/session`，只输出元数据允许字段（`id／parentID／projectID／directory／version／time`），**不输出 title／summary**；成功退出码 0。
-- 退出码：0 成功；2 HTTP／鉴权失败；3 连接／超时；4 配置错误；5 JSON／结构异常。
+- `lifecycle`：只连既有端口，**不代起服务**；超时上限 5 秒；打印 `port_before／port_after／exit_code`。
+- `lifecycle --dry-run`：只打印计划，**不发任何网络请求**。
+- 退出码：0 成功；2 HTTP／鉴权失败或端口未开；3 连接／超时或健康检查后端口关闭；4 配置错误；5 JSON／结构异常。
 - 日志行字段：`task=... time=... channel=... action=... http=... elapsed_ms=... level=...`；不含口令、标题、摘要。
 
 ## 四、边界
@@ -56,9 +58,10 @@ python run_workbench.py health --no-auth
 ```powershell
 python tests/selftest_s1.py
 python tests/selftest_s2.py
+python tests/selftest_s3.py
 ```
 
-自测使用 `tests/fake_server.py`（只绑 `127.0.0.1`），覆盖：带凭据 200、无凭据 401、非回环拒绝、缺口令拒绝、日志不含口令；S2 另覆盖 3 条会话、空数组、HTTP 500、坏 JSON、超时，且断言输出不含 `title`／`summary`。
+自测使用 `tests/fake_server.py`（只绑 `127.0.0.1`），覆盖：带凭据 200、无凭据 401、非回环拒绝、缺口令拒绝、日志不含口令；S2 另覆盖 3 条会话、空数组、HTTP 500、坏 JSON、超时，且断言输出不含 `title`／`summary`；S3 覆盖既有端口健康、端口未开、`--dry-run` 不调用、非回环拒绝。
 
 ## 七、未实现（明确不做）
 
