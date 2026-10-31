@@ -41,7 +41,10 @@ class FakeOpenCodeServer:
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 if data:
-                    self.wfile.write(data)
+                    try:
+                        self.wfile.write(data)
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                        pass
 
             def do_GET(self):
                 outer.requests.append(self.path)

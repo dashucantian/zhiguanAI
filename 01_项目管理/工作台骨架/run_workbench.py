@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
 from workbench.client import BasicAuthClient, check_health, format_log_line
 from workbench.config import ConfigError, load_config
+from workbench.sessions import SessionError, list_sessions
 
 
 def _load_config():
@@ -38,6 +40,28 @@ def cmd_health(args) -> int:
     return 2
 
 
+def cmd_sessions(args) -> int:
+    config = _load_config()
+    if config is None:
+        return 4
+
+    client = BasicAuthClient(config)
+    try:
+        result = list_sessions(client)
+    except SessionError as exc:
+        message = str(exc)
+        print(f"session error: {message}", file=sys.stderr)
+        if "connection error" in message or "timeout" in message.lower():
+            return 3
+        if message.startswith("HTTP"):
+            return 2
+        return 5
+
+    print(format_log_line(config, "session-list", result.status, result.elapsed_ms))
+    print(json.dumps(result.sessions, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only workbench skeleton for the OpenCode serve API."
@@ -49,6 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="send the request without Basic auth (expected 401)",
     )
+    sub.add_parser("sessions", help="GET /session metadata only (read-only)")
     return parser
 
 
@@ -57,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "health":
         return cmd_health(args)
+    if args.command == "sessions":
+        return cmd_sessions(args)
     return 4
 
 
