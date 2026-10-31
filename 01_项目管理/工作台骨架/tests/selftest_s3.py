@@ -21,7 +21,7 @@ def _config(url: str, timeout: str = "5.0"):
         "WORKBENCH_OPENCODE_URL": url,
         "WORKBENCH_TIMEOUT": timeout,
         "WORKBENCH_TASK_ID": "TASK-SELFTEST-S3",
-        "WORKBENCH_LEVEL": "L3_EGRESS",
+        "WORKBENCH_LEVEL": "L0_LOCAL",
     })
 
 
@@ -42,7 +42,7 @@ def main() -> int:
 
         closed_url = f"http://127.0.0.1:{_closed_port()}"
         closed = check_lifecycle(_config(closed_url))
-        assert closed.exit_code == 2 and not closed.ok, closed
+        assert closed.exit_code == 6 and not closed.ok, closed
         assert closed.port_before == "closed", closed
 
         dry = check_lifecycle(_config(closed_url), dry_run=True)
@@ -62,7 +62,7 @@ def main() -> int:
             "OPENCODE_SERVER_USERNAME": "opencode",
             "WORKBENCH_OPENCODE_URL": server.url,
             "WORKBENCH_TASK_ID": "TASK-SELFTEST-S3",
-            "WORKBENCH_LEVEL": "L3_EGRESS",
+            "WORKBENCH_LEVEL": "L0_LOCAL",
         })
         cli_ok = subprocess.run(
             [sys.executable, "run_workbench.py", "lifecycle"],
@@ -79,7 +79,7 @@ def main() -> int:
             [sys.executable, "run_workbench.py", "lifecycle"],
             cwd=ROOT, env=env_closed, capture_output=True, text=True, timeout=20,
         )
-        assert cli_closed.returncode == 2, (cli_closed.returncode, cli_closed.stdout, cli_closed.stderr)
+        assert cli_closed.returncode == 6, (cli_closed.returncode, cli_closed.stdout, cli_closed.stderr)
         assert "port_before=closed" in cli_closed.stdout, cli_closed.stdout
 
         cli_dry = subprocess.run(

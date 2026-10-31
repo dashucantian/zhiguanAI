@@ -46,6 +46,12 @@ class FakeOpenCodeServer:
                     except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
                         pass
 
+            def _send_redirect(self, location: str) -> None:
+                self.send_response(302)
+                self.send_header("Location", location)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
             def do_GET(self):
                 outer.requests.append(self.path)
                 if not self._authorized():
@@ -55,7 +61,11 @@ class FakeOpenCodeServer:
                     self._send(200, json.dumps({"healthy": True, "version": "1.19.5"}))
                     return
                 if self.path == "/session":
-                    if outer.mode == "empty":
+                    if outer.mode == "redirect":
+                        self._send_redirect("http://example.com/session")
+                    elif outer.mode == "large":
+                        self._send(200, "[" + " " * (2 * 1024 * 1024) + "]")
+                    elif outer.mode == "empty":
                         self._send(200, "[]")
                     elif outer.mode == "error":
                         self._send(500, json.dumps({"error": "boom"}))

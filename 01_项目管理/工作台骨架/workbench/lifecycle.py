@@ -5,6 +5,7 @@ import socket
 
 from .client import BasicAuthClient, check_health
 from .config import WorkbenchConfig
+from .exit_codes import EXIT_CONNECTION, EXIT_HTTP, EXIT_OK, EXIT_PORT_CLOSED
 
 PORT_CHECK_TIMEOUT = 5.0
 
@@ -19,6 +20,7 @@ class LifecycleResult:
     health_status: int | None
     health_version: str | None
     error: str | None
+    health_elapsed_ms: int | None = None
 
 
 def port_open(host: str, port: int, timeout: float = PORT_CHECK_TIMEOUT) -> bool:
@@ -33,7 +35,7 @@ def check_lifecycle(config: WorkbenchConfig, dry_run: bool = False) -> Lifecycle
     if dry_run:
         return LifecycleResult(
             ok=True,
-            exit_code=0,
+            exit_code=EXIT_OK,
             dry_run=True,
             port_before="not-checked",
             port_after="not-checked",
@@ -48,7 +50,7 @@ def check_lifecycle(config: WorkbenchConfig, dry_run: bool = False) -> Lifecycle
     if not before:
         return LifecycleResult(
             ok=False,
-            exit_code=2,
+            exit_code=EXIT_PORT_CLOSED,
             dry_run=False,
             port_before="closed",
             port_after="not-checked",
@@ -60,34 +62,41 @@ def check_lifecycle(config: WorkbenchConfig, dry_run: bool = False) -> Lifecycle
     health = check_health(BasicAuthClient(config), auth=True)
     after = port_open(host, config.port, timeout)
     if not health.ok:
+        if health.status is None:
+            exit_code = EXIT_CONNECTION
+        else:
+            exit_code = EXIT_HTTP
         return LifecycleResult(
             ok=False,
-            exit_code=3,
+            exit_code=exit_code,
             dry_run=False,
             port_before="open",
             port_after="open" if after else "closed",
             health_status=health.status,
             health_version=health.version,
             error=health.error,
+            health_elapsed_ms=health.elapsed_ms,
         )
     if not after:
         return LifecycleResult(
             ok=False,
-            exit_code=3,
+            exit_code=EXIT_CONNECTION,
             dry_run=False,
             port_before="open",
             port_after="closed",
             health_status=health.status,
             health_version=health.version,
             error="port closed after health",
+            health_elapsed_ms=health.elapsed_ms,
         )
     return LifecycleResult(
         ok=True,
-        exit_code=0,
+        exit_code=EXIT_OK,
         dry_run=False,
         port_before="open",
         port_after="open",
         health_status=health.status,
         health_version=health.version,
         error=None,
+        health_elapsed_ms=health.elapsed_ms,
     )

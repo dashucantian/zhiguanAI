@@ -20,20 +20,29 @@ def main() -> int:
             "OPENCODE_SERVER_USERNAME": "opencode",
             "WORKBENCH_OPENCODE_URL": server.url,
             "WORKBENCH_TASK_ID": "TASK-SELFTEST-S1",
-            "WORKBENCH_LEVEL": "L3_EGRESS",
+            "WORKBENCH_LEVEL": "L0_LOCAL",
         }
         config = load_config(env)
         client = BasicAuthClient(config)
 
         ok = check_health(client, auth=True)
         assert ok.ok and ok.status == 200 and ok.version == "1.19.5", ok
-        line = format_log_line(config, "health", ok.status, ok.elapsed_ms, ok.version)
+        line = format_log_line(
+            config, "health", ok.status, ok.elapsed_ms,
+            ok.version, summary="version=1.19.5",
+        )
         assert "http=200" in line and "test-password" not in line, line
+        assert "summary=version=1.19.5" in line and "approver=-" in line, line
+        assert "target=http://127.0.0.1:" in line and "level=L0_LOCAL" in line, line
 
         denied = check_health(client, auth=False)
         assert denied.status == 401 and not denied.ok, denied
-        denied_line = format_log_line(config, "health-noauth", denied.status, denied.elapsed_ms)
+        denied_line = format_log_line(
+            config, "health-noauth", denied.status, denied.elapsed_ms,
+            summary="unauthorized",
+        )
         assert "http=401" in denied_line and "test-password" not in denied_line, denied_line
+        assert "summary=unauthorized" in denied_line, denied_line
 
         try:
             load_config({})
@@ -64,6 +73,8 @@ def main() -> int:
         )
         assert cli_ok.returncode == 0, (cli_ok.returncode, cli_ok.stdout, cli_ok.stderr)
         assert "http=200" in cli_ok.stdout and "version=1.19.5" in cli_ok.stdout, cli_ok.stdout
+        assert "summary=version=1.19.5" in cli_ok.stdout, cli_ok.stdout
+        assert "approver=-" in cli_ok.stdout and "level=L0_LOCAL" in cli_ok.stdout, cli_ok.stdout
         assert "test-password" not in cli_ok.stdout + cli_ok.stderr
 
         cli_denied = subprocess.run(

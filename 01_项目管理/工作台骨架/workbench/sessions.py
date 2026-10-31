@@ -52,6 +52,8 @@ def list_sessions(client: BasicAuthClient) -> SessionListResult:
         raise SessionError(resp.error or "no response")
     if resp.status != 200:
         raise SessionError(f"HTTP {resp.status}: {resp.error or 'non-200'}")
+    if resp.error:
+        raise SessionError(resp.error)
     return SessionListResult(
         status=resp.status,
         elapsed_ms=resp.elapsed_ms,

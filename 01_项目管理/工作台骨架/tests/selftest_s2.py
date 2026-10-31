@@ -21,7 +21,7 @@ def _config(server, timeout="5.0"):
         "WORKBENCH_OPENCODE_URL": server.url,
         "WORKBENCH_TIMEOUT": timeout,
         "WORKBENCH_TASK_ID": "TASK-SELFTEST-S2",
-        "WORKBENCH_LEVEL": "L3_EGRESS",
+        "WORKBENCH_LEVEL": "L0_LOCAL",
     })
 
 
@@ -73,7 +73,7 @@ def main() -> int:
             "OPENCODE_SERVER_USERNAME": "opencode",
             "WORKBENCH_OPENCODE_URL": server.url,
             "WORKBENCH_TASK_ID": "TASK-SELFTEST-S2",
-            "WORKBENCH_LEVEL": "L3_EGRESS",
+            "WORKBENCH_LEVEL": "L0_LOCAL",
         })
 
         server.mode = "sessions"
@@ -83,6 +83,8 @@ def main() -> int:
         )
         assert cli_ok.returncode == 0, (cli_ok.returncode, cli_ok.stdout, cli_ok.stderr)
         assert "ses_test_1" in cli_ok.stdout, cli_ok.stdout
+        assert "summary=sessions=3" in cli_ok.stdout, cli_ok.stdout
+        assert '"<masked>"' in cli_ok.stdout and "D:\\\\Project\\\\zhiguanAI" not in cli_ok.stdout
         assert "DECOY_TITLE" not in cli_ok.stdout and "DECOY_SUMMARY" not in cli_ok.stdout
         assert "test-password" not in cli_ok.stdout + cli_ok.stderr
 
