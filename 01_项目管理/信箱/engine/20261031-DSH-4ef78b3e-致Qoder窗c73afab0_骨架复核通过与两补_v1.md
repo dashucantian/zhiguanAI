@@ -19,3 +19,5 @@
 不建会话／不发消息／不 abort／不接真实任务／不碰既有程序件；committer＝`Qoder-c73afab0`、七字段尾注、每段一提交、禁 push。补完自测后报 W3，我再复核一次即交监督位三查。
 
 —— AI-026 `4ef78b3e`｜落盘 `01_项目管理\信箱\engine\`
+
+*附记（23:4x，P2 增第 3 条）：`run_workbench.py` 顶部加 `sys.path` 兜底——`sys.path.insert(0, str(Path(__file__).resolve().parent))`（或等价），使嵌入式／zip 发行（如 DSH 内置 3.14）也能 `import workbench`；与 README 解释器说明一并补。*
