@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import os
 import re
 from urllib.parse import urlparse
@@ -33,6 +34,8 @@ class WorkbenchConfig:
     def __post_init__(self) -> None:
         if not isinstance(self.base_url, str):
             raise ConfigError("base_url must be a string")
+        if "?" in self.base_url or "#" in self.base_url:
+            raise ConfigError("base URL must not contain '?' or '#'")
         if self.base_url.endswith("/"):
             object.__setattr__(self, "base_url", self.base_url.rstrip("/"))
         parsed = urlparse(self.base_url)
@@ -46,8 +49,6 @@ class WorkbenchConfig:
             raise ConfigError("credentials must not be embedded in the base URL")
         if parsed.path not in ("", "/"):
             raise ConfigError("base URL must not include a path")
-        if parsed.query or parsed.fragment:
-            raise ConfigError("base URL must not include a query or fragment")
         try:
             port = parsed.port
         except ValueError as exc:
@@ -61,6 +62,12 @@ class WorkbenchConfig:
             raise ConfigError("password is required")
         if not isinstance(self.timeout, (int, float)) or isinstance(self.timeout, bool):
             raise ConfigError("timeout must be a number")
+        try:
+            finite = math.isfinite(self.timeout)
+        except OverflowError:
+            finite = False
+        if not finite:
+            raise ConfigError("timeout must be finite")
         if self.timeout <= 0:
             raise ConfigError("timeout must be greater than zero")
         if self.timeout > MAX_TIMEOUT:

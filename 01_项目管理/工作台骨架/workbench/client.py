@@ -47,11 +47,41 @@ class HealthResult:
     elapsed_ms: int
 
 
-def _read_limited(source, limit: int) -> bytes:
+def _source_socket(source):
+    current = getattr(source, "fp", source)
+    for _ in range(3):
+        raw = getattr(current, "raw", None)
+        sock = getattr(raw, "_sock", None)
+        if sock is not None:
+            return sock
+        next_fp = getattr(current, "fp", None)
+        if next_fp is None or next_fp is current:
+            break
+        current = next_fp
+    return None
+
+
+def _arm_read_timeout(source, remaining: float) -> None:
+    sock = _source_socket(source)
+    if sock is not None:
+        sock.settimeout(remaining)
+
+
+def _read_limited(source, limit: int, deadline: float | None = None) -> bytes:
+    reader = getattr(source, "read1", None)
+    if reader is None:
+        reader = getattr(getattr(source, "fp", None), "read1", None)
+    if reader is None:
+        reader = source.read
     chunks: list[bytes] = []
     total = 0
     while total <= limit:
-        chunk = source.read(min(READ_CHUNK, limit + 1 - total))
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("request deadline exceeded")
+            _arm_read_timeout(source, remaining)
+        chunk = reader(min(READ_CHUNK, limit + 1 - total))
         if not chunk:
             break
         chunks.append(chunk)
@@ -82,9 +112,10 @@ class BasicAuthClient:
         if auth:
             req.add_header("Authorization", self._auth_header)
         started = time.monotonic()
+        deadline = started + self.config.timeout
         try:
             with self._opener.open(req, timeout=self.config.timeout) as resp:
-                raw = _read_limited(resp, MAX_RESPONSE_BYTES)
+                raw = _read_limited(resp, MAX_RESPONSE_BYTES, deadline)
                 elapsed = int((time.monotonic() - started) * 1000)
                 if len(raw) > MAX_RESPONSE_BYTES:
                     return HttpResponse(
@@ -100,10 +131,18 @@ class BasicAuthClient:
                 )
         except urllib.error.HTTPError as exc:
             body = ""
-            if exc.fp is not None:
-                raw = _read_limited(exc, MAX_RESPONSE_BYTES)
-                if len(raw) <= MAX_RESPONSE_BYTES:
-                    body = raw.decode("utf-8", errors="replace")
+            try:
+                if exc.fp is not None:
+                    raw = _read_limited(exc, MAX_RESPONSE_BYTES, deadline)
+                    if len(raw) <= MAX_RESPONSE_BYTES:
+                        body = raw.decode("utf-8", errors="replace")
+            except TimeoutError:
+                return HttpResponse(
+                    status=exc.code,
+                    body="",
+                    elapsed_ms=int((time.monotonic() - started) * 1000),
+                    error="timeout: request deadline exceeded",
+                )
             if 300 <= exc.code < 400:
                 error = f"redirect rejected (HTTP {exc.code})"
             else:

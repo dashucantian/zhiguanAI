@@ -52,13 +52,29 @@ class FakeOpenCodeServer:
                 self.send_header("Content-Length", "0")
                 self.end_headers()
 
+            def _send_drip(self, total: int, interval: float) -> None:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(total))
+                self.end_headers()
+                for _ in range(total):
+                    try:
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                        return
+                    time.sleep(interval)
+
             def do_GET(self):
                 outer.requests.append(self.path)
                 if not self._authorized():
                     self._send(401, "")
                     return
                 if self.path == "/global/health":
-                    self._send(200, json.dumps({"healthy": True, "version": "1.19.5"}))
+                    if outer.mode == "drip":
+                        self._send_drip(12, 1.0)
+                    else:
+                        self._send(200, json.dumps({"healthy": True, "version": "1.19.5"}))
                     return
                 if self.path == "/session":
                     if outer.mode == "redirect":
