@@ -77,7 +77,7 @@ python run_workbench.py lifecycle --dry-run
 - **拒重定向**：`_NoRedirectHandler` 对任何 3xx 直接抛错，Authorization 不会随 302 离开回环。
 - **GET-only＋路径白名单**：`request()` 只收 `GET`，path 仅 `/global/health`、`/session`；越界立即抛 `ClientError`，**不发请求**。
 - **响应体硬上限**：1 MiB；超限报错，不解析。
-- **超时预算**：单次请求以 5 秒为**总预算**（连接、响应头、读体合计），读循环逐轮核剩余预算并重设 socket 超时，余量耗尽即中止；构造时 `timeout > 5` 自动压到 `5.0`。不说「硬顶」——预算是墙钟，不是单次 I/O。
+- **超时预算**：单次请求以 5 秒为**总预算**（连接、响应头、读体合计），读循环逐轮核剩余预算并重设 socket 超时，余量耗尽即中止；构造时 `timeout > 5` 自动压到 `5.0`。这里的预算是墙钟，不是单次 I/O。
 - **空分隔符**：原始基础地址含 `?` 或 `#`（包括空的 `?`／`#`）一律拒绝，防请求目标被改写成 `/` 或 `/?/global/health`。
 - **有限超时**：`nan`／`inf` 在配置层拒绝，CLI 退码 4、无 traceback。
 - **日志字段白名单＋截断**：`task_id`／`level` 过正则，`action`／`summary`／`approver`／`version` 统一清洗换行与竖线并截断，防拼接伪造。
