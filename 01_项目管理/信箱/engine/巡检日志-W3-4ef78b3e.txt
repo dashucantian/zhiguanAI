@@ -390,3 +390,14 @@
 - 记账：任务登记 `TASK-20261101-02`、待裁单 §四、中枢调用件 §十／§十一、L1。
 - 案例库提取｜2026-11-01｜候选：PS 5.1 无 BOM 中文脚本解析错位——属工程常识，暂不立卡（若再犯即立）。
 - 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
+
+## 2026-11-01 14:1x 收口十三段（批乙复验通过＋setup-token 核准，本机 Get-Date 现取）
+
+- Qoder 两函到（13:41 认领与凭据报告／13:47 批乙交付）：代码 `3af617d`（8 件，+326／−60）、记录 `35bf799`（+100）；author＝committer＝`Qoder-c73afab0`、七字段齐、其自报「未 push」属实（当时 origin 仍 `8f2719d`）。
+- 本窗复跑六段（3.12.10，骨架根）：s1／s2／s3／v11／v12／v12b **全 RC=0**，合计 **32.3 s**，跑后 `.pyc` 0。
+- 读码抽验四处（不采信其 PASS）：`sessions.py:24,40-41` 库层掩码；`lifecycle.py:51,66-67,79` 同一条 `deadline` 贯穿；`client.py:174-175` `finally: exc.close()`；`run_workbench.py:120` `--local-fake`；README 绝对承诺句 **0 处**。⇒ **V4—V7 全成立**。
+- 归因：其两笔（13:44／13:45）被本窗 14:01 那次推送带出门——**推送动作记本窗、提交仍记它**；已在复函写明。
+- 联调：`OPENCODE_SERVER_PASSWORD` 未注入，Qoder 选择不启动、不以假服务冒充——处置正确；联调与真服务验证仍候法师。
+- setup-token 核准：`--help` 仅「Set up a long-lived authentication token (requires Claude subscription)」；**非交互探针 15 s 零输出即挂起**（需真终端）；二进制内命中 `CLAUDE_CODE_OAUTH_TOKEN`／`ANTHROPIC_AUTH_TOKEN`／`ANTHROPIC_API_KEY`。用法已口头告法师（见复函／本轮答问）。
+- 案例库提取｜2026-11-01｜无可提取（复验轮）
+- 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
