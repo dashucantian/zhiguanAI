@@ -356,3 +356,14 @@
 - 待下一测（候法师转贴）：查挂载点——`ls /`、`findmnt -t 9p,virtiofs`、`df -h`，定它到底看不看得见本仓。
 - 案例库提取｜2026-11-01｜无可提取（首测回执轮；坑 079 已立）
 - 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
+
+## 2026-11-01 13:5x 收口十段（中枢调用 Claude 窗可行性，本机 Get-Date 现取）
+
+- 法师问：Opus 5.5 的强大功能用不上怎么办？能否看见本 W3 窗？能否在中枢里分工调用？
+- 查到 **甲通道**：本机有 `claude.exe` 2.1.309（`…\Claude-3p\claude-code\2.1.309\9078b9c1d466\claude.exe`，284.8 MB）；`--version` → rc=0／0.1 s；`-p` 探针 **rc=1「Not logged in · Please run /login」**（1.4 s）⇒ **只差一次登录**。
+- 另查 cowork 两份配置的 user files path **打架**：`claude_desktop_config.json`＝`D:\Project\zhiguanAI`，`cowork-enabled-cli-ops.json`＝`C:\Users\tiand\Claude`（后者只有 `Artifacts`／`Scheduled` 两目录）；VM 内 `/mnt` 空 ⇒ **不建议去修 VM**。
+- 定性三通道：甲 CLI（cwd＝本仓、工具白名单 `Read/Grep/Glob` 强制只读）／乙 cowork VM（要改配置，plan9 对 git 不牢）／丙 只读包（现状可用，本轮已产两条真问题）。
+- 纪律：调用外部模型＝**三级出网**，须法师字，每次记级别与用量；脚本属程序件，未创建，得字后固化为 `中枢_调Claude.ps1`。
+- ⚠风险提示：`claude_desktop_config.json` 内飞书 `APP_SECRET` **明文**；本窗为查配置读过该件，**未入库、未外发**，建议法师换密钥。
+- 案例库提取｜2026-11-01｜无可提取（可行性查证轮）
+- 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
