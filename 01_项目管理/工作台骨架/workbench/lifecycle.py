@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import socket
+import time
 
 from .client import BasicAuthClient, check_health
 from .config import WorkbenchConfig
 from .exit_codes import EXIT_CONNECTION, EXIT_HTTP, EXIT_OK, EXIT_PORT_CLOSED
 
 PORT_CHECK_TIMEOUT = 5.0
+MIN_PORT_RECHECK = 0.1
 
 
 @dataclass(frozen=True)
@@ -45,8 +47,10 @@ def check_lifecycle(config: WorkbenchConfig, dry_run: bool = False) -> Lifecycle
         )
 
     host = config.host or ""
-    timeout = min(config.timeout, PORT_CHECK_TIMEOUT)
-    before = port_open(host, config.port, timeout)
+    started = time.monotonic()
+    deadline = started + config.timeout
+    port_timeout = min(config.timeout, PORT_CHECK_TIMEOUT)
+    before = port_open(host, config.port, port_timeout)
     if not before:
         return LifecycleResult(
             ok=False,
@@ -59,8 +63,35 @@ def check_lifecycle(config: WorkbenchConfig, dry_run: bool = False) -> Lifecycle
             error="port closed",
         )
 
-    health = check_health(BasicAuthClient(config), auth=True)
-    after = port_open(host, config.port, timeout)
+    remaining = deadline - time.monotonic()
+    if remaining < MIN_PORT_RECHECK:
+        return LifecycleResult(
+            ok=False,
+            exit_code=EXIT_CONNECTION,
+            dry_run=False,
+            port_before="open",
+            port_after="not-checked",
+            health_status=None,
+            health_version=None,
+            error="lifecycle deadline exceeded",
+        )
+
+    health = check_health(BasicAuthClient(config), auth=True, deadline=deadline)
+    remaining = deadline - time.monotonic()
+    # Too little budget left: do not run a doomed recheck and report "closed".
+    if remaining < MIN_PORT_RECHECK:
+        return LifecycleResult(
+            ok=False,
+            exit_code=EXIT_CONNECTION,
+            dry_run=False,
+            port_before="open",
+            port_after="not-checked",
+            health_status=health.status,
+            health_version=health.version,
+            error="lifecycle deadline exceeded",
+            health_elapsed_ms=health.elapsed_ms,
+        )
+    after = port_open(host, config.port, remaining)
     if not health.ok:
         if health.status is None:
             exit_code = EXIT_CONNECTION

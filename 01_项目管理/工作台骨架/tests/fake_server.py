@@ -52,8 +52,8 @@ class FakeOpenCodeServer:
                 self.send_header("Content-Length", "0")
                 self.end_headers()
 
-            def _send_drip(self, total: int, interval: float) -> None:
-                self.send_response(200)
+            def _send_drip(self, total: int, interval: float, status: int = 200) -> None:
+                self.send_response(status)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(total))
                 self.end_headers()
@@ -85,6 +85,8 @@ class FakeOpenCodeServer:
                         self._send(200, "[]")
                     elif outer.mode == "error":
                         self._send(500, json.dumps({"error": "boom"}))
+                    elif outer.mode == "error_drip":
+                        self._send_drip(12, 1.0, status=500)
                     elif outer.mode == "badjson":
                         self._send(200, "not json")
                     elif outer.mode == "slow":

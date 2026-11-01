@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import sys
 from pathlib import Path
@@ -20,25 +21,19 @@ from workbench.lifecycle import check_lifecycle
 from workbench.sessions import SessionError, list_sessions
 
 
-def _load_config():
+def _load_config(args=None):
     try:
-        return load_config()
+        config = load_config()
     except ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return None
-
-
-def _mask_directories(sessions: list[dict]) -> list[dict]:
-    masked = []
-    for session in sessions:
-        if session.get("directory") is not None:
-            session = {**session, "directory": "<masked>"}
-        masked.append(session)
-    return masked
+    if args is not None and getattr(args, "local_fake", False):
+        config = replace(config, level="L0_LOCAL")
+    return config
 
 
 def cmd_health(args) -> int:
-    config = _load_config()
+    config = _load_config(args)
     if config is None:
         return EXIT_CONFIG
 
@@ -70,13 +65,13 @@ def cmd_health(args) -> int:
 
 
 def cmd_sessions(args) -> int:
-    config = _load_config()
+    config = _load_config(args)
     if config is None:
         return EXIT_CONFIG
 
     client = BasicAuthClient(config)
     try:
-        result = list_sessions(client)
+        result = list_sessions(client, show_directory=args.show_directory)
     except SessionError as exc:
         message = str(exc)
         print(f"session error: {message}", file=sys.stderr)
@@ -90,13 +85,12 @@ def cmd_sessions(args) -> int:
         config, "session-list", result.status, result.elapsed_ms,
         summary=f"sessions={len(result.sessions)}",
     ))
-    sessions = result.sessions if args.show_directory else _mask_directories(result.sessions)
-    print(json.dumps(sessions, ensure_ascii=False, indent=2))
+    print(json.dumps(result.sessions, ensure_ascii=False, indent=2))
     return EXIT_OK
 
 
 def cmd_lifecycle(args) -> int:
-    config = _load_config()
+    config = _load_config(args)
     if config is None:
         return EXIT_CONFIG
 
@@ -121,6 +115,14 @@ def cmd_lifecycle(args) -> int:
     return result.exit_code
 
 
+def _add_local_fake(parser) -> None:
+    parser.add_argument(
+        "--local-fake",
+        action="store_true",
+        help="label this run L0_LOCAL (local stub; does not change the target)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Read-only workbench skeleton for the OpenCode serve API."
@@ -132,12 +134,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="send the request without Basic auth (expected 401)",
     )
+    _add_local_fake(health)
     sessions = sub.add_parser("sessions", help="GET /session metadata only (read-only)")
     sessions.add_argument(
         "--show-directory",
         action="store_true",
         help="print the real directory field (masked by default)",
     )
+    _add_local_fake(sessions)
     lifecycle = sub.add_parser(
         "lifecycle",
         help="check an existing serve port (never starts or stops the service)",
@@ -147,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the plan only; no network calls",
     )
+    _add_local_fake(lifecycle)
     return parser
 
 

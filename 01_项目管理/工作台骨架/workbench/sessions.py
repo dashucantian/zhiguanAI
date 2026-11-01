@@ -7,6 +7,7 @@ from .client import BasicAuthClient
 
 ALLOWED_SESSION_FIELDS = ("id", "parentID", "projectID", "directory", "version")
 ALLOWED_TIME_FIELDS = ("created", "updated")
+MASKED_DIRECTORY = "<masked>"
 
 
 class SessionError(RuntimeError):
@@ -20,7 +21,7 @@ class SessionListResult:
     sessions: list[dict]
 
 
-def parse_sessions(raw: str) -> list[dict]:
+def parse_sessions(raw: str, show_directory: bool = False) -> list[dict]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -36,6 +37,8 @@ def parse_sessions(raw: str) -> list[dict]:
         if not isinstance(item, dict):
             raise SessionError(f"session[{index}] is not an object")
         meta = {field: item.get(field) for field in ALLOWED_SESSION_FIELDS}
+        if not show_directory and meta.get("directory") is not None:
+            meta["directory"] = MASKED_DIRECTORY
         time_value = item.get("time")
         if isinstance(time_value, dict):
             meta["time"] = {field: time_value.get(field) for field in ALLOWED_TIME_FIELDS}
@@ -46,7 +49,9 @@ def parse_sessions(raw: str) -> list[dict]:
     return sessions
 
 
-def list_sessions(client: BasicAuthClient) -> SessionListResult:
+def list_sessions(
+    client: BasicAuthClient, show_directory: bool = False
+) -> SessionListResult:
     resp = client.request("GET", "/session")
     if resp.status is None:
         raise SessionError(resp.error or "no response")
@@ -57,5 +62,5 @@ def list_sessions(client: BasicAuthClient) -> SessionListResult:
     return SessionListResult(
         status=resp.status,
         elapsed_ms=resp.elapsed_ms,
-        sessions=parse_sessions(resp.body),
+        sessions=parse_sessions(resp.body, show_directory=show_directory),
     )

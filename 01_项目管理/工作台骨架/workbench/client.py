@@ -101,7 +101,13 @@ class BasicAuthClient:
             _NoRedirectHandler(),
         )
 
-    def request(self, method: str, path: str, auth: bool = True) -> HttpResponse:
+    def request(
+        self,
+        method: str,
+        path: str,
+        auth: bool = True,
+        deadline: float | None = None,
+    ) -> HttpResponse:
         if method != "GET":
             raise ClientError(f"method not allowed: {method}")
         if path not in ALLOWED_PATHS:
@@ -112,9 +118,20 @@ class BasicAuthClient:
         if auth:
             req.add_header("Authorization", self._auth_header)
         started = time.monotonic()
-        deadline = started + self.config.timeout
+        if deadline is None:
+            deadline = started + self.config.timeout
+        remaining = deadline - started
+        if remaining <= 0:
+            return HttpResponse(
+                status=None,
+                body="",
+                elapsed_ms=0,
+                error="timeout: request deadline exceeded",
+            )
         try:
-            with self._opener.open(req, timeout=self.config.timeout) as resp:
+            with self._opener.open(
+                req, timeout=min(self.config.timeout, remaining)
+            ) as resp:
                 raw = _read_limited(resp, MAX_RESPONSE_BYTES, deadline)
                 elapsed = int((time.monotonic() - started) * 1000)
                 if len(raw) > MAX_RESPONSE_BYTES:
@@ -130,29 +147,32 @@ class BasicAuthClient:
                     elapsed_ms=elapsed,
                 )
         except urllib.error.HTTPError as exc:
-            body = ""
             try:
-                if exc.fp is not None:
-                    raw = _read_limited(exc, MAX_RESPONSE_BYTES, deadline)
-                    if len(raw) <= MAX_RESPONSE_BYTES:
-                        body = raw.decode("utf-8", errors="replace")
-            except TimeoutError:
+                body = ""
+                try:
+                    if exc.fp is not None:
+                        raw = _read_limited(exc, MAX_RESPONSE_BYTES, deadline)
+                        if len(raw) <= MAX_RESPONSE_BYTES:
+                            body = raw.decode("utf-8", errors="replace")
+                except TimeoutError:
+                    return HttpResponse(
+                        status=exc.code,
+                        body="",
+                        elapsed_ms=int((time.monotonic() - started) * 1000),
+                        error="timeout: request deadline exceeded",
+                    )
+                if 300 <= exc.code < 400:
+                    error = f"redirect rejected (HTTP {exc.code})"
+                else:
+                    error = f"HTTP {exc.code}"
                 return HttpResponse(
                     status=exc.code,
-                    body="",
+                    body=body,
                     elapsed_ms=int((time.monotonic() - started) * 1000),
-                    error="timeout: request deadline exceeded",
+                    error=error,
                 )
-            if 300 <= exc.code < 400:
-                error = f"redirect rejected (HTTP {exc.code})"
-            else:
-                error = f"HTTP {exc.code}"
-            return HttpResponse(
-                status=exc.code,
-                body=body,
-                elapsed_ms=int((time.monotonic() - started) * 1000),
-                error=error,
-            )
+            finally:
+                exc.close()
         except urllib.error.URLError as exc:
             reason = getattr(exc, "reason", exc)
             return HttpResponse(
@@ -170,8 +190,10 @@ class BasicAuthClient:
             )
 
 
-def check_health(client: BasicAuthClient, auth: bool = True) -> HealthResult:
-    resp = client.request("GET", "/global/health", auth=auth)
+def check_health(
+    client: BasicAuthClient, auth: bool = True, deadline: float | None = None
+) -> HealthResult:
+    resp = client.request("GET", "/global/health", auth=auth, deadline=deadline)
     if resp.status != 200:
         return HealthResult(
             ok=False,
