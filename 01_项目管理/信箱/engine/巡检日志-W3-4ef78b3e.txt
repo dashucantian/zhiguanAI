@@ -430,3 +430,13 @@
 - 旁证：`~/.claude` 无凭据；二进制含 `ANTHROPIC_BASE_URL`／`ANTHROPIC_AUTH_TOKEN`／`ANTHROPIC_MODEL`／`ANTHROPIC_SMALL_FAST_MODEL`，且出现 openrouter 字样 ⇒ 网关模式可行。
 - 案例库提取｜2026-11-01｜无可提取（呈验轮）
 - 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
+
+## 2026-11-01 20:4x 收口十七段（法师字「准验收」；Claude 窗挂载点查明，本机 Get-Date 现取）
+
+- 法师字「**准验收**」＝骨架 v1.2 整批（V1—V7）**验收通过**；`TASK-20261031-05` 与 `TASK-20261101-01` 一并销项；工作台线转「待批：真实联调」。
+- 落账：任务登记两行状态、待裁单 §四 记账、呈验件 §七 附记、L1 新行。
+- **Claude 窗挂载点查明**：两份配置均已改为 `D:\Project\zhiguanAI`（20:25／20:26），VM 20:26:47 重启、`add_plan9_shares completed (2482ms)`；日志旧痕给出真路径——`/sessions/amazing-fervent-lovelace/mnt/zhiguanAI/...` ⇒ 它所见「根目录只有 mnt／tmp」正是 session 目录，**本仓在 `mnt/zhiguanAI`**，读码位已可直读。
+- 但 plan9 上有历史硬伤：`.git/index.lock`／`HEAD.lock` unlink 报 `Operation not permitted` ⇒ **不要指望它在 VM 里做 git 操作或写盘**；定位仍是读码位，写与提交归执行窗。
+- CLI 登录：已在「选登录方式」处确认三条路（订阅／Console 计费／Bedrock-Foundry-Vertex）皆非现有账号 ⇒ 搁置；丙路线（桌面端直读）已成立。
+- 案例库提取｜2026-11-01｜无可提取（验收轮）
+- 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
