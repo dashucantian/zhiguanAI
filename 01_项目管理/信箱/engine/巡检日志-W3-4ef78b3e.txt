@@ -401,3 +401,14 @@
 - setup-token 核准：`--help` 仅「Set up a long-lived authentication token (requires Claude subscription)」；**非交互探针 15 s 零输出即挂起**（需真终端）；二进制内命中 `CLAUDE_CODE_OAUTH_TOKEN`／`ANTHROPIC_AUTH_TOKEN`／`ANTHROPIC_API_KEY`。用法已口头告法师（见复函／本轮答问）。
 - 案例库提取｜2026-11-01｜无可提取（复验轮）
 - 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
+
+## 2026-11-01 14:3x 收口十四段（CLI 403 根因：未继承系统代理，本机 Get-Date 现取）
+
+- 法师实跑 `claude.exe`（交互）报 `Unable to connect… Status 403`，与沙箱内那次同源。
+- 查证：系统代理 `ProxyEnable=1`、`127.0.0.1:10808`（在听）；**无** `HTTP(S)_PROXY` 环境变量（进程／用户／机器三级）。
+- 三路实测：`api.anthropic.com/v1/messages` 走代理 **405**（Anthropic 真回）、直连 **403**；`claude.ai` 走代理 403（CF 拦裸 curl）；`downloads.claude.ai` 200；`github` 200。
+- ⇒ **代理通、CLI 未用**：Node 不读 WinINET 系统代理。给 `HTTP(S)_PROXY=http://127.0.0.1:10808` 后，`-p` 立刻从 403 变为 `Not logged in`（rc=1）。
+- 处置：脚本增代理自动注入（读 WinINET，写子进程 `HTTP(S)_PROXY`＋`NO_PROXY=127.0.0.1,localhost`）；DryRun 实见 `proxy=http://127.0.0.1:10808`，真调用 rc=3（未登录）。四路自测仍成立。
+- 提醒已给法师：不必永久设全局代理（会连带 git／pip／npm）；交互登录用一次性变量即可。
+- 案例库提取｜2026-11-01｜候选：**「系统代理 ≠ 命令行代理」**（GUI 走 WinINET，Node/CLI 只认环境变量）——暂不立卡，若再撞即立。
+- 待裁单对账：现势 0 行｜本轮新增落单 0 条｜漂在正文 0 条
