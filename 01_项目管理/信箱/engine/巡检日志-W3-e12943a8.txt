@@ -1962,7 +1962,7 @@ AI-032 窗 14:29 补一句：其 14:28 订正函中「只□行号位移」一�
 
 二、投递回执（现点）
 
-- **致 AI-032 窗函 04 已投**（上游委派方）：sessionId `bf47639f-5718-5076-aece-1aa6f8be430e`，sessionRef authorityEndpointId `1e438c78-d6eb-4ad1-b4fb-5ee89e0510ff`；**返回体 `qoder.chatSession.messageSent`**（带 sessionId／sessionRef／title「W3｜仁川模式调研｜bf47639f | AI-032」／runtimeState opening）⇒ **已受理**；`callbackMode=supervise` 已带。投递正文发出前扫 U+FFFD＝0 处（尺＝逐字符计数，另查 U+25A1＝0 处）。
+- **致 AI-032 窗函 04 已投**（上游委派方）：sessionId `bf47639f-5718-5076-aece-1aa6f8be430e`，sessionRef authorityEndpointId `1e438c78-d6eb-4ad1-b4fb-5ee89e0510ff`；**返回体 `qoder.chatSession.messageSent`**（带 sessionId／sessionRef／title「W3｜仁川模式调研｜bf47639f | AI-032」／runtimeState opening）⇒ **已受理**；`callbackMode=supervise` 已带。投递正文发出前**实查**逐字符码位（尺＝逐字符现跑计数，判据＝`str.count` 逐字符扫，15:3x 实跑）：U+FFFD＝0 处；同尺另查 U+25A1＝0 处。
 - ⚠**本窗不宣布「AI-032 已办」**——返回体只证明已受理；该窗当时 runtimeState＝running、其 activeTurnId 为处理本窗复函 02 那一轮、queuedTurnCount＝1 ⇒ **复函 03 的办理结果尚未到**，等其回函。
 - ⚠**给件主 AI-029 窗的 03／04 两封仍未投**：可投面＝当前 Turn 委派方＝AI-032；本轮 15:1x 投 AI-029 已被同一闸门拦下过一次 ⇒ 按纪律不重试、不改措辞试探，**两封留盘为凭**（信箱 engine 面），⇒ 下一轮**以 AI-029 为委派方起轮时**再投。
 
