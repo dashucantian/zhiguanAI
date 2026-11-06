@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>止观AI 项目全景地图 · 协调位 AI-034 · 2026-11-07</title>
+<style>
+:root{
+  --bg:#0d1117; --bg2:#161b22; --bg3:#1c2330; --line:#2a3341; --line2:#3a4557;
+  --fg:#e6edf3; --fg2:#9aa7b6; --fg3:#6b7787;
+  --ok:#3fb950; --wait:#d29922; --block:#f85149; --info:#58a6ff; --done:#8b949e; --new:#a371f7;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,sans-serif;padding:20px 24px 60px}
+h1{font-size:21px;font-weight:600;letter-spacing:.5px}
+.sub{color:var(--fg2);font-size:12px;margin-top:4px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 22px}
+.kpi{flex:1 1 150px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi .n{font-size:24px;font-weight:600;line-height:1.2}
+.kpi .l{font-size:11px;color:var(--fg3);margin-top:2px}
+.kpi .m{font-size:10px;color:var(--fg3);margin-top:3px}
+section{margin-bottom:26px}
+h2{font-size:13px;color:var(--fg2);text-transform:none;letter-spacing:1px;border-left:3px solid var(--info);padding-left:8px;margin-bottom:10px}
+h2 span{color:var(--fg3);font-weight:400;letter-spacing:0;margin-left:8px;font-size:11px}
+.phases{display:flex;gap:8px;flex-wrap:wrap}
+.ph{flex:1 1 220px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;position:relative}
+.ph .tag{font-size:10px;color:var(--fg3)}
+.ph .nm{font-size:15px;font-weight:600;margin:2px 0 6px}
+.ph .ds{font-size:11.5px;color:var(--fg2)}
+.ph.cur{border-color:var(--info);box-shadow:0 0 0 1px rgba(88,166,255,.25)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.ln{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:11px 13px;cursor:pointer;transition:.15s}
+.ln:hover{border-color:var(--line2);background:var(--bg3)}
+.ln.act{border-color:var(--info);background:var(--bg3)}
+.ln .h{display:flex;align-items:flex-start;gap:8px}
+.ln .nm{font-size:14px;font-weight:600;flex:1}
+.b{font-size:10px;padding:2px 7px;border-radius:10px;white-space:nowrap;border:1px solid}
+.b.ok{color:var(--ok);border-color:rgba(63,185,80,.45);background:rgba(63,185,80,.1)}
+.b.wait{color:var(--wait);border-color:rgba(210,153,34,.45);background:rgba(210,153,34,.1)}
+.b.block{color:var(--block);border-color:rgba(248,81,73,.45);background:rgba(248,81,73,.1)}
+.b.done{color:var(--done);border-color:rgba(139,148,158,.45);background:rgba(139,148,158,.1)}
+.b.info{color:var(--info);border-color:rgba(88,166,255,.45);background:rgba(88,166,255,.1)}
+.ln .who{font-size:11px;color:var(--fg3);margin-top:3px}
+.ln .body{display:none;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--fg2)}
+.ln.act .body{display:block}
+.ln .body b{color:var(--fg);font-weight:600}
+.ln .body ul{margin:4px 0 0 15px}
+.ln .body li{margin-bottom:3px}
+.tbl{width:100%;border-collapse:collapse;font-size:11.5px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tbl th{background:var(--bg3);text-align:left;padding:7px 9px;color:var(--fg2);font-weight:600;border-bottom:1px solid var(--line);font-size:11px}
+.tbl td{padding:6px 9px;border-bottom:1px solid rgba(42,51,65,.6);color:var(--fg2);vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td.n{color:var(--fg);white-space:nowrap}
+.note{font-size:11px;color:var(--fg3);margin-top:7px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:900px){.two{grid-template-columns:1fr}}
+.bar2{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.bar2 .t{font-size:12px;font-weight:600;margin-bottom:7px}
+.bar2 ol{margin-left:17px;font-size:11.5px;color:var(--fg2)}
+.bar2 li{margin-bottom:5px}
+.bar2 li b{color:var(--fg)}
+.bar2 .p{color:var(--fg3);font-size:10.5px}
+.foot{font-size:10.5px;color:var(--fg3);border-top:1px solid var(--line);padding-top:12px;margin-top:10px;line-height:1.8}
+code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;color:var(--new)}
+.hit{background:rgba(163,113,247,.13)}
+</style>
+</head>
+<body>
+
+<h1>止观AI · 项目全景地图</h1>
+<div class="sub">协调位 AI-034·<code>e12943a8</code> ｜ 测绘时刻 <b>2026-11-07 00:3x</b> ｜ 尺＝仓内现读（00_当前状态.md L1、待裁单、任务登记、board_config.py WINDOWS、信箱 engine 面、各窗己档 mtime）｜ 执行类别＝未验（云窗口径）</div>
+
+<div class="bar">
+  <div class="kpi"><div class="n" style="color:var(--info)">9</div><div class="l">现役工作线</div><div class="m">另有 8 条历史线已退位</div></div>
+  <div class="kpi"><div class="n" style="color:var(--ok)">17<span style="font-size:14px;color:var(--fg3)">/23</span></div><div class="l">任务已办·已验收·已生效</div><div class="m">进行中 3 · 已销 3 · 待办 2</div></div>
+  <div class="kpi"><div class="n" style="color:var(--ok)">0</div><div class="l">待裁单活条</div><div class="m">已决 42 · 表体 43 行（上限 8 未超）</div></div>
+  <div class="kpi"><div class="n" style="color:var(--wait)">8</div><div class="l">候法师字</div><div class="m">其中 2 项属程序件层</div></div>
+  <div class="kpi"><div class="n" style="color:var(--block)">2</div><div class="l">全局阻塞</div><div class="m">投递面断连 · 冗余自长</div></div>
+</div>
+
+<section>
+<h2>阶段带<span>项目当前站在第二段：第一段已落定，第三段随营试点结果开门</span></h2>
+<div class="phases">
+  <div class="ph"><div class="tag">阶段 0—4（已落定）</div><div class="nm">定位与产品路线</div><div class="ds">六条裁断落地 · 营期反馈脱敏规程入规约 §二.25 · 居士带教者三档定价 · 任务卡母版 · VPS 选型呈单</div></div>
+  <div class="ph cur"><div class="tag">当前阶段（在跑）</div><div class="nm">12.8 止观营试点</div><div class="ds">试点方案已出 · 营表样 6,201 字节双基准相符 · 日常巡检与收口闸在跑 · 例行值守由协调位兼</div></div>
+  <div class="ph"><div class="tag">后续阶段（随试点结果开门）</div><div class="nm">工程落地与对外发布</div><div class="ds">公众号 9 件排期 11-06／08／10 三期 · 11-06 首篇发布权已交费梦玲 · VR 十道闸 8/9 过 · 工作台骨架 v1.2 全闭</div></div>
+</div>
+</section>
+
+<section>
+<h2>现役工作线<span>点任一张卡展开「谁在办·还差什么·证据在哪」</span></h2>
+<div class="grid">
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">协调位 · 治理与收口</div><span class="b info">在位</span></div>
+  <div class="who">AI-034 · e12943a8 ｜ 承接 AI-026·4ef78b3e（2026-11-05 22:2x 交位）</div>
+  <div class="body"><b>持面</b>：待裁单 §一 · 任务登记 23 块 · L1 状态页 · 看板 WINDOWS 表落码 · 派单与回执消费
+  <ul><li><b>在办</b>：㉟书稿 8 行／㊱对外版两处／㉛回填 三项派单已落盘，<span class="hit">回执未到（投递面断）</span></li><li><b>在办</b>：看板 WINDOWS 已落码 9 行（45→54）· 服务起于 :8848</li><li><b>候字</b>：八项见下表</li></ul>
+  <b>证据</b>：<code>巡检日志-W3-e12943a8.txt</code> 第 64 段补记四十四</div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">产品定位与路线</div><span class="b ok">已落定</span></div>
+  <div class="who">AI-029 · 6895f09a ｜ W3｜止观AI 定位与产品路线</div>
+  <div class="body"><b>已办</b>：阶段 0 规约落定（六条裁断／脱敏规程／三档定价／任务卡母版／阶段 0—4 路线图／VPS 选型呈单）
+  <ul><li><b>已成规约</b>：脱敏规程入 <code>AI-开工入口.md</code> §二 第 25 条</li><li><b>已知缺口</b>：白名单底本 <code>20261106_营期反馈脱敏规程_健康类中性词白名单_v1.md</code> <span class="hit">实查不存在</span> ⇒ fail-closed 前置成立</li><li><b>候字</b>：戊类词条逐词给字（候字①）</li></ul>
+  <b>证据</b>：<code>00_当前状态.md</code> L1 04:4x 条</div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">12.8 止观营试点</div><span class="b ok">在跑</span></div>
+  <div class="who">AI-032 · bf47639f（件主窗）｜ 试点方案 + 例行收口</div>
+  <div class="body"><b>在办</b>：12.8 营试点方案 · 日常巡检与收口闸（收口检查.ps1）
+  <ul><li><b>现势</b>：待裁单活 <b>0</b> 条／已决 42 条／表体 43 行；漂在正文 A1＝1（:103）· A2＝4 · A3＝22</li><li><b>字节双基准</b>：待裁单磁盘 94,553／入库 94,242，差 311＝回车数，归一后逐位相等 True</li><li><b>超上限</b>：0（此前 2 条已随法师给字归零）</li></ul>
+  <b>证据</b>：<code>待裁单.md</code> §一 十行｜<code>01_项目管理/20261101_12.8止观营试点方案_乙_v1.md</code></div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">仁川模式调研</div><span class="b ok">已交复核</span></div>
+  <div class="who">AI-032 · bf47639f（专跑）｜ 一手取证 · 决策备忘</div>
+  <div class="body"><b>已办</b>：一手逐字稿 · 对方一手取证（产品实测／定价页原件／公开仓库／页面存档）· 第三方硬料 · 我方盘上对照 · 交付决策备忘 + 最小实验设计 + 证伪清单 + 证据台账
+  <ul><li><b>四判据</b>全过；脚手架已建，结论＝有条件采用</li><li><b>待改</b>：书稿 8 行（别编07 :175／:229、合稿 v4 :2125／:2153）派单待回执</li></ul>
+  <b>证据</b>：<code>TASK-20261103-01</code> · <code>TASK-20261103-02</code></div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">语音入口 · 影子模式</div><span class="b ok">在产</span></div>
+  <div class="who">AI-033 · 516204fb ｜ W3｜语音入口·影子·专跑</div>
+  <div class="body"><b>在办</b>：语音入口影子链路专跑
+  <ul><li><b>活跃度</b>：各窗己档中 mtime 最新（现读排在首位）</li><li><b>待核</b>：回执归口与落位（归 AI-023 系现量面：本窗只留指针）</li></ul>
+  <b>证据</b>：<code>巡检日志-516204fb.txt</code>（mtime 现读）</div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">AI 调用管家</div><span class="b wait">待验收</span></div>
+  <div class="who">AI-028 · 52bbbfe8 ｜ 决策台 + 本机自动分流代理</div>
+  <div class="body"><b>已交</b>：①中文决策台（<b>12 个命令</b>）②本机代理 127.0.0.1:8791（自动选模型 + 本地账本）③成本按任务号贯穿
+  <ul><li><b>实测通过</b>：三件全部做完并实测通过（唯一代理实例）</li><li><b>换引擎</b>：飞书两群从「DSH 客户端」改走「Qoder 客户端窗口」，管道未拆</li><li><b>待字</b>：本机代理复验在唯一代理实例上重做一遍 → W3 验收</li></ul>
+  <b>证据</b>：<code>TASK-20261104-02</code> · <code>TASK-20261105-01</code></div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">对外稿与公众号</div><span class="b wait">派单未回执</span></div>
+  <div class="who">执行 c73afab0（本机接线执行位）｜改派 W2 cbd182cb</div>
+  <div class="body"><b>排期</b>：法师 11-03 圈定 <b>9 件</b>（正编 1—2 + 别编 01—07），11-06／11-08／11-10 三期各 3 篇，渠道＝公众号
+  <ul><li><b>发布权</b>：11-06 首篇「已交付费梦玲」，<span class="hit">本窗不代发、不追办；未见回执不记「已发布」</span></li><li><b>派单未回</b>：㉟书稿 8 行 · ㊱对外版两处 · ㉛回填</li><li><b>旧欠</b>：公众号未开设三处已失效，派 W2 11-09 前改</li></ul>
+  <b>证据</b>：<code>TASK-20261103-04</code> · <code>TASK-20261101-05</code></div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">查稿与定版</div><span class="b wait">候法师取舍</span></div>
+  <div class="who">49f8c4ad（查稿）｜ 一页纸定版收口</div>
+  <div class="body"><b>已办</b>：定版简版尺 A 已进派工书区间，复核毕（坑 078 同型：我方收口指令「≤1200」是错误尺，实测 950 吞了下限）
+  <ul><li><b>待字</b>：法师段②取舍</li><li><b>本身是候字</b>：法师原问「查稿窗有没有必要」——<span class="hit">尚未裁</span></li></ul>
+  <b>证据</b>：<code>TASK-20261104-01</code></div>
+</div>
+
+<div class="ln" onclick="t(this)">
+  <div class="h"><div class="nm">VR/EEG 与工作台骨架</div><span class="b wait">在跑·缺真机值</span></div>
+  <div class="who">W1 73336324 · W2 cbd182cb · bf54cc05 ｜ 多窗</div>
+  <div class="body"><b>已办</b>：VR 十道闸 8/9 过（`vr_gates` 零改动）· 工作台骨架 v1.2 整批 V1—V7 全闭 · 真实 opencode serve 联调
+  <ul><li><b>进行中</b>：VR 10-29 真机场四值收取（法师 10-31 字「头显没电，充电，等会再跑」）</li><li><b>待办</b>：外环四钩子落地＝反馈单模板 + 回灌规程两件（不需法师字）</li><li><b>待核</b>：行内字「八」读数差 1（口径问题，非事实）</li></ul>
+  <b>证据</b>：<code>TASK-20261101-06</code> · <code>TASK-20261031-05</code> · <code>TASK-20261029-04</code> · <code>TASK-20261031-04</code></div>
+</div>
+
+</div>
+</section>
+
+<section>
+<h2>候法师字（8 项）<span>第 ⑦⑧ 属程序件层，本窗不代改、不代拟条文</span></h2>
+<table class="tbl">
+<tr><th style="width:26px">#</th><th style="width:280px">事项</th><th>所在</th><th style="width:150px">状态</th></tr>
+<tr><td class="n">①</td><td>戊类白名单词条逐词给字</td><td>健康类中性词白名单（底本实查不存在，fail-closed 前置成立）</td><td><span class="b wait">候字</span></td></tr>
+<tr><td class="n">②</td><td>底座程序件放行</td><td>—</td><td><span class="b wait">候字</span></td></tr>
+<tr><td class="n">③</td><td>已入库实名破口完整脱敏（重写历史）</td><td>重写历史＝不可逆面</td><td><span class="b wait">候字</span></td></tr>
+<tr><td class="n">④</td><td>对外稿脱敏规程起草归属三选一</td><td>—</td><td><span class="b wait">候字</span></td></tr>
+<tr><td class="n">⑤</td><td>规约 §二 第 25 条①②③指针挂载</td><td><code>AI-开工入口.md</code> §二 第 25 条（特档，须法师字）</td><td><span class="b wait">候字</span></td></tr>
+<tr><td class="n">⑥</td><td>待裁单活条超上限 2 条示删并或放宽</td><td><code>待裁单.md</code> §一（该 2 条已随 23:1x 给字归零，现活 0）</td><td><span class="b done">已消</span></td></tr>
+<tr><td class="n">⑦</td><td>commit-msg 钩子两条告警是否升级为拦阻</td><td>钩子只警告不拦阻（已知实例：标题增删数与实算差 1）</td><td><span class="b block">程序件层</span></td></tr>
+<tr><td class="n">⑧</td><td>门 14 两套判据不等价、是否改</td><td><code>收口检查.ps1</code> vs <code>ev_check.py</code>（断言侧正则相同，差在套用规则；已给分支级归因）</td><td><span class="b block">程序件层</span></td></tr>
+</table>
+</section>
+
+<section>
+<h2>全局阻塞与信息冗余诊断<span>法师所说「信息量太大、太乱、太冗余」的量化根因</span></h2>
+<div class="two">
+<div class="bar2">
+<div class="t" style="color:var(--block)">阻塞 ①投递面断连</div>
+<ol>
+<li><b>builtin 断</b>：<code>mcp_list</code> 持续返回 0 项 ⇒ 三项派单（㉟／㊱／㉛）与他窗回执只能落盘，投不出去</li>
+<li><b>影响</b>：对外稿线与仁川线在等回执；本窗不重试、不绕行、不换 sessionRef、不借道第三方</li>
+<li><b>解除</b>：通道恢复后按序各投一次即可，无须重做</li>
+</ol>
+</div>
+<div class="bar2">
+<div class="t" style="color:var(--wait)">阻塞 ②冗余自长（C3 留痕）</div>
+<ol>
+<li><b>量</b>：C3 留痕档 8,326,629 B ／ 5,503 行，占 43 份己档总量 12,128,875 B 的 <b>68.7%</b></li>
+<li><b>增速</b>：11-06 20:15 → 11-07 00:15 四小时涨 32,144 B ≈ <b>193 KB/天</b>，且仍每小时落一段 12 节</li>
+<li><b>实质</b>：值守功能 <b>2026-10-20 18:27 已停用</b>，留痕是停用后的机械续写</li>
+<li><b>建议</b>：<b>改而不全停</b>（见右栏处置意见）</li>
+</ol>
+</div>
+</div>
+<div class="note" style="margin-top:9px">另：信箱 engine 面 745 件（686 函件 + 43 己档 + 6 件 W1 输出 + README），其中 11-06 起两日新增函件 <b>176 件</b>；函件是「往来原始档」，本就无需法师逐件读——地图只收「态势」，不留「流水」。</div>
+</section>
+
+<section>
+<h2>「架构可视化」可用性结论<span>法师未做过探索——实为仓内已跑通一轮，只是做的是代码层不是治理层</span></h2>
+<table class="tbl">
+<tr><th style="width:230px">仓内存量</th><th>内容</th><th style="width:200px">对「项目地图」的价值</th></tr>
+<tr><td class="n"><code>architecture-model.json</code><br>43,052 B</td><td>schemaVersion 1 · nodes/edges · metadata.generatedBy = <code>system-modeler + c4model + graphviz (architecture-visualization 0.1.0)</code> · generatedAt 2026-10-07</td><td><span class="b ok">格式可复用</span>（节点/边 schema 已在用）</td></tr>
+<tr><td class="n"><code>qgraphflow/</code><br>5 张交互图</td><td>closedloop-session-sequence · congci-feed-sequence · source-of-truth-map · board-architecture · console-architecture（各含 graph.json + index.html）</td><td><span class="b ok">交互视图壳子现成</span>，可整套照搬</td></tr>
+<tr><td class="n"><code>zhiguan.structurizr.dsl</code> + 3 个 .dot</td><td>C4 L2 容器 / 闭环流 / 来源真值</td><td><span class="b done">代码层，与法师要的「推进情况」不同层</span></td></tr>
+<tr><td class="n"><code>validate-anchors.mjs</code> + selftest</td><td>行号锚点校验，防「改一次规约、告警静默消失＝假绿灯」（坑 030）</td><td><span class="b ok">必需</span>：新增治理层视图必带锚点校验</td></tr>
+<tr><td class="n">已知暗坑</td><td><code>soT.window-identity</code> 节点以<b>行号</b>锚定 <code>AI代理身份登记.md</code> :31/:97/:156 ⇒ §三 表插行会推移锚点</td><td><span class="b block">动身份登记表必同步改锚点</span></td></tr>
+</table>
+<div class="note" style="margin-top:9px"><b>结论一句话</b>：「架构可视化」<b>可用且已在仓内跑通</b>，不必新造工具；但它现做的是<b>软件系统架构图</b>（代码层），法师要的是<b>项目推进地图</b>（治理层：工作线 × 方面 × 推进位 × 候字/阻塞）。<b>做法</b>：沿用 qgraphflow 的 graph.json + index.html 形态新开一层「governance／project-map」视图，与软件架构图并排、同一视觉语言；节点＝工作线，边＝依赖/派单/证据，色带＝推进位。</div>
+</section>
+
+<section>
+<h2>信息收敛的三条机制<span>治「冗余」的正手：不是删档案，是分层——法师只读态势层</span></h2>
+<div class="two">
+<div class="bar2"><div class="t" style="color:var(--info)">机制 ①　态势页（本窗每轮只出一份）</div>
+<div class="p">＝本地图 + 三张清单（在办／候字／阻塞）。地图＝全局与各方面推进；清单＝可逐件指名。法师读这一份即可掌握全局，不必读任何窗的己档。</div></div>
+<div class="bar2"><div class="t" style="color:var(--info)">机制 ②　原始档下沉</div>
+<div class="p">各窗己档、函件、留痕档全部保留为原始层（可查、可追责），但<b>不要求法师读</b>；C3 留痕档的历史部分封存为冷档，正本只留近 N 天。</div></div>
+<div class="bar2"><div class="t" style="color:var(--info)">机制 ③　单一真值口</div>
+<div class="p">推进状态只认三处：<code>待裁单.md</code>（裁了什么）· <code>任务登记.md</code>（谁在办）· 本地图（合起来看）。其余件为佐证，不为真值。</div></div>
+<div class="bar2"><div class="t" style="color:var(--info)">机制 ④　指数自曝</div>
+<div class="p">凡报数带「尺名＋切点＋检索面＋分类判据」四要素；凡跨窗引数带时刻；两窗读数差先核五处写法口径，再谈分歧。</div></div>
+</div>
+</section>
+
+<div class="foot">
+<b>测绘尺与边界</b>——本图全部数字为 2026-11-07 00:2x—00:3x 仓内现读：<code>00_当前状态.md</code>（3,201 B／12 行）·<code>待裁单.md</code> §一 十行 · <code>任务登记.md</code>（23 块）· <code>board_config.py</code> <code>WINDOWS</code>（54 行）· 信箱 engine 面 745 件（43 己档 12,128,875 B）· 身份登记 §三 现行行 · <code>20261021_全项目再规划_六格与五拍_v1.md</code>:20（C3 停用时点）· <code>05_产品与开发/架构可视化/</code> 全目录。<br>
+<b>本图未做</b>：未写任何程序件 · 未动待裁单／任务登记／身份登记 · 未起服务 · 未出网 · 未 push · 未代他窗登记或代拟条文。<br>
+<b>本窗</b>：AI-034·Qoder·e12943a8（W3｜止观AI 项目协调位）｜Session <code>W3-MINIMAX3.1FLASH-20261106-COORD-A</code>｜Model MiniMax-M3.1-Flash｜执行类别＝未验（云窗口径）
+</div>
+
+<script>function t(el){el.classList.toggle('act');}</script>
+</body>
+</html>
