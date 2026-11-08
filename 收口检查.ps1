@@ -716,6 +716,63 @@ try {
     }
 } catch { Write-Host ('[NOTE] 门21 取数失败 ⇒ 未检：' + $_.Exception.Message) -ForegroundColor Gray }
 
+
+# ---------- 22. 席位阶梯台账（升阶梯判据机器可读） ----------
+# 依据：法师 2026-11-08 字「升阶梯（影子→观察派→真派→真提交）判据要不要定成可机器读的一条；要。」
+# 分工写死：机器只核「有没有这一行、五栏齐不齐、级别合不合法、依据指针在不在盘」；
+#   **升没升、该不该升是人的判断题**，本门不判，也不自动改级。
+# 载体用 Markdown 表而非 JSON：仓库 .gitignore 第 77 行 `*.json` 把整类 JSON 排除，JSON 台账进不了库。
+# 缺件与格式硬伤分开报：件不在盘 ⇒ NOTE（未检≠通过）；件在盘但表不齐/级别不合法/依据不在盘 ⇒ Bad。
+Section "22. 席位阶梯台账（升阶梯判据机器可读）"
+try {
+    $pj22 = Join-Path (Get-Location) '01_项目管理\席位阶梯台账_v1.md'
+    if (-not (Test-Path -LiteralPath $pj22)) {
+        Write-Host "[NOTE] 门22：席位阶梯台账不在盘 ⇒ 本门**未检**（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $ls22 = [System.IO.File]::ReadAllLines($pj22, [System.Text.Encoding]::UTF8)
+        $legal22 = @('影子', '观察派', '真派', '真提交')
+        $rows22 = @()
+        foreach ($l22 in $ls22) {
+            if (-not $l22.StartsWith('|')) { continue }
+            $c22 = @($l22.Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim() })
+            if ($c22.Count -lt 5) { continue }
+            if ((($c22 -join '') -replace '[-: ]', '').Length -eq 0) { continue }
+            $rows22 += , $c22
+        }
+        if ($rows22.Count -le 1) {
+            Bad "门22：席位阶梯台账里找不到数据行（表头之外无内容）——修台账，不改判据。"
+        } else {
+            $body22 = @($rows22 | Select-Object -Skip 1)
+            $err22 = @()
+            $cnt22 = 0
+            foreach ($r22 in $body22) {
+                $cnt22++
+                $nm22 = $r22[0]; $lv22 = $r22[2]; $sd22 = $r22[3]; $bs22 = $r22[4]
+                $tag22 = if ([string]::IsNullOrWhiteSpace($nm22)) { '(第 ' + $cnt22 + ' 行未命名)' } else { $nm22 }
+                if ([string]::IsNullOrWhiteSpace($nm22) -or [string]::IsNullOrWhiteSpace($r22[1]) -or
+                    [string]::IsNullOrWhiteSpace($lv22) -or [string]::IsNullOrWhiteSpace($sd22) -or
+                    [string]::IsNullOrWhiteSpace($bs22)) {
+                    if ($err22.Count -lt 5) { $err22 += ($tag22 + '：五栏有空项') }
+                    continue
+                }
+                if ($legal22 -notcontains $lv22) {
+                    if ($err22.Count -lt 5) { $err22 += ($tag22 + '：级别「' + $lv22 + '」不在四级内') }
+                    continue
+                }
+                $bp22 = Join-Path (Get-Location) ($bs22 -replace '/', '\')
+                if (-not (Test-Path -LiteralPath $bp22)) {
+                    if ($err22.Count -lt 5) { $err22 += ($tag22 + '：依据指针所指件不在盘（' + $bs22 + '）') }
+                }
+            }
+            if ($err22.Count -gt 0) {
+                Bad ("门22：席位阶梯台账不合判据 —— " + ($err22 -join '；') + "。（修台账，不改判据；最多列 5 处）")
+            } else {
+                Ok ("门22：席位阶梯台账 " + $body22.Count + " 个席位，五栏齐、级别均在四级内、依据指针均可在盘（机器只核格式，升没升是人的判断）。")
+            }
+        }
+    }
+} catch { Bad ('门22 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
