@@ -803,10 +803,14 @@ try {
     }
 } catch { Bad ('门23 取数失败 ⇒ 未检：' + $_.Exception.Message) }
 
-# ---------- 24. 一个文件一个写者（第 5 道·乙） ----------
-# 本道本义是「跨窗覆盖」。机器核的是**己档文件的写者归属**：同一窗码若有两份己档**今天都被改过**，即多写者风险。
-# 历史重复（如 W1.txt 与 W1-24e5b510.txt 并存）只报数量、不判红——否则本门恒红（坑 021）。
-Section "24. 一个文件一个写者（第 5 道·近似·只判今日）"
+# ---------- 24. 一个文件一个写者（第 5 道·乙·只报形态，不判红） ----------
+# 本道本义是「跨窗覆盖」。⚠**机器判不了覆盖本身**：
+#   ① 覆盖要看「同一份文件先后被两个写者改」，而本仓 git 的 author/committer 是统一的（zhiguanAI-agent），按提交人分不出窗；
+#   ② 按 mtime 也分不出——mtime 只说明"有人写过"，不说明"谁写、是不是覆盖"。
+# 所以本门**只报形态事实**（同一窗码有几份己档在今天被改），**不判红**。
+#   ⚠2026-11-08 首版把「同窗码两份都被改」判成红——那是**错的因果**：两份不同文件各改各的，不构成覆盖。
+#     当日 W1 新开一窗（W1-8473bc3e）与旧窗（W1-24e5b510）并存，该版当场误报。已据实改为只报不判。
+Section "24. 一个文件一个写者（第 5 道·只报形态·不判红）"
 try {
     $eng24 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
     $f24 = @(Get-ChildItem -LiteralPath $eng24 -File -Filter '巡检日志-*.txt' -ErrorAction SilentlyContinue)
@@ -821,23 +825,23 @@ try {
             if (-not $grp24.ContainsKey($code24)) { $grp24[$code24] = @() }
             $grp24[$code24] += $x24
         }
-        $dupAll24 = 0
+        $dupAll24 = @()
         $dupToday24 = @()
         foreach ($k24 in $grp24.Keys) {
             if ($grp24[$k24].Count -le 1) { continue }
-            $dupAll24++
+            $dupAll24 += $k24
             $today24 = @($grp24[$k24] | Where-Object { $_.LastWriteTime.Date -eq $d24 })
             if ($today24.Count -gt 1) {
                 $dupToday24 += ($k24 + '＝' + (($today24 | ForEach-Object { $_.Name }) -join ' 与 '))
             }
         }
         if ($dupToday24.Count -gt 0) {
-            Bad ("门24：同一窗码今天有两份己档被改 —— " + ($dupToday24 -join '；') + "。先认写者再动笔（本道本义＝防跨窗覆盖）。")
+            Write-Host ("[NOTE] 门24：同一窗码今天有两份以上己档被改（**只报形态，不判红**）—— " + ($dupToday24 -join '；') + "。覆盖本身机器判不了：本仓提交人统一、mtime 分不出写者。人工处置：动手前逐件认归属。") -ForegroundColor Yellow
         } else {
-            Ok ("门24：今天没有同窗码双写（历史并存组 " + $dupAll24 + " 组，属既有形制，不判红）。⚠本门按「窗码+当日 mtime」判，不按 git 归属。")
+            Write-Host ("[NOTE] 门24：今天没有同窗码多份己档被改（同窗码并存组 " + $dupAll24.Count + " 组，属既有形制）。覆盖本身机器判不了，动手前仍须逐件认归属。") -ForegroundColor Gray
         }
     }
-} catch { Bad ('门24 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+} catch { Write-Host ('[NOTE] 门24 取数失败 ⇒ 未检：' + $_.Exception.Message) -ForegroundColor Gray }
 
 # ---------- 25. 提交是否只动本窗（第 6 道·乙） ----------
 # 本道本义是「裸提交带上他窗件」。git 记录里看不出「有没有用路径限定」，故改判**后果面**：
