@@ -773,6 +773,104 @@ try {
     }
 } catch { Bad ('门22 取数失败 ⇒ 未检：' + $_.Exception.Message) }
 
+
+# ---------- 23. 受理戳防护回归（第 4 道·乙） ----------
+# 依据：法师 2026-11-08 字「九道闸里乙丙六道要做成机器可查」。
+# 本道本义是「未受理即当已办」；机器只能核**回写器那一面**：列白名单是否仍把「受理戳」列在硬拒里。
+#   这是**回归检查**——有人把受理戳加进可写列，本门立刻红；但「人有没有在没受理时就当已办」机器判不了。
+# 导语：这仍是乙态（近似、覆盖有限），不称已机器化。
+Section "23. 受理戳防护回归（第 4 道·近似·只核回写器白名单）"
+try {
+    $rw23 = Join-Path (Get-Location) '01_项目管理\任务关系图\20261012_W3_维那源表回写器_v1.py'
+    if (-not (Test-Path -LiteralPath $rw23)) {
+        Write-Host "[NOTE] 门23：维那源表回写器不在盘 ⇒ 本门**未检**（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $src23 = [System.IO.File]::ReadAllText($rw23, [System.Text.Encoding]::UTF8)
+        $err23 = @()
+        $mF23 = [regex]::Match($src23, 'FORBIDDEN_COLS\s*=\s*\{([^}]*)\}')
+        if (-not $mF23.Success) { $err23 += 'FORBIDDEN_COLS 定义取不到' }
+        elseif ($mF23.Groups[1].Value -notmatch '受理戳') { $err23 += 'FORBIDDEN_COLS 里没有「受理戳」' }
+        foreach ($nm23 in @('WRITE_COLS', 'UPDATE_COLS')) {
+            $mW23 = [regex]::Match($src23, $nm23 + '\s*=\s*\{([^}]*)\}')
+            if (-not $mW23.Success) { $err23 += ($nm23 + ' 定义取不到') }
+            elseif ($mW23.Groups[1].Value -match '受理戳') { $err23 += ($nm23 + ' 里出现了「受理戳」（应只读）') }
+        }
+        if ($err23.Count -gt 0) {
+            Bad ("门23：受理戳防护被破坏 —— " + ($err23 -join '；') + "。改回白名单，不改判据。")
+        } else {
+            Ok "门23：回写器白名单完好（受理戳仍在硬拒列、可写两列均不含它）。⚠只核回写器这一面；「未受理即当已办」仍靠人工写戳→回查。"
+        }
+    }
+} catch { Bad ('门23 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+
+# ---------- 24. 一个文件一个写者（第 5 道·乙） ----------
+# 本道本义是「跨窗覆盖」。机器核的是**己档文件的写者归属**：同一窗码若有两份己档**今天都被改过**，即多写者风险。
+# 历史重复（如 W1.txt 与 W1-24e5b510.txt 并存）只报数量、不判红——否则本门恒红（坑 021）。
+Section "24. 一个文件一个写者（第 5 道·近似·只判今日）"
+try {
+    $eng24 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+    $f24 = @(Get-ChildItem -LiteralPath $eng24 -File -Filter '巡检日志-*.txt' -ErrorAction SilentlyContinue)
+    if ($f24.Count -eq 0) {
+        Write-Host "[NOTE] 门24：engine 层无巡检日志文件 ⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $d24 = (Get-Date).Date
+        $grp24 = @{}
+        foreach ($x24 in $f24) {
+            $nm24 = $x24.BaseName -replace '^巡检日志-', ''
+            $code24 = ($nm24 -split '-')[0]
+            if (-not $grp24.ContainsKey($code24)) { $grp24[$code24] = @() }
+            $grp24[$code24] += $x24
+        }
+        $dupAll24 = 0
+        $dupToday24 = @()
+        foreach ($k24 in $grp24.Keys) {
+            if ($grp24[$k24].Count -le 1) { continue }
+            $dupAll24++
+            $today24 = @($grp24[$k24] | Where-Object { $_.LastWriteTime.Date -eq $d24 })
+            if ($today24.Count -gt 1) {
+                $dupToday24 += ($k24 + '＝' + (($today24 | ForEach-Object { $_.Name }) -join ' 与 '))
+            }
+        }
+        if ($dupToday24.Count -gt 0) {
+            Bad ("门24：同一窗码今天有两份己档被改 —— " + ($dupToday24 -join '；') + "。先认写者再动笔（本道本义＝防跨窗覆盖）。")
+        } else {
+            Ok ("门24：今天没有同窗码双写（历史并存组 " + $dupAll24 + " 组，属既有形制，不判红）。⚠本门按「窗码+当日 mtime」判，不按 git 归属。")
+        }
+    }
+} catch { Bad ('门24 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+
+# ---------- 25. 提交是否只动本窗（第 6 道·乙） ----------
+# 本道本义是「裸提交带上他窗件」。git 记录里看不出「有没有用路径限定」，故改判**后果面**：
+#   某一笔提交若同时改动两个以上不同窗码的己档 ⇒ 极可能是一次全量提交。
+# 只判**今日**的提交；历史笔只报数量、不判红（禁 amend，历史不回改）。
+Section "25. 提交是否只动本窗（第 6 道·近似·只判今日）"
+try {
+    $log25 = @(git log --since=midnight --pretty=format:'%h' 2>$null)
+    if ($log25.Count -eq 0) {
+        Write-Host "[NOTE] 门25：今日无提交 ⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $clean25 = @()
+        $bad25 = @()
+        foreach ($h25 in $log25) {
+            $files25 = @(git show --name-only --pretty=format: $h25 2>$null | Where-Object { $_ -ne '' })
+            $codes25 = @()
+            foreach ($p25 in $files25) {
+                if ($p25 -match '巡检日志-([^\\/]+?)\.txt$') {
+                    $c25 = ($matches[1] -split '-')[0]
+                    if ($codes25 -notcontains $c25) { $codes25 += $c25 }
+                }
+            }
+            if ($codes25.Count -ge 2) { $bad25 += ($h25 + '（动到 ' + ($codes25 -join '／') + ' 窗己档）') }
+            else { $clean25 += $h25 }
+        }
+        if ($bad25.Count -gt 0) {
+            Bad ("门25：今日有 " + $bad25.Count + " 笔提交同时动了两个以上窗的己档（疑似未带路径限定）：" + ($bad25 -join '；') + "。本道本义＝防裸提交带上他窗件。")
+        } else {
+            Ok ("门25：今日 " + $log25.Count + " 笔提交，每笔最多只动到一个窗的己档（判据＝后果面；git 看不到「有没有用路径限定」本身）。")
+        }
+    }
+} catch { Bad ('门25 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
