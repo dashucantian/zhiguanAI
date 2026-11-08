@@ -55,6 +55,19 @@ for ($i = 0; $i -lt [Math]::Min(12, $L1.Count); $i++) {
 if ($overs.Count -eq 0) { Ok "头部 ≤12 行内无超 300 字更新条目。" }
 else { $overs | ForEach-Object { Bad "超长未归档 $_" } }
 
+# ---------- 3b. L1 头部更新条目数闸门（L1 余量机制·甲案①；法师 2026-11-08 字「候编号 ㊽准拟裁」） ----------
+# 口径（本窗自定并写明，题面可核）：条数尺＝`00_当前状态.md` **头部 12 行内**匹配 `^> (更新|前次更新)` 的行数；
+#   判据 ≤3 条。⚑只前向不回溯：判超即报，不动已入库件、不改历史条目、不自动下沉。
+#   与闸 3 的关系：闸 3 管「单条多长」，本格管「有几条」，两格合起来＝甲案①②；
+#   第③条「新增一条必下沉一条」是条级收支纪律，由协调位每轮收口自检承担，机器不代做。
+Section "3b. L1 头部更新条目数（≤3 条）"
+$cnt3b = 0
+for ($i = 0; $i -lt [Math]::Min(12, $L1.Count); $i++) {
+    if ($L1[$i] -match '^> (更新|前次更新)') { $cnt3b++ }
+}
+if ($cnt3b -gt 3) { Bad ("头部更新条目 " + $cnt3b + " 条 > 3 条：按「新增一条必下沉一条」下沉后再收口。") }
+else { Ok ("头部更新条目 " + $cnt3b + " 条 ≤3 条。") }
+
 # ---------- 4. 本轮提交卫生 ----------
 Section "4. 本窗口提交卫生"
 $last = git log -1 --format='%h %s'
@@ -414,7 +427,18 @@ if ($scope14.Count -eq 0) {
     #  ⛔不收「不存在／从未／盘上无／无成文」等叙述型：实测其中多数命中行是**引用别人（含自己）旧错**的元叙述，判它必误报（10-13 首跑 11 处误报 4 处）。
     $re14 = '(零命中|0 命中|命中 ?0|＝ ?0 ?(个|处|行|件|笔)|全库 ?0|返回空|输出为空)'
     # 证据侧按首跑误报补词：mtime／实点／实查／实跑／现跑／逐行 均为本仓通行取法标记
-    $ok14 = '(检索面|排除面|判据|grep|awk|sed|python|命令|测于|实测|实点|实查|实跑|现跑|现量|复算|口径|mtime|〔测|〔1[0-9]:| wc |ls )'
+    # ★2026-11-07 候编号㊶ 落码（法师准拟裁·「两侧统一为逐词字面子串」）：
+    #   旧写法：**PS 侧**把整串当一个正则去配 —— 串首的「(」在正则里是**分组符**、不是字面 ⇒ 裸「检索面」本就能匹配（**PS 侧该词不失效**）；
+    #   真正的失效侧是**旧 ev_check.py**：它把整串按「|」切词，首 token 成了字面「(检索面」⇒ 该词在裸「检索面」行上匹配不到（实测旧 ev 同面判缺 152 行、PS 侧 144 行，差 8 行全在裸「检索面」上）。
+    # ★2026-11-07 18:3x 订正（据 AI-032 第 42 件函，本窗独立复算照认）：失效侧原被记成「PS 侧」，已据实改；另：ev 旧代码 `w in line` 大小写敏感、新代码 `has_mark` 用 re.I ⇒ 259→255 的 4 条＝「Grep」×3 与「TLS 」内含「LS 」×1，**判据字面一字未改**。
+    # ★2026-11-07 候编号㊷ 落码（法师 11-07 字「四、㊷／㊸ 两条候字；回溯复跑。「立、扩」」⇒ 给「ls 」加词首边界）：
+    #   旧写法：字面词「ls 」会被更长词命中（TLS/ELS/ols/OLS …）属假阳性；全 engine 面影响 1 行、今日同面 0 行。
+    #   现写法：该词移入 $ok14x 正则项 `(?<![A-Za-z])ls `——前不得为拉丁字母 ⇒ 「TLS 」不再命中，真取法标记「ls 」仍命中。
+    #   改后回溯复跑读数见本窗落码件 `20261107-W3-e12943a8-落码㊷㊸_门14词首边界与互核节流扩窗加每轮每窗一件上限_v1.md`。
+    #   ⚠旧件里的告警读数照留不删（§一③ 历史不回改），新基线以该落码件为准。
+    #   现两侧**同源同算法**：字面词表 $ok14 逐词各自当独立可查串（大小写不敏感），无法写成字面的正则项另置 $ok14x、两侧判法一致。
+    $ok14 = '检索面|排除面|判据|grep|awk|sed|python|命令|测于|实测|实点|实查|实跑|现跑|现量|复算|口径|mtime|〔测| wc |'
+    $ok14x = '〔1[0-9]:|(?<![A-Za-z])ls '
     $n14 = 0; $miss14 = @()
     foreach ($f in $scope14) {
         $ls14 = [System.IO.File]::ReadAllLines($f.FullName, [System.Text.Encoding]::UTF8)
@@ -427,7 +451,17 @@ if ($scope14.Count -eq 0) {
         for ($i = $st14; $i -lt $ls14.Count; $i++) {
             if ($ls14[$i] -match $re14) {
                 $n14++
-                if ($ls14[$i] -notmatch $ok14) { $miss14 += ('{0}:{1}' -f $f.Name, ($i + 1)) }
+                # ★㊶ 落码：证据侧改逐词字面子串（不再拿整串当一个正则配）
+                $hit14 = $false
+                foreach ($w14 in ($ok14 -split '\|')) {
+                    if ($w14 -and $ls14[$i].IndexOf($w14, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) { $hit14 = $true; break }
+                }
+                if (-not $hit14) {
+                    foreach ($w14 in ($ok14x -split '\|')) {
+                        if ($w14 -and $ls14[$i] -match $w14) { $hit14 = $true; break }
+                    }
+                }
+                if (-not $hit14) { $miss14 += ('{0}:{1}' -f $f.Name, ($i + 1)) }
             }
         }
     }
@@ -572,6 +606,116 @@ if (Test-Path $f5a) {
     $lenA = ([System.IO.File]::ReadAllText($f5a, [System.Text.Encoding]::UTF8)).Length
     Write-Host ("[NOTE] 闸18 开工入口 " + $lenA + " 字符（表内无其 F5 判据行，只报不判）") -ForegroundColor Gray
 }
+# ---------- 19. 互核函件频次上限（⑬；法师 2026-11-07 字「㊷／㊸ 两条候字；回溯复跑。「立、扩」」） ----------
+# 口径（本窗自定并写明，题面可核）：互核函件＝`01_项目管理\信箱\engine\` 下**当日**落盘且文件名含
+#   「知会」／「确认」／「互核」三词者——这三类即「无实质变更也要互发」的互核函高发形态；
+#   按「出件窗码 → 收件窗码」成对计数，一对当日 >1 件 ⇒ 告警。适用面＝**全部窗**（不只 C3／W3）＝⑬的「扩」。
+# ⚠口径边界（写明以免被误读）：本门只管「知会／确认／互核」这一族；**逐件复函**（对来函的实质回应）不在此门内，
+#   故本窗当日对 C3 的多件逐件回函不触发。若把它们也纳入，本门将恒红（坑 021：恒红警报会训练人不看警报）。
+Section "19. 互核函件频次上限（每轮每窗 ≤1 件·适用面＝全部窗）"
+try {
+    $eng19 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+    if (-not (Test-Path -LiteralPath $eng19)) {
+        Write-Host "[NOTE] 闸19：engine 面不在盘 ⇒ 本门**未检**（未检≠通过，§二.16④）" -ForegroundColor Gray
+    } else {
+        $d19 = (Get-Date).Date
+        $pair19 = @{}
+        $scan19 = 0
+        foreach ($f19 in (Get-ChildItem -LiteralPath $eng19 -File)) {
+            if ($f19.Name -notmatch '(知会|确认|互核)') { continue }
+            if ($f19.LastWriteTime.Date -ne $d19) { continue }
+            $mm19 = [regex]::Match($f19.Name, '^\d{8}-(.+?)-(?:致|复|交件)([^_]+)_')
+            if (-not $mm19.Success) { continue }
+            $scan19++
+            $key19 = $mm19.Groups[1].Value + ' → ' + $mm19.Groups[2].Value
+            if ($pair19.ContainsKey($key19)) { $pair19[$key19] = $pair19[$key19] + 1 } else { $pair19[$key19] = 1 }
+        }
+        $over19 = @($pair19.GetEnumerator() | Where-Object { $_.Value -gt 1 })
+        if ($scan19 -eq 0) {
+            Write-Host "[NOTE] 闸19：当日互核函件 0 件（取法＝engine 一层·文件名含知会/确认/互核·当日 mtime）⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+        } elseif ($over19.Count -eq 0) {
+            Ok ("闸19：当日互核函件 " + $scan19 + " 件（尺＝engine 一层·文件名含知会/确认/互核·当日 mtime），每对（出件窗→收件窗）均 ≤1 件。")
+        } else {
+            Bad ("闸19：当日互核函件 " + $scan19 + " 件中有 " + $over19.Count + " 对超过「每轮每窗 ≤1 件」：" + (($over19 | ForEach-Object { $_.Key + '=' + $_.Value }) -join '、'))
+        }
+    }
+} catch { Bad ('闸19 取数失败 ⇒ 未检：' + $_.Exception.Message) }
+
+# ---------- 20. 完成时态须带凭据（近似判据·只报不拦） ----------
+# 依据：法师 2026-11-08 字「九道闸里乙丙六道要做成机器可查」；本门对应九道闸第 7 道「完成时态口径」。
+# 本义是语义判断（「完成时态若无文件可附，就是没做」）。机器只能核一个**近似面**：句子里出现强完成态词时，
+# 同一行必须能看见凭据形态（提交号／文件扩展名／「附」字）。故本门**只报不拦**、不计入告警数，不假称已机器化。
+# 扫描面收窄的理由：只看 engine 一层**当日 .md 函件**；不扫 .txt 己档（流水叙述必然大量出现完成态，会把门变恒红——坑 021）。
+Section "20. 完成时态须带凭据（近似·只报不拦）"
+try {
+    $eng20 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+    if (-not (Test-Path -LiteralPath $eng20)) {
+        Write-Host "[NOTE] 门20：engine 面不在盘 ⇒ 本门**未检**（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $d20 = (Get-Date).Date
+        $re20done = '(已完成|已办讫|已落盘并入库|已提交入库)'
+        $re20evi  = '([0-9a-f]{7,}|\.md|\.txt|\.py|\.ps1|\.json|\.html|\.csv|附)'
+        $scan20 = 0
+        $hit20 = @()
+        foreach ($f20 in (Get-ChildItem -LiteralPath $eng20 -File -Filter '*.md')) {
+            if ($f20.Name -notmatch '^\d{8}-') { continue }
+            if ($f20.LastWriteTime.Date -ne $d20) { continue }
+            $scan20++
+            $ln20 = 0
+            foreach ($t20 in [System.IO.File]::ReadAllLines($f20.FullName, [System.Text.Encoding]::UTF8)) {
+                $ln20++
+                if ($t20 -match $re20done -and $t20 -notmatch $re20evi) {
+                    if ($hit20.Count -lt 8) { $hit20 += ($f20.Name + ':' + $ln20) }
+                }
+            }
+        }
+        if ($scan20 -eq 0) {
+            Write-Host "[NOTE] 门20：当日函件 0 份（取法＝engine 一层·.md·文件名以 8 位日期开头·当日 mtime）⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+        } elseif ($hit20.Count -eq 0) {
+            Write-Host ("[NOTE] 门20：当日函件 " + $scan20 + " 份，强完成态句均带凭据形态（近似判据·只报不拦；最多列 8 处）。") -ForegroundColor Gray
+        } else {
+            Write-Host ("[NOTE] 门20：当日函件 " + $scan20 + " 份中有 " + $hit20.Count + " 处强完成态未带凭据形态（近似判据·只报不拦；最多列 8 处）：" + ($hit20 -join '、')) -ForegroundColor Yellow
+        }
+    }
+} catch { Write-Host ('[NOTE] 门20 取数失败 ⇒ 未检：' + $_.Exception.Message) -ForegroundColor Gray }
+
+# ---------- 21. 代验闭环（验收须换手·近似判据·只报不拦） ----------
+# 依据同上；本门对应九道闸第 1 道「代验闭环」（本体件：出题权不等于裁定权、判卷必须换手）。
+# 近似面：句子里出现「已验／验过／自测通过／复核成立」时，同一行必须能看见**换手标记**（他窗／换手／复核位／由…验）。
+# 判据同样是近似——「换没换手」本质是人的判断题；故只报不拦，不计入告警数。
+Section "21. 代验闭环（近似·只报不拦）"
+try {
+    $eng21 = Join-Path (Get-Location) '01_项目管理\信箱\engine'
+    if (-not (Test-Path -LiteralPath $eng21)) {
+        Write-Host "[NOTE] 门21：engine 面不在盘 ⇒ 本门**未检**（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $d21 = (Get-Date).Date
+        $re21say  = '(已验|验过|自测通过|复核成立|验收通过)'
+        $re21hand = '(他窗|另窗|换手|复核位|由[^，。、 ]{1,10}验)'
+        $scan21 = 0
+        $hit21 = @()
+        foreach ($f21 in (Get-ChildItem -LiteralPath $eng21 -File -Filter '*.md')) {
+            if ($f21.Name -notmatch '^\d{8}-') { continue }
+            if ($f21.LastWriteTime.Date -ne $d21) { continue }
+            $scan21++
+            $ln21 = 0
+            foreach ($t21 in [System.IO.File]::ReadAllLines($f21.FullName, [System.Text.Encoding]::UTF8)) {
+                $ln21++
+                if ($t21 -match $re21say -and $t21 -notmatch $re21hand) {
+                    if ($hit21.Count -lt 8) { $hit21 += ($f21.Name + ':' + $ln21) }
+                }
+            }
+        }
+        if ($scan21 -eq 0) {
+            Write-Host "[NOTE] 门21：当日函件 0 份（取法同上）⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+        } elseif ($hit21.Count -eq 0) {
+            Write-Host ("[NOTE] 门21：当日函件 " + $scan21 + " 份，验收类断言均带换手标记（近似判据·只报不拦；最多列 8 处）。") -ForegroundColor Gray
+        } else {
+            Write-Host ("[NOTE] 门21：当日函件 " + $scan21 + " 份中有 " + $hit21.Count + " 处验收断言未见换手标记（近似判据·只报不拦；最多列 8 处）：" + ($hit21 -join '、')) -ForegroundColor Yellow
+        }
+    }
+} catch { Write-Host ('[NOTE] 门21 取数失败 ⇒ 未检：' + $_.Exception.Message) -ForegroundColor Gray }
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
