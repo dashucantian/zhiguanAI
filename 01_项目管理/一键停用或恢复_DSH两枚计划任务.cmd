@@ -1,65 +1,79 @@
 @echo off
-chcp 65001 >nul
-title æ­¢è§‚AIï½œDSH ä¸¤æšè®¡åˆ’ä»»åŠ¡ åœç”¨ä¸æ¢å¤
+setlocal EnableExtensions EnableDelayedExpansion
+title Ö¹¹ÛAI£üDSH Á½Ã¶¼Æ»®ÈÎÎñ Í£ÓÃÓë»Ö¸´
 color 0F
 
 echo ==========================================================
-echo   æ­¢è§‚AIï½œDSH ä¸¤æšè®¡åˆ’ä»»åŠ¡ï¼šåœç”¨ / æ¢å¤
-echo   æœ¬çª—ï¼ˆåè°ƒä½ AI-034Â·e12943a8ï¼‰æ— æƒåœç”¨ç³»ç»Ÿè®¡åˆ’ä»»åŠ¡ï¼Œ
-echo   æœ¬æ–‡ä»¶è®©æ‚¨åœ¨ç®¡ç†å‘˜èº«ä»½ä¸‹åŒå‡»å³å¯å®Œæˆã€‚
+echo   Ö¹¹ÛAI£üDSH Á½Ã¶¼Æ»®ÈÎÎñ£ºÍ£ÓÃ / »Ö¸´
+echo   ¹ÜµÄÊÇ£ºDSH_Run_2h            Ã¿ 2 Ğ¡Ê±ÅÜÒ»´ÎÁ¬ĞøÖ´ĞĞÆ÷
+echo           DSH_C3_Archive_1830   10-21 ÒÑÅÜÍêµÄÒ»´ÎĞÔÈÎÎñ
 echo ==========================================================
 echo.
 
 net session >nul 2>&1
-if errorlevel 1 (
-  echo éœ€è¦ç®¡ç†å‘˜æƒé™ï¼Œæ­£åœ¨ä¸ºæ‚¨ææƒï¼Œè¯·åœ¨æ–°å¼¹å‡ºçš„çª—å£é‡ŒæŒ‰æç¤ºç¡®è®¤...
-  echo.
-  powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
-  exit /b 0
-)
+if errorlevel 1 goto NEEDADMIN
 
-echo å½“å‰çŠ¶æ€ï¼š
+:ADMIN
+echo µ±Ç°×´Ì¬£º
+call :SHOW
 echo.
-schtasks /query /tn "DSH_Run_2h" /fo LIST /v | findstr /i "TaskName Status Next Run"
-echo.
-schtasks /query /tn "DSH_C3_Archive_1830" /fo LIST /v | findstr /i "TaskName Status Next Run"
-echo.
-
-set /p CH=è¯·é€‰æ‹©ï¼š1=åœç”¨è¿™ä¸¤æšï¼ˆæ¨èï¼‰  2=æ¢å¤å¯ç”¨  ç›´æ¥å›è½¦=å–æ¶ˆ =
+set "CH="
+set /p "CH=ÇëÑ¡Ôñ£º1=Í£ÓÃÕâÁ½Ã¶£¨ÍÆ¼ö£©  2=»Ö¸´ÆôÓÃ  Ö±½Ó»Ø³µ=È¡Ïû = "
 if "%CH%"=="1" goto DISABLE
 if "%CH%"=="2" goto ENABLE
-echo å·²å–æ¶ˆï¼Œæœªæ”¹åŠ¨ä»»ä½•ä¸œè¥¿ã€‚
-pause
+echo ÒÑÈ¡Ïû£¬Î´¸Ä¶¯ÈÎºÎ¶«Î÷¡£
+goto END
+
+:NEEDADMIN
+echo ĞèÒª¹ÜÀíÔ±È¨ÏŞ£¬ÕıÔÚÌáÈ¨£¬ÇëÔÚµ¯³öµÄ´°¿Úµã¡¸ÊÇ¡¹...
+echo £¨Èç¹ûÃ»ÓĞµ¯´°£¬ËµÃ÷±»ÏµÍ³À¹ÁË£¬ÇëÓÒ¼ü±¾ÎÄ¼şÑ¡¡¸ÒÔ¹ÜÀíÔ±Éí·İÔËĞĞ¡¹£©
+powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
 exit /b 0
 
 :DISABLE
 echo.
-echo æ­£åœ¨åœç”¨ DSH_Run_2hï¼ˆæ¯ 2 å°æ—¶çš„è¿ç»­æ‰§è¡Œå™¨ï¼‰...
+echo Í£ÓÃ DSH_Run_2h ...
 schtasks /change /tn "DSH_Run_2h" /disable
-echo æ­£åœ¨åœç”¨ DSH_C3_Archive_1830ï¼ˆ10-21 å·²è·‘å®Œçš„ä¸€æ¬¡æ€§å½’æ¡£ä»»åŠ¡ï¼‰...
+if errorlevel 1 (echo    [Ê§°Ü] ·µ»ØÂë !errorlevel! & set "FAIL=1") else (echo    [³É¹¦])
+echo Í£ÓÃ DSH_C3_Archive_1830 ...
 schtasks /change /tn "DSH_C3_Archive_1830" /disable
-echo.
-echo ç»“æœå¤æŸ¥ï¼š
-schtasks /query /tn "DSH_Run_2h" /fo LIST /v | findstr /i "TaskName Status"
-schtasks /query /tn "DSH_C3_Archive_1830" /fo LIST /v | findstr /i "TaskName Status"
-goto END
+if errorlevel 1 (echo    [Ê§°Ü] ·µ»ØÂë !errorlevel! & set "FAIL=1") else (echo    [³É¹¦])
+goto VERIFY
 
 :ENABLE
 echo.
-echo æ­£åœ¨æ¢å¤ DSH_Run_2h ...
+echo »Ö¸´ DSH_Run_2h ...
 schtasks /change /tn "DSH_Run_2h" /enable
-echo æ­£åœ¨æ¢å¤ DSH_C3_Archive_1830 ...
+if errorlevel 1 (echo    [Ê§°Ü] ·µ»ØÂë !errorlevel! & set "FAIL=1") else (echo    [³É¹¦])
+echo »Ö¸´ DSH_C3_Archive_1830 ...
 schtasks /change /tn "DSH_C3_Archive_1830" /enable
+if errorlevel 1 (echo    [Ê§°Ü] ·µ»ØÂë !errorlevel! & set "FAIL=1") else (echo    [³É¹¦])
+goto VERIFY
+
+:VERIFY
 echo.
-echo ç»“æœå¤æŸ¥ï¼š
-schtasks /query /tn "DSH_Run_2h" /fo LIST /v | findstr /i "TaskName Status"
-schtasks /query /tn "DSH_C3_Archive_1830" /fo LIST /v | findstr /i "TaskName Status"
+echo ½á¹û¸´²é£º
+call :SHOW
+if defined FAIL (
+  echo.
+  echo [ÌáÊ¾] ÓĞÌõÄ¿Ê§°Ü¡£±¸ÓÃ°ì·¨£ºÔÚ¡¸ÈÎÎñ¼Æ»®³ÌĞò¿â¡¹¸ùÏÂÕÒµ½ DSH_Run_2h£¬
+  echo        ÓÒ¼ü ¡ú ½ûÓÃ¡£ÏÂÃæ¿ÉÒÔ°ïÄúÖ±½Ó´ò¿ªÈÎÎñ¼Æ»®³ÌĞò¡£
+  echo.
+  choice /c YN /m "ÏÖÔÚ´ò¿ªÈÎÎñ¼Æ»®³ÌĞòÂğ"
+  if errorlevel 2 goto END
+  start "" taskschd.msc
+)
 goto END
+
+:SHOW
+schtasks /query /tn "DSH_Run_2h" /fo LIST /v | findstr /i "ÈÎÎñÃû ÏÂ´ÎÔËĞĞÊ±¼ä ¼Æ»®ÈÎÎñ×´Ì¬ TaskName Next"
+schtasks /query /tn "DSH_C3_Archive_1830" /fo LIST /v | findstr /i "ÈÎÎñÃû ÏÂ´ÎÔËĞĞÊ±¼ä ¼Æ»®ÈÎÎñ×´Ì¬ TaskName Next"
+exit /b 0
 
 :END
 echo.
-echo è¯´æ˜ï¼šä¸¤æšä»»åŠ¡çš„åŸå§‹ XML å·²å¤‡ä»½åœ¨
+echo ËµÃ÷£ºÍ£ÓÃÖ»ÊÇ²»ÔÙ´¥·¢£¬²»É¾³ıÈÎÎñ¶¨Òå£¬ËæÊ±¿ÉÓÃ±¾ÎÄ¼şÑ¡ 2 »Ö¸´¡£
+echo Á½Ã¶ÈÎÎñµÄÔ­Ê¼ XML ±¸·İÔÚ£º
 echo   D:\Project\zhiguanAI\_analysis_tmp\bak_20261109_gov\
-echo åœç”¨åªæ˜¯ä¸å†è§¦å‘ï¼Œä¸åˆ é™¤ä»»åŠ¡å®šä¹‰ï¼Œéšæ—¶å¯ä»¥ç”¨æœ¬æ–‡ä»¶é€‰ 2 æ¢å¤ã€‚
 echo.
 pause
