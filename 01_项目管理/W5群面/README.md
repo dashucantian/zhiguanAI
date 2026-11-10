@@ -25,7 +25,9 @@ python 群轮询台账.py              :: 增量拉一次
 
 ## 台账字段
 
-`ts` 抓取时刻／`chat` 群名／`chat_id`／`msg_time` 消息时刻／`message_id`／`sender`（open_id 或 app_id 前 12 位）／`sender_kind`／`msg_type`／`text`（正文前 500 字）／`level` 层级标（未判填 `1?`）／`replied` 是否已回。
+`ts` 抓取时刻／`chat` 群名／`chat_id`／`msg_time` 消息时刻／`message_id`／`sender`（open_id 或 app_id 前 12 位）／`sender_kind`／`msg_type`／`text`（正文前 500 字）／`deleted` 是否已撤回／`reply_to` 被回复的消息 id／`level` 层级标（未判填 `1?`）／`replied` 是否已回。
+
+**回执怎么查**：台账只追加、不改旧行，原消息行的 `replied` 不回头改。判某条是否回过，查台账里有没有一条 `reply_to` 等于它的机器人消息行；那一行的 `message_id` 就是回复 id。发送时用 `lark-cli im +messages-reply --message-id <原消息>` 才会带上 `reply_to`，用 `+messages-send` 发的普通消息链不上。撤回的消息 `deleted` 为 true、正文会显示 `[Invalid text JSON]`，属正常。
 
 ## 两个已知坑（都踩过）
 

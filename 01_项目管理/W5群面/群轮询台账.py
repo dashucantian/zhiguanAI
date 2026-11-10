@@ -76,6 +76,35 @@ def append(rows: list[dict]) -> None:
             f.write((json.dumps(r, ensure_ascii=False) + "\n").encode("utf-8"))
 
 
+def load_seen_ids() -> set:
+    """台账里已有的 message_id（含判读行的）。用于重叠窗口去重。"""
+    seen = set()
+    if not os.path.exists(LEDGER):
+        return seen
+    with open(LEDGER, "rb") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line.decode("utf-8", "replace"))
+            except Exception:  # noqa: BLE001
+                continue
+            mid = row.get("message_id")
+            if mid:
+                seen.add(mid)
+    return seen
+
+
+def overlap(since: str, minutes: int = 2) -> str:
+    """游标是分钟粒度，同一分钟的后到消息会被 --start 挡掉；查询时往前多取两分钟，靠 id 去重。"""
+    try:
+        t = time.mktime(time.strptime(since, "%Y-%m-%d %H:%M"))
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(t - minutes * 60))
+    except Exception:  # noqa: BLE001
+        return since
+
+
 def fetch(chat_id: str, since: str | None) -> tuple[list[dict], str]:
     """拉一次消息。since 为空则只取最近 20 条建游标。"""
     args = LARK + ["im", "+chat-messages-list", "--chat-id", chat_id,
@@ -95,15 +124,47 @@ def fetch(chat_id: str, since: str | None) -> tuple[list[dict], str]:
     return msgs, out
 
 
+def _arg(argv: list[str], flag: str, default: str = "") -> str:
+    if flag in argv:
+        i = argv.index(flag)
+        if i + 1 < len(argv):
+            return argv[i + 1]
+    return default
+
+
+def mark(argv: list[str]) -> int:
+    """追加一条判读/回执行（不改旧行）。--mark <原消息id> [--level 1|2|3] [--reply-id <回复id>] [--note 文字]"""
+    mid = _arg(argv, "--mark")
+    if not mid:
+        print("用法：python 群轮询台账.py --mark <message_id> [--level 1|2|3] [--reply-id <om_>] [--note 文字]")
+        return 2
+    reply_id = _arg(argv, "--reply-id")
+    row = {
+        "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "type": "mark",
+        "message_id": mid,
+        "level": _arg(argv, "--level"),
+        "replied": bool(reply_id),
+        "reply_message_id": reply_id,
+        "note": _arg(argv, "--note"),
+    }
+    append([row])
+    print("已追加判读行：%s level=%s replied=%s" % (mid, row["level"], row["replied"]))
+    return 0
+
+
 def main() -> int:
+    if "--mark" in sys.argv:
+        return mark(sys.argv)
     baseline = "--baseline" in sys.argv
     state = load_state()
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     total_new = 0
+    seen = load_seen_ids()
     for name, cid in CHATS:
         since = None if baseline else state.get(cid)
         try:
-            msgs, _ = fetch(cid, since)
+            msgs, _ = fetch(cid, overlap(since) if since else None)
         except Exception as exc:  # noqa: BLE001
             print("[X] %s 拉取失败：%s" % (name, exc))
             continue
@@ -111,7 +172,10 @@ def main() -> int:
         latest = since
         for m in msgs:
             mt = m.get("create_time") or ""
-            if latest and mt and mt <= latest:
+            mid = m.get("message_id")
+            if mt and (latest is None or mt > latest):
+                latest = mt
+            if mid and mid in seen:
                 continue
             sender = (m.get("sender") or {}).get("id") or ""
             rows.append({
@@ -119,16 +183,18 @@ def main() -> int:
                 "chat": name,
                 "chat_id": cid,
                 "msg_time": mt,
-                "message_id": m.get("message_id"),
+                "message_id": mid,
                 "sender": sender[:12],
                 "sender_kind": (m.get("sender") or {}).get("id_type"),
                 "msg_type": m.get("msg_type"),
                 "text": (m.get("content") or "")[:500],
+                "deleted": bool(m.get("deleted")),
+                "reply_to": m.get("reply_to") or "",
                 "level": "1?",
                 "replied": False,
             })
-            if mt and (latest is None or mt > latest):
-                latest = mt
+            if mid:
+                seen.add(mid)
         if latest:
             state[cid] = latest
         if baseline:
