@@ -559,7 +559,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--both", action="store_true", help="正跑＋四路反证")
     ap.add_argument("--no-start", action="store_true", help="不自起服务，只连已在听的 8779")
-    ap.add_argument("--asset-min", type=int, default=4096, help="GLB 占位线（字节）")
+    ap.add_argument("--asset-min", type=int, default=1048576, help="GLB 占位线（字节，默认 1 MiB；协调位 11-11 准提，堵 6.8KB 级假绿）")
     a = ap.parse_args()
     if EDGE is None:
         print("[FAIL] 找不到 Edge，本闸的判据 3／4 全靠真浏览器")
