@@ -1,615 +1,734 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-skin="a" data-view="overview">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>止观AI 关系场域 · 二维活看板（最小验证）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>关系场域活看板 · 骨架页 v0.1</title>
 <style>
-  :root{
-    --bg:#0b0f14; --panel:#11161d; --panel2:#0e131a; --line:#1f2937;
-    --text:#e5e7eb; --muted:#94a3b8; --dim:#64748b;
-    --subject:#3b82f6; --task:#a855f7; --boundary:#14b8a6; --model:#f59e0b;
-    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --done:#64748b;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
-    font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;}
-  #app{display:flex;flex-direction:column;height:100%}
-  header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);
-    border-bottom:1px solid var(--line);flex-wrap:wrap}
-  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.5px}
-  header .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 8px}
-  header .spacer{flex:1}
-  header button,header label{font-size:12px;color:var(--text);background:var(--panel2);
-    border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
-  header button:hover{border-color:var(--dim)}
-  header input[type=search]{font-size:12px;background:var(--panel2);border:1px solid var(--line);
-    color:var(--text);border-radius:6px;padding:5px 8px;width:180px;outline:none}
-  #filters{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
-  #filters label{display:flex;gap:4px;align-items:center;background:none;border:none;padding:0;cursor:pointer}
-  #filters input{accent-color:var(--subject)}
-  #main{display:flex;flex:1;min-height:0}
-  #canvasWrap{flex:1;position:relative;min-width:0;overflow:hidden;background:
-    radial-gradient(circle at 30% 20%,#101926 0%,var(--bg) 55%)}
-  svg#graph{width:100%;height:100%;display:block;cursor:grab;user-select:none}
-  svg#graph.dragging{cursor:grabbing}
-  .col-bg{fill:#0f151d;stroke:#1b2532;stroke-width:1;rx:10}
-  .col-title{fill:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px}
-  .node{cursor:pointer}
-  .node rect{stroke-width:1;rx:6}
-  .node text{pointer-events:none;fill:var(--text);font-size:12px}
-  .node .sub{fill:var(--muted);font-size:10px}
-  .node:hover rect{stroke:#fff;stroke-opacity:.65}
-  .node.selected rect{stroke:#fff;stroke-width:2}
-  .layer-subject rect{fill:#12213a;stroke:#2b5a9e}
-  .layer-subject.kind-window rect{fill:#17356b;stroke:#4f8ff7}
-  .layer-subject.kind-human rect{fill:#2a2140;stroke:#a78bfa}
-  .layer-task rect{fill:#241433;stroke:#7e3aa8}
-  .layer-boundary rect{fill:#0f2f2b;stroke:#2a8c7f}
-  .layer-model rect{fill:#33240f;stroke:#a8731a}
-  .layer-model.kind-arch-hub rect{fill:#4a2c08;stroke:#f59e0b}
-  .edge{fill:none;stroke-width:1;opacity:.22;transition:opacity .12s}
-  .edge.e-subject{stroke:var(--subject)}
-  .edge.e-task{stroke:var(--task)}
-  .edge.e-boundary{stroke:var(--boundary)}
-  .edge.e-model{stroke:var(--model)}
-  .edge.hi{opacity:.95;stroke-width:2}
-  .edge.dim{opacity:.04}
-  .node.dim{opacity:.16}
-  .node.hi{opacity:1}
-  .status-dot{stroke:none}
-  #detail{width:410px;min-width:320px;border-left:1px solid var(--line);background:var(--panel);
-    display:flex;flex-direction:column;min-height:0}
-  #detail .hd{padding:12px 14px;border-bottom:1px solid var(--line)}
-  #detail .hd h2{font-size:14px;margin:0 0 4px 0;line-height:1.4}
-  #detail .hd .meta{font-size:11px;color:var(--muted)}
-  #detail .bd{overflow:auto;padding:12px 14px;flex:1}
-  #detail .empty{color:var(--dim);font-size:12px;line-height:1.8}
-  .kv{display:grid;grid-template-columns:92px 1fr;gap:6px 10px;font-size:12px;margin:8px 0 14px}
-  .kv .k{color:var(--muted)}
-  .kv .v{color:var(--text);word-break:break-word}
-  .sec-title{font-size:11px;color:var(--muted);letter-spacing:1px;margin:14px 0 6px 0;
-    border-top:1px solid var(--line);padding-top:10px}
-  .anchor{border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0;background:var(--panel2)}
-  .anchor .a-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .anchor .a-file{font-family:Consolas,monospace;font-size:11px;color:#7dd3fc;word-break:break-all}
-  .anchor .a-note{font-size:11px;color:var(--muted)}
-  .anchor .a-raw{font-size:11px;line-height:1.6;color:#cbd5e1;background:#0a0e13;border-radius:6px;
-    padding:6px;margin-top:6px;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow:auto}
-  .anchor .a-actions{display:flex;gap:6px;margin-top:6px}
-  .anchor button,.anchor a{font-size:11px;color:var(--text);background:#1a2330;border:1px solid var(--line);
-    border-radius:5px;padding:3px 7px;cursor:pointer;text-decoration:none}
-  .anchor a:hover,button:hover{border-color:var(--dim)}
-  footer{font-size:11px;color:var(--dim);padding:6px 16px;border-top:1px solid var(--line);
-    display:flex;gap:16px;flex-wrap:wrap;background:var(--panel)}
-  footer .ok{color:var(--ok)}
-  #toast{position:fixed;right:430px;bottom:44px;background:#173d2b;border:1px solid #2f6f4a;
-    color:#bbf7d0;font-size:12px;padding:8px 12px;border-radius:8px;opacity:0;transition:opacity .2s;
-    pointer-events:none;max-width:420px}
-  #toast.show{opacity:1}
-  .legend{display:flex;gap:12px;font-size:11px;color:var(--muted);align-items:center}
-  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
-  @media (max-width:1200px){#detail{width:340px}header input[type=search]{width:120px}}
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --paper:#f4f0e6;--card:#fbf8f1;--card-2:#efeadd;
+  --ink:#2b2a27;--ink-2:#4b4842;--ink-3:#6b675e;
+  --line:#c9c2b2;--line-soft:#ddd6c6;
+  --g-subject:#5a6d7d;--g-task:#6a7d5a;--g-boundary:#7d5a6a;--g-model:#6b5a7d;
+  --sig-ok:#4f8a63;--sig-warn:#b0833f;--sig-risk:#a8544a;
+  --gray:#9a9a93;--gray-tx:#6b675e;
+  --serif:"Songti SC","STSong","SimSun","Noto Serif SC",serif;
+  --sans:"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+  --mono:Consolas,"Courier New",monospace;
+}
+html[data-skin="b"]{
+  --paper:#14181d;--card:#1e242b;--card-2:#242b33;
+  --ink:#e8eaed;--ink-2:#c6cbd1;--ink-3:#8a9199;
+  --line:#3a4148;--line-soft:#2a3138;
+  --g-subject:#7d94a8;--g-task:#8fa876;--g-boundary:#a87d8f;--g-model:#947da8;
+  --sig-warn:#c9973f;--sig-risk:#c96a5a;
+  --gray:#6b7178;--gray-tx:#8a9199;
+}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--sans)}
+body{font-size:13px;line-height:1.55;padding:0 0 44px}
+button{font-family:inherit;font-size:inherit;color:inherit;background:none;border:none;cursor:pointer}
+a{color:inherit}
+[hidden]{display:none !important}
+
+.designbanner{font-size:11px;color:var(--ink-3);background:var(--card-2);
+  border-bottom:1px solid var(--line-soft);padding:4px 20px;letter-spacing:.02em}
+
+.topbar{display:flex;align-items:center;gap:18px;padding:11px 20px 9px;
+  border-bottom:1px solid var(--line);flex-wrap:wrap;background:var(--paper)}
+.brand{font-family:var(--serif);font-size:20px;font-weight:700;letter-spacing:.06em}
+.brand small{font-family:var(--sans);font-size:11px;font-weight:400;color:var(--ink-3);margin-left:8px;letter-spacing:0}
+.tabs{display:flex;gap:2px}
+.tab{padding:5px 14px;font-size:13px;color:var(--ink-3);border-bottom:2px solid transparent}
+.tab:hover{color:var(--ink-2)}
+.tab.on{color:var(--ink);border-bottom-color:var(--ink);font-weight:600}
+.tab .sk{font-size:10px;color:var(--ink-3);margin-left:4px}
+.topright{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.verchip{font-family:var(--mono);font-size:11px;color:var(--ink-3);
+  border:1px solid var(--line-soft);border-radius:5px;padding:3px 8px;background:var(--card)}
+.btn{border:1px solid var(--line);border-radius:5px;padding:4px 10px;font-size:12px;background:var(--card)}
+.btn:hover{border-color:var(--ink-3)}
+
+.wrap{padding:14px 20px 0}
+.notice{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--gray);
+  border-radius:8px;padding:12px 16px;margin-bottom:14px}
+.notice .nt{font-size:14px;font-weight:700;color:var(--gray-tx);font-family:var(--serif)}
+.notice .nd{font-size:12px;color:var(--ink-3);margin-top:5px;line-height:1.7}
+.chip-gray{display:inline-block;font-size:11px;color:var(--gray-tx);background:var(--card-2);
+  border:1px solid var(--line);border-radius:4px;padding:1px 9px;margin-right:6px}
+
+.overview{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.ovcard{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;padding:10px 14px 11px}
+.ovlabel{display:inline-block;font-size:11px;font-weight:600;color:var(--ink-2);
+  background:var(--card-2);border:1px solid var(--line-soft);border-radius:4px;padding:1px 8px;margin-bottom:6px}
+.ovsentence{font-family:var(--serif);font-size:15px;line-height:1.6;color:var(--ink)}
+.ovsentence b{font-weight:700}
+.anchip{display:inline-block;font-family:var(--mono);font-size:11px;color:var(--ink-2);
+  border:1px solid var(--line);border-radius:4px;padding:1px 7px;margin-top:7px;background:var(--paper)}
+.anchip:hover{border-color:var(--ink-3)}
+.anchip .n{color:var(--ink-3)}
+
+.main{display:grid;grid-template-columns:1fr 338px;gap:14px;align-items:start}
+.canvas{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.col{min-width:0;overflow:hidden}
+.colhead{display:flex;align-items:baseline;gap:7px;padding:2px 2px 7px;
+  border-bottom:2px solid var(--line);margin-bottom:9px}
+.coldot{width:9px;height:9px;border-radius:2px;align-self:center}
+.colname{font-size:14px;font-weight:700;font-family:var(--serif);letter-spacing:.04em}
+.colcount{font-size:12px;color:var(--ink-3);font-family:var(--mono)}
+.colsub{font-size:11px;color:var(--ink-3);margin-left:auto}
+
+.group{margin-bottom:10px}
+summary.ghead{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink-2);
+  padding:4px 6px;background:var(--card-2);border:1px solid var(--line-soft);border-bottom:none;
+  border-radius:5px 5px 0 0;list-style:none;cursor:pointer}
+summary.ghead::-webkit-details-marker{display:none}
+.ghead .gc{font-family:var(--mono);font-weight:400;color:var(--ink-3);font-size:11px}
+.ghead .caret{margin-left:auto;color:var(--ink-3);font-size:10px}
+details.group:not([open]) summary.ghead{border-bottom:1px solid var(--line-soft);border-radius:5px}
+details.group:not([open]) .caret{transform:rotate(-90deg)}
+.gbody{border:1px solid var(--line-soft);border-radius:0 0 5px 5px;padding:6px;background:var(--card)}
+
+.node{border:1px solid var(--line-soft);border-left:3px solid var(--line);border-radius:5px;
+  background:var(--paper);padding:6px 8px 5px;margin-bottom:6px;width:100%;text-align:left;display:block;overflow:hidden}
+.node:last-child{margin-bottom:0}
+.node:hover{border-color:var(--ink-3);border-left-color:var(--ink-3)}
+.node .nl{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;
+  font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;line-height:1.4;
+  white-space:normal;word-break:break-all}
+.node .nm{display:flex;font-size:11px;color:var(--ink-3);margin-top:2px;gap:6px;align-items:center;flex-wrap:wrap}
+.node .na{font-family:var(--mono);font-size:10px;color:var(--ink-3);border:1px solid var(--line-soft);border-radius:3px;padding:0 4px}
+.node.l-subject{border-left-color:var(--g-subject)}
+.node.l-task{border-left-color:var(--g-task)}
+.node.l-boundary{border-left-color:var(--g-boundary)}
+.node.l-model{border-left-color:var(--g-model)}
+.node.lit{outline:2px solid var(--ink);outline-offset:1px;background:var(--card)}
+.node.gray{border-left-color:var(--gray);opacity:.6}
+
+.aside{display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;padding:12px 14px}
+.ptitle{font-size:13px;font-weight:700;font-family:var(--serif);letter-spacing:.03em;
+  padding-bottom:7px;margin-bottom:8px;border-bottom:1px solid var(--line-soft);
+  display:flex;align-items:center;gap:8px}
+.ptitle .tag{font-size:10px;font-weight:400;color:var(--ink-3);border:1px solid var(--line-soft);
+  border-radius:4px;padding:0 6px;margin-left:auto}
+.kv{font-size:12px;color:var(--ink-2);margin-bottom:5px;line-height:1.6;word-break:break-all}
+.kv b{color:var(--ink-3);font-weight:600;margin-right:6px}
+.relrow{font-size:12px;padding:6px 0;border-bottom:1px dashed var(--line-soft);width:100%;text-align:left;display:block}
+.relrow:last-child{border-bottom:none}
+.relrow:hover{background:var(--card-2)}
+.relrow .rt{display:inline-block;font-size:10px;border:1px solid var(--line);border-radius:3px;
+  padding:0 5px;margin-right:6px;color:var(--ink-2)}
+.hint{font-size:11px;color:var(--ink-3);line-height:1.7}
+.raw{font-family:var(--mono);font-size:12px;line-height:1.75;color:var(--ink);
+  background:var(--paper);border:1px solid var(--line-soft);border-radius:5px;
+  padding:8px 10px;margin-top:6px;word-break:break-all;white-space:pre-wrap}
+.slot{border:1.5px dashed var(--line);border-radius:8px;padding:12px 14px}
+.slot .st{font-size:12px;font-weight:600;color:var(--ink-3);margin-bottom:5px}
+.slot .sd{font-size:11px;color:var(--ink-3);line-height:1.6}
+
+.crumb{font-size:12px;color:var(--ink-3);padding:0 0 10px}
+.crumb b{color:var(--ink-2);font-weight:600}
+.workbench{display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start}
+.anchorlist{list-style:none}
+.anchorlist li{border:1px solid var(--line-soft);border-radius:6px;padding:7px 10px;
+  margin-bottom:7px;background:var(--paper);width:100%;text-align:left;display:block}
+.anchorlist li.on{border-color:var(--ink-3);background:var(--card-2)}
+.anchorlist .af{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.anchorlist .an{font-size:11px;color:var(--ink-3);margin-top:2px}
+.rawpane{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;overflow:hidden;min-width:0}
+.rawhead{display:flex;align-items:center;gap:10px;padding:9px 14px;
+  border-bottom:1px solid var(--line-soft);background:var(--card-2);flex-wrap:wrap}
+.rawhead .rf{font-family:var(--mono);font-size:12px;color:var(--ink-2);word-break:break-all}
+.rawhead .got{margin-left:auto;font-size:11px;color:var(--ink-2);border:1px solid var(--line);
+  border-radius:4px;padding:1px 8px}
+.rawbody{padding:14px 0;font-family:var(--mono);font-size:13px;line-height:1.9}
+.rawline{display:flex;gap:14px;padding:0 14px}
+.rawline .ln{color:var(--ink-3);min-width:34px;text-align:right;user-select:none}
+.rawline .lt{color:var(--ink);word-break:break-all;white-space:pre-wrap}
+.rawline.sel{background:var(--card-2);border-left:3px solid var(--sig-warn);padding-left:11px}
+.rawnote{font-size:11px;color:var(--ink-3);padding:9px 14px;border-top:1px solid var(--line-soft)}
+.emptybox{border:1.5px dashed var(--line);border-radius:8px;padding:18px 16px;color:var(--ink-3);font-size:12px}
+
+.statusbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:16px;align-items:center;
+  background:var(--card);border-top:1px solid var(--line);padding:6px 20px;
+  font-size:11px;color:var(--ink-3);flex-wrap:wrap}
+.statusbar .mono{font-family:var(--mono)}
+.statusbar .right{margin-left:auto}
+
+@media (max-width:1100px){
+  .main{grid-template-columns:1fr}
+  .canvas{grid-template-columns:repeat(2,1fr)}
+  .overview{grid-template-columns:1fr;gap:8px}
+  .aside{flex-direction:row;flex-wrap:wrap}
+  .aside .panel,.aside .slot{flex:1 1 260px}
+  .workbench{grid-template-columns:1fr}
+  .topright{margin-left:0}
+}
+@media (max-width:760px){
+  .canvas{grid-template-columns:1fr}
+  .wrap{padding:10px 12px 0}
+  .topbar{padding:9px 12px}
+}
 </style>
 </head>
 <body>
-<div id="app">
-  <header>
-    <h1>止观AI 关系场域 · 二维活看板</h1>
-    <span class="tag" id="tagVersion">版本 —</span>
-    <span class="tag" id="tagTime">建模 —</span>
-    <span class="tag" id="tagStats">节点 — / 边 — / 锚 —</span>
-    <div class="legend">
-      <span><i style="background:var(--subject)"></i>主体</span>
-      <span><i style="background:var(--task)"></i>任务</span>
-      <span><i style="background:var(--boundary)"></i>边界</span>
-      <span><i style="background:var(--model)"></i>模型</span>
-    </div>
-    <div class="spacer"></div>
-    <div id="filters">
-      <label><input type="checkbox" id="f-subject" checked>主体</label>
-      <label><input type="checkbox" id="f-task" checked>任务</label>
-      <label><input type="checkbox" id="f-boundary" checked>边界</label>
-      <label><input type="checkbox" id="f-model" checked>模型</label>
-    </div>
-    <input type="search" id="search" placeholder="搜索节点…">
-    <label><input type="checkbox" id="auto" checked>自动刷新 2 秒</label>
-    <button id="btnRefresh">刷新</button>
-    <button id="btnFit">适配</button>
-  </header>
 
-  <div id="main">
-    <div id="canvasWrap">
-      <svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg>
-    </div>
-    <aside id="detail">
-      <div class="hd">
-        <h2 id="dTitle">点击一个节点</h2>
-        <div class="meta" id="dMeta">右侧显示该节点登记件原文（文件:行号）与建模时锚点。</div>
-      </div>
-      <div class="bd" id="dBd">
-        <div class="empty">
-          左图四层：主体（窗口／AI／法师）、任务、边界、模型。<br>
-          点任一节点 → 这里列出它回指的登记件原文。<br>
-          页面只经 file:// 读本地脚本，零网络请求。
-        </div>
-      </div>
-    </aside>
+<div class="designbanner">骨架页 v0.1（第一步）· 四列＋三视图＋点节点看证据 · 只读本地数据件、零联网、零第三方库 · 双击即开</div>
+
+<div class="topbar">
+  <div class="brand">关系场域<small>止观AI · 活看板</small></div>
+  <div class="tabs" role="tablist" aria-label="视图预设">
+    <button class="tab on" role="tab" aria-selected="true" data-view-btn="overview">总览</button>
+    <button class="tab" role="tab" aria-selected="false" data-view-btn="duty">责任</button>
+    <button class="tab" role="tab" aria-selected="false" data-view-btn="evidence">证据<span class="sk">B</span></button>
+  </div>
+  <div class="topright">
+    <div class="verchip" id="verchip">版本 —</div>
+    <button class="btn" id="reloadBtn" type="button">重新读盘</button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="boot" class="notice">
+    <div class="nt">正在读本地数据件…</div>
+    <div class="nd" id="bootText">读 data/field-model.js（本地文件，不出网）。</div>
   </div>
 
-  <footer>
-    <span class="ok" id="fStatus">本地 file:// · 零网络请求</span>
-    <span id="fSources">四源 —</span>
-    <span id="fAnchor">锚点 —</span>
-    <span>只读四源，不改任何登记件；探针读数见 selftest_readings.txt</span>
-  </footer>
+  <div id="app" hidden>
+    <div class="overview" id="overviewStrip"></div>
+
+    <div class="main" id="mainWrap">
+      <div class="canvas" id="canvas"></div>
+      <aside class="aside" id="aside"></aside>
+    </div>
+
+    <div id="evidenceWrap" hidden>
+      <div class="crumb" id="crumb"></div>
+      <div class="workbench">
+        <ul class="anchorlist" id="anchorList"></ul>
+        <div class="rawpane" id="rawPane"></div>
+      </div>
+    </div>
+  </div>
 </div>
-<div id="toast"></div>
+
+<div class="statusbar">
+  <span class="mono" id="sbCounts">节点 — · 边 — · 锚 —</span>
+  <span id="sbVersion">版本 —</span>
+  <span id="sbTime">建模 —</span>
+  <span id="sbSources">四源 —</span>
+  <span class="right">本地零网络 · 只读</span>
+</div>
 
 <script>
 (function(){
-  'use strict';
-  const NS = 'http://www.w3.org/2000/svg';
-  const $ = id => document.getElementById(id);
-  const svg = $('graph');
-  const state = {
+  "use strict";
+
+  var state = {
     model: null,
-    pos: new Map(),
+    view: "overview",
     selected: null,
-    view: {x: 0, y: 0, k: 1},
-    loading: false,
-    lastVersion: null,
-    auto: true,
-    filters: {subject:true, task:true, boundary:true, model:true},
-    search: ''
+    anchorIndex: 0,
+    error: null
   };
 
-  const COLW = 210, TASKW = 390, BNDW = 270, MODW = 300;
-  const X = {subject: 90, task: 590, boundary: 1090, model: 1590};
-  const LAYER_LABEL = {subject:'主体', task:'任务', boundary:'边界', model:'模型'};
-  const STATUS_COLOR = {progress:'#22c55e', done:'#64748b', waiting:'#f59e0b', other:'#94a3b8'};
+  var WK_ORDER = ["W3", "W1", "W2", "W4"];
+  var TASK_ORDER = ["进行中", "待办/待裁", "已完成/已交", "其他", "已销"];
+  var BND_ORDER = [["window-boundary", "窗口职责"], ["ruling", "裁定边界"], ["task-boundary", "任务边界"]];
+  var ARCH_ORDER = [["service", "服务"], ["module", "模块"], ["source-of-truth", "正源"],
+    ["projection", "投影"], ["database", "数据库"], ["external-system", "外部系统"],
+    ["risk", "风险"], ["actor", "角色"], ["", "未分类"]];
 
-  function el(tag, attrs){
-    const e = document.createElementNS(NS, tag);
-    if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
-    return e;
-  }
-  function svgText(t, x, y, cls){
-    const e = el('text', {x, y});
-    if (cls) e.setAttribute('class', cls);
-    e.textContent = t;
-    return e;
-  }
-  function fitText(s, maxW, fs){
-    s = String(s == null ? '' : s);
-    let w = 0, out = '';
-    for (const ch of s){
-      const cw = /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(ch) ? fs : fs * 0.56;
-      if (w + cw > maxW){ out += '…'; break; }
-      w += cw; out += ch;
-    }
-    return out || '—';
-  }
-  function statusKey(s){
-    s = String(s || '');
-    if (/已销|已归档/.test(s)) return 'done';
-    if (/已验收|已完成|已交|已办|已生效|已升为/.test(s)) return 'done';
-    if (/进行中|中环已跑|待验收/.test(s)) return 'progress';
-    if (/待派|待办|待审|候法师|候裁/.test(s)) return 'waiting';
-    return 'other';
-  }
-  function nodeSize(n){
-    if (n.layer === 'subject'){
-      if (n.kind === 'window') return {w: COLW, h: 36};
-      if (n.kind === 'human') return {w: COLW, h: 40};
-      return {w: COLW, h: 24};
-    }
-    if (n.layer === 'task') return {w: TASKW, h: 30};
-    if (n.layer === 'boundary') return {w: BNDW, h: 34};
-    if (n.kind === 'arch-hub') return {w: MODW, h: 40};
-    return {w: MODW, h: 24};
+  function esc(s){
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  function layout(model){
-    const pos = new Map();
-    const nodes = model.nodes;
-    // 主体：法师 + 四窗 + 各窗 AI
-    let y = 78;
-    const human = nodes.find(n => n.kind === 'human');
-    if (human){ pos.set(human.id, {x: X.subject, y, ...nodeSize(human)}); y += 58; }
-    const windows = nodes.filter(n => n.kind === 'window').sort((a,b)=>a.label.localeCompare(b.label));
-    const ais = nodes.filter(n => n.kind === 'ai');
-    for (const w of windows){
-      pos.set(w.id, {x: X.subject, y, ...nodeSize(w)});
-      const wy = y;
-      y += 46;
-      const wk = w.attrs['窗口'];
-      const list = ais.filter(a => a.window === wk).sort((a,b)=>a.attrs['AI 号'].localeCompare(b.attrs['AI 号']));
-      for (const a of list){
-        pos.set(a.id, {x: X.subject, y, ...nodeSize(a)});
-        y += 30;
-      }
-      y += 16;
-      w._y = wy;
+  // 脱敏只在渲染层做，不改生成器、不改数据件
+  function safeLabel(s){
+    return String(s == null ? "" : s).replace(/宗国法师/g, "法师");
+  }
+
+  function attr(n, k){ return (n && n.attrs && n.attrs[k]) || ""; }
+
+  // 渲染层统一出口：先脱敏再转义；数据件不改
+  function T(s){ return esc(safeLabel(s)); }
+
+  function anchorsOf(n){ return (n && n.anchors) || []; }
+
+  function byId(id){
+    if (!state.model) return null;
+    for (var i = 0; i < state.model.nodes.length; i++){
+      if (state.model.nodes[i].id === id) return state.model.nodes[i];
     }
-    // 任务：按任务号倒序（今日在前）
-    y = 78;
-    const tasks = nodes.filter(n => n.layer === 'task')
-      .sort((a,b)=> b.attrs['任务号'].localeCompare(a.attrs['任务号']));
-    for (const t of tasks){
-      pos.set(t.id, {x: X.task, y, ...nodeSize(t)});
-      y += 38;
-    }
-    // 边界：四窗与主体窗同高，其余顺排
-    let maxWinY = 0;
-    for (const w of windows){
-      const b = nodes.find(n => n.id === 'boundary.window.' + w.attrs['窗口']);
-      if (b){
-        pos.set(b.id, {x: X.boundary, y: w._y, ...nodeSize(b)});
-        maxWinY = Math.max(maxWinY, w._y);
+    return null;
+  }
+
+  function firstAnchor(n, preferNoteWord){
+    var as = anchorsOf(n);
+    if (!as.length) return null;
+    if (preferNoteWord){
+      for (var i = 0; i < as.length; i++){
+        if (String(as[i].note || "").indexOf(preferNoteWord) >= 0) return as[i];
       }
     }
-    y = maxWinY + 90;
-    for (const b of nodes.filter(n => n.layer === 'boundary' && n.kind !== 'window-boundary')){
-      pos.set(b.id, {x: X.boundary, y, ...nodeSize(b)});
-      y += 64;
+    return as[0];
+  }
+
+  function fileUrl(a){
+    if (!a || !state.model) return "#";
+    var root = String(state.model.root || "").replace(/\\/g, "/").replace(/\/+$/, "");
+    return "file:///" + encodeURI(root + "/" + String(a.file).replace(/\\/g, "/"));
+  }
+
+  /* ---------- 分组（确定性纯函数） ---------- */
+
+  function groupByLayer(nodes, layer){
+    var out = [];
+    var map = {};
+    function push(key, name, order){
+      if (!map[key]){ map[key] = { key: key, name: name, order: order, nodes: [] }; out.push(map[key]); }
+      return map[key];
     }
-    // 模型：hub + 按类型分组
-    y = 78;
-    const hub = nodes.find(n => n.kind === 'arch-hub');
-    if (hub){ pos.set(hub.id, {x: X.model, y, ...nodeSize(hub)}); y += 62; }
-    const order = ['actor','service','module','source-of-truth','projection','database','external-system','risk'];
-    const groups = new Map();
-    for (const n of nodes.filter(n => n.layer === 'model' && n.kind === 'arch-node')){
-      const t = n.archType || 'other';
-      if (!groups.has(t)) groups.set(t, []);
-      groups.get(t).push(n);
-    }
-    for (const t of order.concat([...groups.keys()].filter(k => !order.includes(k)))){
-      const list = groups.get(t);
-      if (!list) continue;
-      for (const n of list.sort((a,b)=>a.label.localeCompare(b.label))){
-        pos.set(n.id, {x: X.model, y, ...nodeSize(n)});
-        y += 28;
+    var i, n;
+    if (layer === "subject"){
+      for (i = 0; i < nodes.length; i++){
+        n = nodes[i];
+        if (n.layer !== "subject") continue;
+        if (n.kind === "human") push("human", "决策人", 90).nodes.push(n);
+        else {
+          var w = String(n.window || attr(n, "窗口") || "");
+          var m = /^W\d$/.exec(w);
+          if (m) push(m[0], m[0] + " 窗口", WK_ORDER.indexOf(m[0]) >= 0 ? WK_ORDER.indexOf(m[0]) : 50).nodes.push(n);
+          else push("none", "未标窗口", 50).nodes.push(n);
+        }
       }
-      y += 20;
-    }
-    // 画布范围
-    let maxY = 600;
-    for (const p of pos.values()) maxY = Math.max(maxY, p.y + p.h + 60);
-    return {pos, width: 1990, height: maxY};
-  }
-
-  function edgePath(a, b, type){
-    const ax = a.x + a.w, ay = a.y + a.h/2;
-    const bx = b.x, by = b.y + b.h/2;
-    if (a.x === b.x){
-      const mx = a.x - 28;
-      return `M ${a.x} ${ay} C ${mx} ${ay} ${mx} ${by} ${b.x} ${by}`;
-    }
-    if (type === '架构'){
-      const mx = Math.min(a.x, b.x) - 70;
-      return `M ${a.x} ${ay} C ${mx} ${ay} ${mx} ${by} ${b.x} ${by}`;
-    }
-    const dx = Math.max(60, Math.abs(bx - ax) * 0.42);
-    return `M ${ax} ${ay} C ${ax + dx} ${ay} ${bx - dx} ${by} ${bx} ${by}`;
-  }
-
-  function render(){
-    const model = state.model;
-    if (!model) return;
-    while (svg.firstChild) svg.removeChild(svg.firstChild);
-    const {pos, width, height} = layout(model);
-    state.pos = pos;
-    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-    const vp = el('g', {id:'viewport'});
-    svg.appendChild(vp);
-
-    // 列背景
-    const cols = [
-      {x: X.subject - 30, w: COLW + 60, label:'主体'},
-      {x: X.task - 30, w: TASKW + 60, label:'任务'},
-      {x: X.boundary - 30, w: BNDW + 60, label:'边界'},
-      {x: X.model - 30, w: MODW + 60, label:'模型'},
-    ];
-    for (const c of cols){
-      vp.appendChild(el('rect', {x:c.x, y:36, width:c.w, height:height-70, rx:10, class:'col-bg'}));
-      vp.appendChild(svgText(c.label, c.x + 14, 58, 'col-title'));
-    }
-
-    // 边
-    const edgeLayer = el('g', {id:'edges'});
-    vp.appendChild(edgeLayer);
-    for (const e of model.edges){
-      const a = pos.get(e.from), b = pos.get(e.to);
-      if (!a || !b) continue;
-      const p = el('path', {
-        d: edgePath(a, b, e.type),
-        class: 'edge e-' + (e.type === '架构' ? 'model' : (e.type === '隶属' || e.type === '裁定' ? 'subject' : (e.type === '边界' ? 'boundary' : 'task'))),
-        'data-id': e.id, 'data-from': e.from, 'data-to': e.to
+      out.sort(function(a, b){ return a.order - b.order; });
+      out.forEach(function(g){
+        g.nodes.sort(function(a, b){
+          var ka = a.kind === "human" ? 0 : (a.kind === "window" ? 1 : 2);
+          var kb = b.kind === "human" ? 0 : (b.kind === "window" ? 1 : 2);
+          if (ka !== kb) return ka - kb;
+          var sa = String(attr(a, "AI 号") || a.label || "");
+          var sb = String(attr(b, "AI 号") || b.label || "");
+          return sa.localeCompare(sb, "zh");
+        });
       });
-      p.addEventListener('click', ev => { ev.stopPropagation(); showEdge(e); });
-      edgeLayer.appendChild(p);
-    }
-
-    // 节点
-    const nodeLayer = el('g', {id:'nodes'});
-    vp.appendChild(nodeLayer);
-    for (const n of model.nodes){
-      const p = pos.get(n.id);
-      if (!p) continue;
-      const g = el('g', {class:'node layer-' + n.layer + ' kind-' + n.kind, 'data-id': n.id});
-      g.setAttribute('transform', `translate(${p.x},${p.y})`);
-      const rect = el('rect', {x:0, y:0, width:p.w, height:p.h});
-      g.appendChild(rect);
-      const fs = n.layer === 'task' ? 12 : (n.kind === 'window' ? 13 : 12);
-      const label = fitText(n.label, p.w - 26, fs);
-      const tx = svgText(label, 10, p.h/2 + 4);
-      tx.style.fontSize = fs + 'px';
-      if (n.kind === 'window' || n.kind === 'human' || n.kind === 'arch-hub') tx.style.fontWeight = '600';
-      g.appendChild(tx);
-      if (n.layer === 'task'){
-        const sk = statusKey(n.status);
-        const dot = el('circle', {cx: p.w - 12, cy: p.h/2, r: 4, class:'status-dot'});
-        dot.setAttribute('fill', STATUS_COLOR[sk] || STATUS_COLOR.other);
-        g.appendChild(dot);
+    } else if (layer === "task"){
+      for (i = 0; i < nodes.length; i++){
+        n = nodes[i];
+        if (n.layer !== "task") continue;
+        var k = String(attr(n, "状态类") || "其他");
+        var ord = TASK_ORDER.indexOf(k);
+        push(k, k, ord >= 0 ? ord : 900).nodes.push(n);
       }
-      g.addEventListener('click', ev => { ev.stopPropagation(); showNode(n.id); });
-      g.addEventListener('mouseenter', () => highlight(n.id));
-      g.addEventListener('mouseleave', () => clearHighlight());
-      nodeLayer.appendChild(g);
-    }
-    applyFilters();
-    applyTransform();
-  }
-
-  function applyTransform(){
-    const vp = svg.querySelector('#viewport');
-    if (!vp) return;
-    const {x, y, k} = state.view;
-    vp.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
-  }
-
-  function highlight(id){
-    const connected = new Set([id]);
-    svg.querySelectorAll('.edge').forEach(e => {
-      const on = e.getAttribute('data-from') === id || e.getAttribute('data-to') === id;
-      e.classList.toggle('hi', on);
-      e.classList.toggle('dim', !on);
-      if (on){ connected.add(e.getAttribute('data-from')); connected.add(e.getAttribute('data-to')); }
-    });
-    svg.querySelectorAll('.node').forEach(n => {
-      const on = connected.has(n.getAttribute('data-id'));
-      n.classList.toggle('hi', on);
-      n.classList.toggle('dim', !on);
-    });
-  }
-  function clearHighlight(){
-    svg.querySelectorAll('.hi').forEach(e => e.classList.remove('hi'));
-    svg.querySelectorAll('.dim').forEach(e => e.classList.remove('dim'));
-  }
-
-  function applyFilters(){
-    for (const layer of ['subject','task','boundary','model']){
-      svg.classList.toggle('hide-' + layer, !state.filters[layer]);
-    }
-    if (!state.model) return;
-    const q = state.search.trim().toLowerCase();
-    svg.querySelectorAll('.node').forEach(g => {
-      const n = state.model.nodes.find(x => x.id === g.getAttribute('data-id'));
-      let visible = n && state.filters[n.layer];
-      if (visible && q){
-        const hay = (n.label + ' ' + n.desc + ' ' + Object.values(n.attrs || {}).join(' ')).toLowerCase();
-        visible = hay.includes(q);
+      out.sort(function(a, b){ return a.order - b.order; });
+      out.forEach(function(g){
+        g.nodes.sort(function(a, b){
+          return String(attr(b, "任务号") || b.id).localeCompare(String(attr(a, "任务号") || a.id));
+        });
+      });
+    } else if (layer === "boundary"){
+      for (i = 0; i < nodes.length; i++){
+        n = nodes[i];
+        if (n.layer !== "boundary") continue;
+        var found = null;
+        for (var j = 0; j < BND_ORDER.length; j++) if (BND_ORDER[j][0] === n.kind) found = BND_ORDER[j];
+        push(n.kind, found ? found[1] : (n.kind || "其他"), found ? j : 900).nodes.push(n);
       }
-      g.style.display = visible ? '' : 'none';
-    });
-    svg.querySelectorAll('.edge').forEach(e => {
-      const a = state.model.nodes.find(x => x.id === e.getAttribute('data-from'));
-      const b = state.model.nodes.find(x => x.id === e.getAttribute('data-to'));
-      let visible = a && b && state.filters[a.layer] && state.filters[b.layer];
-      if (visible && q){
-        const ha = (a.label + ' ' + Object.values(a.attrs || {}).join(' ')).toLowerCase();
-        const hb = (b.label + ' ' + Object.values(b.attrs || {}).join(' ')).toLowerCase();
-        visible = ha.includes(q) || hb.includes(q);
-      }
-      e.style.display = visible ? '' : 'none';
-    });
-  }
-
-  // 隐藏层用 CSS 简法：给 svg 加类后由这些规则隐藏
-  const styleHide = document.createElement('style');
-  styleHide.textContent = `
-    svg.hide-subject .layer-subject{display:none}
-    svg.hide-task .layer-task{display:none}
-    svg.hide-boundary .layer-boundary{display:none}
-    svg.hide-model .layer-model{display:none}
-  `;
-  document.head.appendChild(styleHide);
-
-  function showNode(id){
-    const n = state.model.nodes.find(x => x.id === id);
-    if (!n) return;
-    svg.querySelectorAll('.node.selected').forEach(e => e.classList.remove('selected'));
-    const g = svg.querySelector(`.node[data-id="${cssEscape(id)}"]`);
-    if (g) g.classList.add('selected');
-    $('dTitle').textContent = n.label;
-    $('dMeta').textContent = `${LAYER_LABEL[n.layer]} · ${n.kind}` + (n.desc ? ` · ${n.desc}` : '');
-    const bd = $('dBd');
-    bd.textContent = '';
-    const kv = document.createElement('div'); kv.className = 'kv';
-    const attrs = Object.assign({}, n.attrs || {});
-    if (n.window) attrs['窗口归属'] = n.window;
-    for (const k in attrs){
-      const kd = document.createElement('div'); kd.className = 'k'; kd.textContent = k;
-      const vd = document.createElement('div'); vd.className = 'v'; vd.textContent = attrs[k];
-      kv.appendChild(kd); kv.appendChild(vd);
-    }
-    bd.appendChild(kv);
-    const st = document.createElement('div');
-    st.className = 'sec-title';
-    st.textContent = `回源锚点（${(n.anchors || []).length} 条，建模时按工作树现算）`;
-    bd.appendChild(st);
-    if (!n.anchors || !n.anchors.length){
-      const d = document.createElement('div'); d.className='empty'; d.textContent='该节点无锚点。';
-      bd.appendChild(d);
+      out.sort(function(a, b){ return a.order - b.order; });
     } else {
-      for (const a of n.anchors) bd.appendChild(anchorBox(a));
-    }
-  }
-
-  function showEdge(e){
-    $('dTitle').textContent = `关系：${e.type}`;
-    $('dMeta').textContent = `${e.from} → ${e.to}`;
-    const bd = $('dBd'); bd.textContent = '';
-    const kv = document.createElement('div'); kv.className='kv';
-    const rows = {'关系类型':e.type,'起点':e.from,'终点':e.to,'说明':e.desc || '—'};
-    for (const k in rows){
-      const kd = document.createElement('div'); kd.className='k'; kd.textContent=k;
-      const vd = document.createElement('div'); vd.className='v'; vd.textContent=rows[k];
-      kv.appendChild(kd); kv.appendChild(vd);
-    }
-    bd.appendChild(kv);
-    const st = document.createElement('div'); st.className='sec-title'; st.textContent='关系锚点';
-    bd.appendChild(st);
-    for (const a of (e.anchors || [])) bd.appendChild(anchorBox(a));
-  }
-
-  function anchorBox(a){
-    const box = document.createElement('div'); box.className = 'anchor';
-    const top = document.createElement('div'); top.className = 'a-top';
-    const f = document.createElement('span'); f.className = 'a-file';
-    f.textContent = `${a.file}:${a.line}`;
-    const note = document.createElement('span'); note.className = 'a-note'; note.textContent = a.note || '';
-    top.appendChild(f); top.appendChild(note);
-    box.appendChild(top);
-    const raw = document.createElement('div'); raw.className = 'a-raw';
-    raw.textContent = a.raw || '（建模时原文为空）';
-    box.appendChild(raw);
-    const acts = document.createElement('div'); acts.className = 'a-actions';
-    const copy = document.createElement('button'); copy.textContent = '复制文件:行号';
-    copy.addEventListener('click', () => copyText(`${a.file}:${a.line}`));
-    const open = document.createElement('a');
-    open.textContent = '打开文件';
-    open.href = 'file:///' + encodeURI((state.model.root || '').replace(/\\/g,'/') + '/' + a.file);
-    open.target = '_blank'; open.rel = 'noopener';
-    acts.appendChild(copy); acts.appendChild(open);
-    box.appendChild(acts);
-    return box;
-  }
-  function copyText(t){
-    if (navigator.clipboard && navigator.clipboard.writeText){
-      navigator.clipboard.writeText(t).then(()=>toast('已复制：' + t)).catch(()=>fallbackCopy(t));
-    } else fallbackCopy(t);
-  }
-  function fallbackCopy(t){
-    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta);
-    ta.select(); try{ document.execCommand('copy'); toast('已复制：' + t); }catch(e){ toast('复制失败：' + t); }
-    document.body.removeChild(ta);
-  }
-  function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
-  let toastTimer = null;
-  function toast(msg){
-    const t = $('toast'); t.textContent = msg; t.classList.add('show');
-    clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 2400);
-  }
-
-  // 载入模型：script 标签读本地文件，零网络
-  function loadModel(manual){
-    if (state.loading) return;
-    state.loading = true;
-    const s = document.createElement('script');
-    s.src = 'data/field-model.js?v=' + Date.now();
-    s.onload = () => {
-      state.loading = false;
-      s.remove();
-      const m = window.FIELD_MODEL;
-      if (!m){ toast('模型加载失败：window.FIELD_MODEL 为空'); return; }
-      const prev = state.lastVersion;
-      state.lastVersion = m.version;
-      state.model = m;
-      updateHeader(m);
-      if (manual || !prev || prev !== m.version){
-        render();
-        if (prev && prev !== m.version) toast(`已刷新：版本 ${prev} → ${m.version}（${m.generatedAtLocal}）`);
-        else toast(`已载入：版本 ${m.version}`);
+      for (i = 0; i < nodes.length; i++){
+        n = nodes[i];
+        if (n.layer !== "model") continue;
+        var t = (n.kind === "arch-hub") ? "service" : String(n.archType || "");
+        var nm = "未分类", od = 900;
+        if (n.kind === "arch-hub"){ nm = "服务（主轴）"; od = -1; }
+        else for (var m2 = 0; m2 < ARCH_ORDER.length; m2++){
+          if (ARCH_ORDER[m2][0] === t){ nm = ARCH_ORDER[m2][1]; od = m2; break; }
+        }
+        push(t || "none", nm, od).nodes.push(n);
       }
+      out.sort(function(a, b){ return a.order - b.order; });
+      out.forEach(function(g){
+        g.nodes.sort(function(a, b){
+          if (a.kind === "arch-hub") return -1;
+          if (b.kind === "arch-hub") return 1;
+          return safeLabel(a.label).localeCompare(safeLabel(b.label), "zh");
+        });
+      });
+    }
+    return out;
+  }
+
+  /* ---------- 渲染：四列 ---------- */
+
+  var COLS = [
+    { layer: "subject", name: "主体", color: "var(--g-subject)", sub: "谁" },
+    { layer: "task", name: "任务", color: "var(--g-task)", sub: "做什么" },
+    { layer: "boundary", name: "边界", color: "var(--g-boundary)", sub: "权限" },
+    { layer: "model", name: "模型", color: "var(--g-model)", sub: "架构" }
+  ];
+
+  function metaChips(n){
+    var chips = [];
+    if (n.layer === "subject"){
+      if (n.kind === "human") chips.push("唯一决策人");
+      else if (n.kind === "window") chips.push("窗口");
+      else chips.push(String(n.window || attr(n, "窗口") || "—"));
+    } else if (n.layer === "task"){
+      var ws = (n.windows || []).filter(function(x){ return x && x !== "—"; });
+      chips.push(String(attr(n, "状态类") || "其他"));
+      chips.push("责任 " + (ws.length ? ws.join("/") : "未标"));
+    } else if (n.layer === "boundary"){
+      for (var i = 0; i < BND_ORDER.length; i++) if (BND_ORDER[i][0] === n.kind) chips.push(BND_ORDER[i][1]);
+      if (!chips.length) chips.push(String(n.kind || "—"));
+    } else {
+      chips.push(n.kind === "arch-hub" ? "主轴" : String(n.archType || "未分类"));
+    }
+    chips.push("锚 " + anchorsOf(n).length);
+    return chips.map(function(c){ return '<span>' + T(c) + '</span>'; }).join("");
+  }
+
+  function renderColumns(){
+    var html = "";
+    COLS.forEach(function(col){
+      var groups = groupByLayer(state.model.nodes, col.layer);
+      var total = groups.reduce(function(s, g){ return s + g.nodes.length; }, 0);
+      html += '<div class="col">'
+        + '<div class="colhead"><span class="coldot" style="background:' + col.color + '"></span>'
+        + '<span class="colname">' + col.name + '</span>'
+        + '<span class="colcount">' + total + '</span>'
+        + '<span class="colsub">' + col.sub + '</span></div>';
+      groups.forEach(function(g){
+        html += '<details class="group" open data-gkey="' + esc(col.layer + ":" + g.key) + '">'
+          + '<summary class="ghead">' + esc(g.name)
+          + '<span class="gc">' + g.nodes.length + '</span><span class="caret">▾</span></summary>'
+          + '<div class="gbody">';
+        g.nodes.forEach(function(n){
+          var lb = safeLabel(n.label);
+          html += '<button type="button" class="node l-' + esc(n.layer)
+            + (state.selected === n.id ? ' lit' : '')
+            + '" data-node="' + esc(n.id) + '" title="' + esc(lb) + '">'
+            + '<span class="nl">' + esc(lb) + '</span>'
+            + '<span class="nm">' + metaChips(n) + '</span>'
+            + '</button>';
+        });
+        html += '</div></details>';
+      });
+      html += '</div>';
+    });
+    document.getElementById("canvas").innerHTML = html;
+  }
+
+  /* ---------- 渲染：概览三句（现算，不写死） ---------- */
+
+  function anchorChip(a, tail){
+    if (!a) return '<span class="anchip" style="color:var(--gray-tx)">锚 <span class="n">未取到</span></span>';
+    return '<span class="anchip" title="' + T(a.raw || a.fp || "") + '">'
+      + T(a.file) + ':' + a.line + '<span class="n">' + T(tail || "") + '</span></span>';
+  }
+
+  function renderOverview(){
+    var m = state.model, st = m.stats || {};
+    var tasks = m.nodes.filter(function(n){ return n.layer === "task"; });
+    var moving = tasks.filter(function(n){ return String(attr(n, "状态类") || "") === "进行中"; });
+    var rows = Number(st.rulingRows || 0), decided = Number(st.rulingDecided || 0);
+    var open = Math.max(0, rows - decided);
+    var human = m.nodes.filter(function(n){ return n.kind === "human"; })[0] || null;
+
+    var movingNames = moving.slice(0, 2).map(function(n){ return safeLabel(n.label); });
+    var s1 = moving.length
+      ? ('<b>' + moving.length + '</b> 条任务在动：' + esc(movingNames.join('、')) + (moving.length > 2 ? ' 等' : ''))
+      : '当前没有「进行中」类任务。';
+
+    var s2 = '待裁单共 <b>' + rows + '</b> 行，已决 <b>' + decided + '</b>，未决 <b>' + open + '</b>（未决＝行数减已决）。';
+
+    var s3 = human
+      ? ('下一步看 <b>' + esc(safeLabel(human.label)) + '</b>：候裁 <b>' + open + '</b> 项候法师一字。')
+      : '下一步看谁：<span style="color:var(--gray-tx)">未取到决策人节点</span>。';
+
+    var rulingNode = m.nodes.filter(function(n){ return n.kind === "ruling"; })[0] || null;
+
+    document.getElementById("overviewStrip").innerHTML =
+      '<div class="ovcard"><span class="ovlabel">今天哪条线在动</span>'
+        + '<div class="ovsentence">' + s1 + '</div>'
+        + anchorChip(moving.length ? firstAnchor(moving[0], "状态") : null, " · 状态") + '</div>'
+      + '<div class="ovcard"><span class="ovlabel">哪里卡住</span>'
+        + '<div class="ovsentence">' + s2 + '</div>'
+        + anchorChip(rulingNode ? firstAnchor(rulingNode) : null, " · 待裁单") + '</div>'
+      + '<div class="ovcard"><span class="ovlabel">下一步看谁</span>'
+        + '<div class="ovsentence">' + s3 + '</div>'
+        + anchorChip(human ? firstAnchor(human) : null, " · 人类身份") + '</div>';
+  }
+
+  /* ---------- 渲染：右栏 ---------- */
+
+  function renderAside(){
+    var el = document.getElementById("aside");
+    var n = state.selected ? byId(state.selected) : null;
+
+    if (state.view === "duty"){
+      var edges = state.model.edges.filter(function(e){ return e.type === "责任"; });
+      var rows = edges.map(function(e){
+        var from = byId(e.from), to = byId(e.to);
+        var fl = from ? safeLabel(from.label) : e.from;
+        var tl = to ? safeLabel(to.label) : e.to;
+        return '<button type="button" class="relrow" data-node="' + esc(e.from) + '">'
+          + '<span class="rt">责任</span>' + T(fl) + ' → ' + T(tl)
+          + '<br><span class="hint">锚 ' + anchorsOf(e).length + ' 枚' + (e.desc ? ' · ' + T(e.desc) : '') + '</span></button>';
+      }).join("");
+      el.innerHTML = '<div class="panel"><div class="ptitle">责任归属<span class="tag">'
+        + edges.length + ' 条责任边 · 现算</span></div>'
+        + (rows || '<div class="hint">未取到责任边。</div>')
+        + '</div>'
+        + '<div class="panel"><div class="ptitle">说明</div><div class="hint">'
+        + '本视图先列责任边（任务→承担窗）。骨架态只做这一层；后续再加责任高亮与按窗归组。</div></div>';
+      return;
+    }
+
+    if (!n){
+      el.innerHTML = '<div class="panel"><div class="ptitle">节点卡<span class="tag">未选</span></div>'
+        + '<div class="hint">点左列任一节点，这里显示它的身份、属性与锚；点锚切证据视图看原文。</div></div>'
+        + '<div class="panel"><div class="ptitle">骨架态说明<span class="tag">第一步</span></div>'
+        + '<div class="hint">本页只做四件事：双击能开、读现有数据、固定四列、三视图可切。'
+        + '搜索、折叠记忆、变化明细、跨会话书签、锚体检面板均未上，按步再长。</div></div>';
+      return;
+    }
+
+    var attrs = n.attrs || {};
+    var kvHtml = "";
+    Object.keys(attrs).slice(0, 8).forEach(function(k){
+      var v = String(attrs[k] == null ? "" : attrs[k]);
+      kvHtml += '<div class="kv"><b>' + esc(k) + '</b>' + T(v.length > 120 ? v.slice(0, 120) + '…' : v) + '</div>';
+    });
+
+    var as = anchorsOf(n);
+    var anchorHtml = as.length ? as.map(function(a, i){
+      return '<button type="button" class="relrow" data-anchor="' + i + '">'
+        + '<span class="rt">锚</span><span class="mono" style="font-family:var(--mono)">'
+        + T(a.file) + ':' + a.line + '</span>'
+        + '<br><span class="hint">' + T(a.note || "（无注）") + '</span></button>';
+    }).join("") : '<div class="hint" style="color:var(--gray-tx)">锚 未取到</div>';
+
+    el.innerHTML = '<div class="panel"><div class="ptitle">节点卡<span class="tag">' + esc(n.layer) + ' · ' + esc(n.kind) + '</span></div>'
+      + '<div class="kv"><b>名称</b>' + esc(safeLabel(n.label)) + '</div>'
+      + (n.desc ? '<div class="kv"><b>说明</b>' + esc(safeLabel(n.desc)) + '</div>' : '')
+      + kvHtml
+      + '</div>'
+      + '<div class="panel"><div class="ptitle">锚<span class="tag">共 ' + as.length + ' 枚 · 建模时快照</span></div>'
+      + anchorHtml
+      + '<div class="hint" style="margin-top:8px">点一枚锚 → 证据视图看原文；原文为建模时抓的前若干字，不实时回读。</div></div>';
+  }
+
+  /* ---------- 渲染：证据工作台 ---------- */
+
+  function renderEvidence(){
+    var n = state.selected ? byId(state.selected) : null;
+    var listEl = document.getElementById("anchorList");
+    var paneEl = document.getElementById("rawPane");
+    var crumbEl = document.getElementById("crumb");
+
+    if (!n){
+      crumbEl.innerHTML = '<b>证据</b> · 未选节点';
+      listEl.innerHTML = '<li><div class="af">未取到</div><div class="an">先回总览点一个节点</div></li>';
+      paneEl.innerHTML = '<div class="rawhead"><span class="rf">—</span><span class="got">未取到</span></div>'
+        + '<div class="rawnote">证据视图按节点取锚。先在总览（或责任）视图点一个节点，再切回这里。</div>';
+      return;
+    }
+
+    var as = anchorsOf(n);
+    crumbEl.innerHTML = '总览 / 节点 / <b>' + esc(safeLabel(n.label)) + '</b> / 证据 · 锚 ' + as.length;
+
+    if (!as.length){
+      listEl.innerHTML = '<li><div class="af">锚 未取到</div><div class="an">该节点无锚</div></li>';
+      paneEl.innerHTML = '<div class="rawhead"><span class="rf">—</span><span class="got">未取到</span></div>'
+        + '<div class="rawnote">取不到＝灰＋文字「未取到」，不显示绿、不装作有数据。</div>';
+      return;
+    }
+
+    if (state.anchorIndex >= as.length) state.anchorIndex = 0;
+
+    listEl.innerHTML = as.map(function(a, i){
+      return '<li' + (i === state.anchorIndex ? ' class="on"' : '') + '>'
+        + '<button type="button" data-anchor="' + i + '" style="text-align:left;width:100%">'
+        + '<div class="af">' + T(a.file) + ':' + a.line + '</div>'
+        + '<div class="an">' + T(a.note || "（无注）") + '</div></button></li>';
+    }).join("");
+
+    var a = as[state.anchorIndex];
+    var rawLines = String(a.raw || "").split("\n");
+    var body = rawLines.map(function(ln, i){
+      return '<div class="rawline' + (i === 0 ? ' sel' : '') + '">'
+        + '<span class="ln">' + (a.line + i) + '</span>'
+        + '<span class="lt">' + T(ln) + '</span></div>';
+    }).join("");
+
+    paneEl.innerHTML = '<div class="rawhead"><span class="rf">' + T(a.file) + '</span>'
+      + '<span class="got">原文已取到 · 建模时快照</span></div>'
+      + '<div class="rawbody">' + body + '</div>'
+      + '<div class="rawnote">只显示锚行本身（原文前 ' + (a.rawLen || String(a.raw || "").length) + ' 字）；'
+      + '附近非锚行未展开。原文里的俗名按渲染层规则显示为「法师」，数据件不改。'
+      + '真值闸＝锚校验探针，页面只展示建模时锚。'
+      + ' <a href="' + esc(fileUrl(a)) + '" target="_blank" rel="noopener">打开该文件</a></div>';
+  }
+
+  /* ---------- 视图切换 ---------- */
+
+  function setView(v){
+    state.view = v;
+    document.documentElement.setAttribute("data-view", v);
+    document.documentElement.setAttribute("data-skin", v === "evidence" ? "b" : "a");
+
+    var btns = document.querySelectorAll("[data-view-btn]");
+    for (var i = 0; i < btns.length; i++){
+      var on = btns[i].getAttribute("data-view-btn") === v;
+      btns[i].className = "tab" + (on ? " on" : "");
+      btns[i].setAttribute("aria-selected", on ? "true" : "false");
+    }
+
+    document.getElementById("overviewStrip").hidden = (v === "evidence");
+    document.getElementById("mainWrap").hidden = (v === "evidence");
+    document.getElementById("evidenceWrap").hidden = (v !== "evidence");
+
+    if (v === "evidence") renderEvidence();
+    else renderAside();
+  }
+
+  /* ---------- 事件 ---------- */
+
+  function selectNode(id, opts){
+    state.selected = id;
+    state.anchorIndex = 0;
+    var nodes = document.querySelectorAll(".node");
+    for (var i = 0; i < nodes.length; i++){
+      nodes[i].classList.toggle("lit", nodes[i].getAttribute("data-node") === id);
+    }
+    if (state.view === "evidence") renderEvidence();
+    else renderAside();
+    if (opts && opts.gotoEvidence) setView("evidence");
+  }
+
+  document.addEventListener("click", function(ev){
+    var t = ev.target;
+    if (t && t.closest) t = t.closest("[data-node],[data-view-btn],[data-anchor]");
+    if (!t) return;
+
+    var viewBtn = t.getAttribute("data-view-btn");
+    if (viewBtn){ setView(viewBtn); return; }
+
+    var nodeId = t.getAttribute("data-node");
+    if (nodeId){ selectNode(nodeId); return; }
+
+    var ai = t.getAttribute("data-anchor");
+    if (ai != null){
+      state.anchorIndex = parseInt(ai, 10) || 0;
+      if (state.view === "evidence") renderEvidence();
+      else setView("evidence");
+      return;
+    }
+  });
+
+  document.addEventListener("keydown", function(ev){
+    if (ev.key === "Escape"){
+      state.selected = null;
+      var nodes = document.querySelectorAll(".node");
+      for (var i = 0; i < nodes.length; i++) nodes[i].classList.remove("lit");
+      if (state.view === "evidence") renderEvidence(); else renderAside();
+    }
+  });
+
+  /* ---------- 读盘 ---------- */
+
+  function bootMsg(title, text){
+    var boot = document.getElementById("boot");
+    boot.hidden = false;
+    boot.className = "notice";
+    boot.innerHTML = '<div class="nt">' + esc(title) + '</div>'
+      + '<div class="nd">' + text + '</div>';
+  }
+
+  function loadModel(){
+    bootMsg("正在读本地数据件…", "读 data/field-model.js（本地文件，不出网）。");
+
+    var old = document.getElementById("modelScript");
+    if (old) old.parentNode.removeChild(old);
+    try { window.FIELD_MODEL = null; } catch (e) {}
+
+    var s = document.createElement("script");
+    s.id = "modelScript";
+    s.src = "data/field-model.js?v=" + Date.now();
+    s.onload = function(){
+      if (!window.FIELD_MODEL){ onFail("数据件已读到，但里面没有 FIELD_MODEL。"); return; }
+      state.model = window.FIELD_MODEL;
+      state.error = null;
+      document.getElementById("boot").hidden = true;
+      document.getElementById("app").hidden = false;
+      renderAll();
     };
-    s.onerror = () => {
-      state.loading = false; s.remove();
-      toast('模型脚本加载失败：请先运行 build_field_model.py');
-    };
+    s.onerror = function(){ onFail("数据件没读到：data/field-model.js"); };
     document.body.appendChild(s);
   }
 
-  function updateHeader(m){
-    $('tagVersion').textContent = '版本 ' + m.version;
-    $('tagTime').textContent = '建模 ' + m.generatedAtLocal;
-    $('tagStats').textContent = `节点 ${m.stats.nodes} / 边 ${m.stats.edges} / 锚 ${m.stats.anchors}`;
-    $('fSources').textContent = '四源：' + m.sources.map(s => `${s.label}（${s.lines} 行）`).join(' · ');
-    $('fAnchor').textContent = `锚点 ${m.stats.anchors} 条 · 生成于 ${m.generatedAtLocal}`;
+  function onFail(msg){
+    state.model = null;
+    state.error = msg;
+    document.getElementById("app").hidden = true;
+    bootMsg("数据件未取到", esc(msg) + '<br>'
+      + '这是本地文件读取失败，不是网络问题。<br>'
+      + '请先在看板目录运行生成器让它产出数据件，再点右上「重新读盘」。');
+    document.getElementById("verchip").textContent = "版本 —";
+    document.getElementById("sbCounts").textContent = "节点 — · 边 — · 锚 —";
+    document.getElementById("sbVersion").textContent = "版本 —";
+    document.getElementById("sbTime").textContent = "建模 —";
+    document.getElementById("sbSources").textContent = "四源 —";
   }
 
-  // 视口：滚轮缩放 + 拖拽平移
-  function applyTransformSafe(){
-    const {x,y,k} = state.view;
-    const vp = svg.querySelector('#viewport');
-    if (vp) vp.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
-  }
-  svg.addEventListener('wheel', ev => {
-    ev.preventDefault();
-    const rect = svg.getBoundingClientRect();
-    const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-    const old = state.view.k;
-    const next = Math.min(2.5, Math.max(0.25, old * (ev.deltaY < 0 ? 1.1 : 0.9)));
-    const ratio = next / old;
-    state.view.x = mx - (mx - state.view.x) * ratio;
-    state.view.y = my - (my - state.view.y) * ratio;
-    state.view.k = next;
-    applyTransformSafe();
-  }, {passive:false});
-  let drag = null;
-  svg.addEventListener('mousedown', ev => {
-    if (ev.button !== 0) return;
-    drag = {x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y};
-    svg.classList.add('dragging');
-  });
-  window.addEventListener('mousemove', ev => {
-    if (!drag) return;
-    state.view.x = drag.vx + (ev.clientX - drag.x);
-    state.view.y = drag.vy + (ev.clientY - drag.y);
-    applyTransformSafe();
-  });
-  window.addEventListener('mouseup', () => { drag = null; svg.classList.remove('dragging'); });
-  svg.addEventListener('click', ev => {
-    if (ev.target === svg){ svg.querySelectorAll('.node.selected').forEach(e => e.classList.remove('selected')); }
-  });
-  function fit(){
-    if (!state.model) return;
-    const vb = svg.viewBox.baseVal;
-    const rect = svg.getBoundingClientRect();
-    const k = Math.min(rect.width / (vb.width || 1990), rect.height / (vb.height || 1200)) * 0.96;
-    state.view = {k, x: 0, y: 0};
-    applyTransformSafe();
-  }
-
-  $('btnRefresh').addEventListener('click', () => loadModel(true));
-  $('btnFit').addEventListener('click', fit);
-  $('auto').addEventListener('change', ev => {
-    state.auto = ev.target.checked;
-    toast(state.auto ? '自动刷新已开（2 秒）' : '自动刷新已关');
-  });
-  for (const layer of ['subject','task','boundary','model']){
-    $('f-' + layer).addEventListener('change', ev => {
-      state.filters[layer] = ev.target.checked;
-      applyFilters();
+  function applyHash(){
+    var h = String(location.hash || "").replace(/^#/, "");
+    var parts = {};
+    h.split("&").forEach(function(p){
+      var kv = p.split("=");
+      if (kv[0]) parts[decodeURIComponent(kv[0])] = decodeURIComponent(kv[1] || "");
     });
+    if (parts.node && byId(parts.node)) state.selected = parts.node;
+    if (parts.anchor != null && parts.anchor !== "") state.anchorIndex = parseInt(parts.anchor, 10) || 0;
+    if (parts.view === "overview" || parts.view === "duty" || parts.view === "evidence") state.view = parts.view;
+    return parts;
   }
-  $('search').addEventListener('input', ev => { state.search = ev.target.value; applyFilters(); });
-  window.addEventListener('resize', () => { /* 保持变换，不打断用户 */ });
 
-  loadModel(true);
-  setInterval(() => { if (state.auto) loadModel(false); }, 2000);
+  function renderAll(){
+    var m = state.model, st = m.stats || {};
+    var src = m.sources || [];
+
+    applyHash();
+
+    document.getElementById("verchip").textContent = "v " + (m.version || "—");
+    renderOverview();
+    renderColumns();
+    setView(state.view);
+
+    document.getElementById("sbCounts").textContent =
+      (st.nodes || 0) + " 节点 · " + (st.edges || 0) + " 边 · " + (st.anchors || 0) + " 锚";
+    document.getElementById("sbVersion").textContent = "版本 " + (m.version || "—");
+    document.getElementById("sbTime").textContent = "建模 " + (m.generatedAtLocal || "—");
+    document.getElementById("sbSources").textContent = src.length
+      ? ("四源 " + src.map(function(x){ return (x.label || x.key) + " " + (x.lines || "—") + " 行"; }).join(" · "))
+      : "四源 —";
+  }
+
+  document.getElementById("reloadBtn").addEventListener("click", function(){ loadModel(); });
+
+  window.addEventListener("hashchange", function(){
+    if (!state.model) return;
+    applyHash();
+    renderColumns();
+    setView(state.view);
+  });
+
+  loadModel();
 })();
 </script>
 </body>
