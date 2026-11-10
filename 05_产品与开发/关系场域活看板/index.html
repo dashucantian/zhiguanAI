@@ -259,7 +259,7 @@ button.anchip{cursor:pointer;text-align:left}
 
   // 脱敏只在渲染层做，不改生成器、不改数据件
   function safeLabel(s){
-    return String(s == null ? "" : s).replace(/宗国法师/g, "法师");
+    return String(s == null ? "" : s).replace(/宗国法师/g, "法师"); // 脱敏替换目标（不渲染、不进图）：挡源文俗名于展示之外；勿当遗留错误删除。留改候法师一字
   }
 
   function attr(n, k){ return (n && n.attrs && n.attrs[k]) || ""; }
