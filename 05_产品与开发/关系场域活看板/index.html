@@ -119,6 +119,10 @@ button.anchip{cursor:pointer;text-align:left}
   padding:7px 12px;margin-bottom:12px;font-size:12px;color:var(--ink-2)}
 .versionbar .vb{font-family:var(--mono);font-size:11px}
 .versionbar .vt{color:var(--ink-3);font-size:11px}
+.diffbox .db{font-size:11px;border:1px solid var(--line);border-radius:3px;padding:0 5px;margin-right:6px}
+.diffbox .db.add{color:var(--sig-ok);border-color:var(--sig-ok)}
+.diffbox .db.del{color:var(--sig-risk);border-color:var(--sig-risk)}
+.diffbox .db.chg{color:var(--sig-warn);border-color:var(--sig-warn)}
 
 .aside{display:flex;flex-direction:column;gap:12px;min-width:0}
 .panel{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;padding:12px 14px}
@@ -215,6 +219,7 @@ button.anchip{cursor:pointer;text-align:left}
     <div class="overview" id="overviewStrip"></div>
     <div id="focusStrip" class="focusstrip" hidden></div>
     <div id="versionbar" class="versionbar" hidden aria-live="polite"></div>
+    <div id="diffBox" class="panel diffbox" hidden></div>
 
     <div class="main" id="mainWrap">
       <div class="canvas" id="canvas"></div>
@@ -258,7 +263,9 @@ button.anchip{cursor:pointer;text-align:left}
     prevTime: null,
     lastCheck: null,
     lastHow: null,
-    lastFail: null
+    lastFail: null,
+    diff: null,
+    diffMeta: null
   };
 
   var WK_ORDER = ["W3", "W1", "W2", "W4"];
@@ -678,6 +685,7 @@ button.anchip{cursor:pointer;text-align:left}
     if (v === "evidence") renderEvidence();
     else renderAside();
     renderFocus();
+    syncDiffVisibility();
   }
 
   /* ---------- 事件 ---------- */
@@ -772,6 +780,8 @@ button.anchip{cursor:pointer;text-align:left}
       if (changed){
         state.prevVersion = state.lastVersion;
         state.prevTime = state.lastGenerated;
+        state.diff = state.model ? computeDiff(state.model, m) : null;
+        state.diffMeta = { at: nowStr(), how: silent ? "自动" : "手动" };
       }
       state.model = m;
       state.error = null;
@@ -784,10 +794,97 @@ button.anchip{cursor:pointer;text-align:left}
       document.getElementById("app").hidden = false;
       if (changed || !state.rendered){ state.rendered = true; renderAll(); }
       renderVersionBar(changed);
+      renderDiffList();
       renderRefreshNote();
     };
     s.onerror = function(){ onFail("数据件没读到：data/field-model.js", silent); };
     document.body.appendChild(s);
+  }
+
+  function stable(o){
+    return JSON.stringify(o == null ? {} : o, Object.keys(o == null ? {} : o).sort());
+  }
+
+  function fpNode(n){
+    return [n.label, n.desc, n.status, stable(n.attrs), stable(n.anchors)].join("|");
+  }
+
+  function fpEdge(e){
+    return [e.from, e.to, e.type, e.desc, stable(e.anchors)].join("|");
+  }
+
+  function changedFields(a, b){
+    var f = [];
+    if (a.label !== b.label) f.push("名称");
+    if (a.desc !== b.desc) f.push("说明");
+    if (a.status !== b.status) f.push("状态");
+    if (stable(a.attrs) !== stable(b.attrs)) f.push("属性");
+    if (stable(a.anchors) !== stable(b.anchors)) f.push("锚");
+    return f;
+  }
+
+  function computeDiff(oldM, newM){
+    var d = { added: [], removed: [], changed: [], edges: { added: [], removed: [], changed: [] } };
+    var om = {}, nm = {}, oe = {}, ne = {};
+    oldM.nodes.forEach(function(n){ om[n.id] = n; });
+    newM.nodes.forEach(function(n){ nm[n.id] = n; });
+    oldM.edges.forEach(function(e){ oe[e.id] = e; });
+    newM.edges.forEach(function(e){ ne[e.id] = e; });
+    newM.nodes.forEach(function(n){ if (!om[n.id]) d.added.push(n); });
+    oldM.nodes.forEach(function(n){ if (!nm[n.id]) d.removed.push(n); });
+    newM.nodes.forEach(function(n){
+      if (om[n.id] && fpNode(om[n.id]) !== fpNode(n)) d.changed.push({ n: n, fields: changedFields(om[n.id], n) });
+    });
+    newM.edges.forEach(function(e){ if (!oe[e.id]) d.edges.added.push(e); });
+    oldM.edges.forEach(function(e){ if (!ne[e.id]) d.edges.removed.push(e); });
+    newM.edges.forEach(function(e){
+      if (oe[e.id] && fpEdge(oe[e.id]) !== fpEdge(e)) d.edges.changed.push(e);
+    });
+    return d;
+  }
+
+  function diffCount(d){
+    if (!d) return 0;
+    return d.added.length + d.removed.length + d.changed.length
+      + d.edges.added.length + d.edges.removed.length + d.edges.changed.length;
+  }
+
+  function diffRow(cls, tag, label, id, node, extra){
+    var click = node && anchorsOf(node).length ? ' data-node="' + esc(id) + '" data-anchor="0"' : '';
+    var openTag = click ? '<button type="button" class="relrow"' + click + '>' : '<div class="relrow" style="cursor:default">';
+    var closeTag = click ? "</button>" : "</div>";
+    return openTag + '<span class="db ' + cls + '">' + tag + "</span>" + T(label)
+      + '<br><span class="hint">' + esc(id) + (extra ? " · " + T(extra) : "") + "</span>" + closeTag;
+  }
+
+  function edgeRow(cls, tag, e){
+    var f = byId(e.from), t2 = byId(e.to);
+    return '<div class="relrow" style="cursor:default"><span class="db ' + cls + '">' + tag + "</span>边 "
+      + T(e.type) + "：" + T(f ? f.label : e.from) + " → " + T(t2 ? t2.label : e.to)
+      + '<br><span class="hint">' + esc(e.id) + "</span></div>";
+  }
+
+  function syncDiffVisibility(){
+    var el = document.getElementById("diffBox");
+    el.hidden = (state.view === "evidence") || !state.diff;
+  }
+
+  function renderDiffList(){
+    var el = document.getElementById("diffBox");
+    var d = state.diff;
+    if (!d){ el.hidden = true; el.innerHTML = ""; return; }
+    var rows = "";
+    d.added.forEach(function(n){ rows += diffRow("add", "新增", n.label, n.id, n, ""); });
+    d.changed.forEach(function(c){ rows += diffRow("chg", "变更", c.n.label, c.n.id, c.n, "变了：" + c.fields.join("、")); });
+    d.removed.forEach(function(n){ rows += diffRow("del", "移除", n.label, n.id, null, ""); });
+    d.edges.added.forEach(function(e){ rows += edgeRow("add", "新增", e); });
+    d.edges.changed.forEach(function(e){ rows += edgeRow("chg", "变更", e); });
+    d.edges.removed.forEach(function(e){ rows += edgeRow("del", "移除", e); });
+    el.innerHTML = '<div class="ptitle">变化明细<span class="tag">' + diffCount(d) + ' 项 · 内存比对 · 关页即失</span></div>'
+      + '<div class="hint" style="margin-bottom:6px">' + esc(state.prevVersion || "—") + " → " + esc(state.lastVersion || "—")
+      + " · " + esc((state.diffMeta && state.diffMeta.at) || "") + " · " + esc((state.diffMeta && state.diffMeta.how) || "") + '刷新</div>'
+      + (rows || '<div class="hint">版本变但逐条比对无差异（仅顺序或未跟踪字段变动）。</div>');
+    syncDiffVisibility();
   }
 
   function renderVersionBar(changed){
@@ -797,7 +894,7 @@ button.anchip{cursor:pointer;text-align:left}
     el.innerHTML = '<span>版本已变</span><span class="vb">' + esc(state.prevVersion || "—") + '</span>'
       + '<span>→</span><span class="vb">' + esc(state.lastVersion || "—") + '</span>'
       + '<span class="vt">' + esc(state.prevTime || "旧时刻未记") + ' → ' + esc(state.lastGenerated || "—") + '</span>'
-      + '<span class="vt">· ' + esc(state.lastHow || "") + '刷新 · 变化明细下一步上</span>';
+      + '<span class="vt">· ' + esc(state.lastHow || "") + '刷新 · 明细 ' + diffCount(state.diff) + ' 项见下</span>';
   }
 
   function renderRefreshNote(){
@@ -858,6 +955,7 @@ button.anchip{cursor:pointer;text-align:left}
       ? ("四源 " + src.map(function(x){ return (x.label || x.key) + " " + (x.lines || "—") + " 行"; }).join(" · "))
       : "四源 —";
     renderRefreshNote();
+    renderDiffList();
   }
 
   document.getElementById("reloadBtn").addEventListener("click", function(){ loadModel(); });
