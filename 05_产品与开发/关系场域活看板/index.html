@@ -104,6 +104,16 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
 .node.l-model{border-left-color:var(--g-model)}
 .node.lit{outline:2px solid var(--ink);outline-offset:1px;background:var(--card)}
 .node.gray{border-left-color:var(--gray);opacity:.6}
+.node.dim{opacity:.32}
+details.group.dim{opacity:.38}
+button.anchip{cursor:pointer;text-align:left}
+.focusstrip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--card);
+  border:1px solid var(--line);border-left:4px solid var(--ink-3);border-radius:8px;
+  padding:8px 12px;margin-bottom:12px;font-size:12px}
+.focusstrip .ft{font-weight:700;font-family:var(--serif)}
+.focusstrip .frow{border:1px solid var(--line-soft);border-radius:5px;padding:2px 8px;background:var(--paper);font-size:12px}
+.focusstrip .frow:hover{border-color:var(--ink-3)}
+.focusstrip .fh{color:var(--ink-3);font-size:11px}
 
 .aside{display:flex;flex-direction:column;gap:12px;min-width:0}
 .panel{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;padding:12px 14px}
@@ -174,7 +184,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
 </head>
 <body>
 
-<div class="designbanner">骨架页 v0.1（第一步）· 四列＋三视图＋点节点看证据 · 只读本地数据件、零联网、零第三方库 · 双击即开</div>
+<div class="designbanner">骨架页 v0.2（第二步）· 四列＋三视图＋概览句点锚回证据＋聚焦条 · 只读本地数据件、零联网、零第三方库 · 双击即开</div>
 
 <div class="topbar">
   <div class="brand">关系场域<small>止观AI · 活看板</small></div>
@@ -197,6 +207,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
 
   <div id="app" hidden>
     <div class="overview" id="overviewStrip"></div>
+    <div id="focusStrip" class="focusstrip" hidden></div>
 
     <div class="main" id="mainWrap">
       <div class="canvas" id="canvas"></div>
@@ -372,6 +383,28 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
     { layer: "model", name: "模型", color: "var(--g-model)", sub: "架构" }
   ];
 
+  var neighborSet = null;
+
+  function computeNeighbors(){
+    neighborSet = null;
+    if (!state.selected || !state.model) return;
+    var s = {};
+    s[state.selected] = 1;
+    state.model.edges.forEach(function(e){
+      if (e.from === state.selected) s[e.to] = 1;
+      if (e.to === state.selected) s[e.from] = 1;
+    });
+    neighborSet = s;
+  }
+
+  function isDim(n){ return !!neighborSet && !neighborSet[n.id]; }
+
+  function groupDim(g){
+    if (!neighborSet) return false;
+    for (var i = 0; i < g.nodes.length; i++) if (neighborSet[g.nodes[i].id]) return false;
+    return true;
+  }
+
   function metaChips(n){
     var chips = [];
     if (n.layer === "subject"){
@@ -403,7 +436,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
         + '<span class="colcount">' + total + '</span>'
         + '<span class="colsub">' + col.sub + '</span></div>';
       groups.forEach(function(g){
-        html += '<details class="group" open data-gkey="' + esc(col.layer + ":" + g.key) + '">'
+        html += '<details class="group' + (groupDim(g) ? " dim" : "") + '" open data-gkey="' + esc(col.layer + ":" + g.key) + '">'
           + '<summary class="ghead">' + esc(g.name)
           + '<span class="gc">' + g.nodes.length + '</span><span class="caret">▾</span></summary>'
           + '<div class="gbody">';
@@ -411,6 +444,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
           var lb = safeLabel(n.label);
           html += '<button type="button" class="node l-' + esc(n.layer)
             + (state.selected === n.id ? ' lit' : '')
+            + (isDim(n) ? ' dim' : '')
             + '" data-node="' + esc(n.id) + '" title="' + esc(lb) + '">'
             + '<span class="nl">' + esc(lb) + '</span>'
             + '<span class="nm">' + metaChips(n) + '</span>'
@@ -425,10 +459,21 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
 
   /* ---------- 渲染：概览三句（现算，不写死） ---------- */
 
-  function anchorChip(a, tail){
+  function anchorIndexFor(n, a){
+    if (!n || !a) return 0;
+    var as = anchorsOf(n);
+    for (var i = 0; i < as.length; i++) if (as[i] === a) return i;
+    return 0;
+  }
+
+  function anchorChip(a, tail, node){
     if (!a) return '<span class="anchip" style="color:var(--gray-tx)">锚 <span class="n">未取到</span></span>';
-    return '<span class="anchip" title="' + T(a.raw || a.fp || "") + '">'
-      + T(a.file) + ':' + a.line + '<span class="n">' + T(tail || "") + '</span></span>';
+    var openTag = node
+      ? '<button type="button" class="anchip" data-node="' + esc(node.id) + '" data-anchor="' + anchorIndexFor(node, a) + '"'
+      : '<span class="anchip"';
+    var closeTag = node ? "</button>" : "</span>";
+    return openTag + ' title="' + T(a.raw || a.fp || "") + '">'
+      + T(a.file) + ':' + a.line + '<span class="n">' + T(tail || "") + "</span>" + closeTag;
   }
 
   function renderOverview(){
@@ -455,13 +500,13 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
     document.getElementById("overviewStrip").innerHTML =
       '<div class="ovcard"><span class="ovlabel">今天哪条线在动</span>'
         + '<div class="ovsentence">' + s1 + '</div>'
-        + anchorChip(moving.length ? firstAnchor(moving[0], "状态") : null, " · 状态") + '</div>'
+        + anchorChip(moving.length ? firstAnchor(moving[0], "状态") : null, " · 状态", moving[0]) + '</div>'
       + '<div class="ovcard"><span class="ovlabel">哪里卡住</span>'
         + '<div class="ovsentence">' + s2 + '</div>'
-        + anchorChip(rulingNode ? firstAnchor(rulingNode) : null, " · 待裁单") + '</div>'
+        + anchorChip(rulingNode ? firstAnchor(rulingNode) : null, " · 待裁单", rulingNode) + '</div>'
       + '<div class="ovcard"><span class="ovlabel">下一步看谁</span>'
         + '<div class="ovsentence">' + s3 + '</div>'
-        + anchorChip(human ? firstAnchor(human) : null, " · 人类身份") + '</div>';
+        + anchorChip(human ? firstAnchor(human) : null, " · 人类身份", human) + '</div>';
   }
 
   /* ---------- 渲染：右栏 ---------- */
@@ -575,6 +620,26 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
       + ' <a href="' + esc(fileUrl(a)) + '" target="_blank" rel="noopener">打开该文件</a></div>';
   }
 
+  /* ---------- 渲染：聚焦条 ---------- */
+
+  function renderFocus(){
+    var el = document.getElementById("focusStrip");
+    var n = state.selected ? byId(state.selected) : null;
+    if (!n || !state.model || state.view === "evidence"){ el.hidden = true; el.innerHTML = ""; return; }
+    var edges = state.model.edges.filter(function(e){ return e.from === n.id || e.to === n.id; });
+    var rows = edges.map(function(e){
+      var otherId = e.from === n.id ? e.to : e.from;
+      var o = byId(otherId);
+      return '<button type="button" class="frow" data-node="' + esc(otherId) + '">'
+        + (e.from === n.id ? "→ " : "← ") + T(e.type) + " " + T(o ? o.label : otherId)
+        + '<span class="fh"> 锚 ' + anchorsOf(e).length + "</span></button>";
+    }).join("");
+    el.hidden = false;
+    el.innerHTML = '<span class="ft">聚焦：' + T(n.label) + "</span>"
+      + (rows || '<span class="fh">该节点无边</span>')
+      + '<span class="fh">点空白处解除聚焦 · 非邻域淡出但不隐藏</span>';
+  }
+
   /* ---------- 视图切换 ---------- */
 
   function setView(v){
@@ -595,6 +660,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
 
     if (v === "evidence") renderEvidence();
     else renderAside();
+    renderFocus();
   }
 
   /* ---------- 事件 ---------- */
@@ -602,27 +668,47 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
   function selectNode(id, opts){
     state.selected = id;
     state.anchorIndex = 0;
-    var nodes = document.querySelectorAll(".node");
-    for (var i = 0; i < nodes.length; i++){
-      nodes[i].classList.toggle("lit", nodes[i].getAttribute("data-node") === id);
-    }
+    computeNeighbors();
+    renderColumns();
+    renderFocus();
     if (state.view === "evidence") renderEvidence();
     else renderAside();
     if (opts && opts.gotoEvidence) setView("evidence");
   }
 
+  function clearSelection(){
+    state.selected = null;
+    state.anchorIndex = 0;
+    computeNeighbors();
+    renderColumns();
+    renderFocus();
+    if (state.view === "evidence") renderEvidence();
+    else renderAside();
+  }
+
   document.addEventListener("click", function(ev){
     var t = ev.target;
     if (t && t.closest) t = t.closest("[data-node],[data-view-btn],[data-anchor]");
-    if (!t) return;
+    if (!t){
+      var act = ev.target && ev.target.closest ? ev.target.closest("button,a,summary,input") : null;
+      if (!act) clearSelection();
+      return;
+    }
 
     var viewBtn = t.getAttribute("data-view-btn");
     if (viewBtn){ setView(viewBtn); return; }
 
     var nodeId = t.getAttribute("data-node");
-    if (nodeId){ selectNode(nodeId); return; }
-
     var ai = t.getAttribute("data-anchor");
+    if (nodeId && ai != null){
+      state.selected = nodeId;
+      state.anchorIndex = parseInt(ai, 10) || 0;
+      computeNeighbors();
+      renderColumns();
+      setView("evidence");
+      return;
+    }
+    if (nodeId){ selectNode(nodeId); return; }
     if (ai != null){
       state.anchorIndex = parseInt(ai, 10) || 0;
       if (state.view === "evidence") renderEvidence();
@@ -632,12 +718,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
   });
 
   document.addEventListener("keydown", function(ev){
-    if (ev.key === "Escape"){
-      state.selected = null;
-      var nodes = document.querySelectorAll(".node");
-      for (var i = 0; i < nodes.length; i++) nodes[i].classList.remove("lit");
-      if (state.view === "evidence") renderEvidence(); else renderAside();
-    }
+    if (ev.key === "Escape") clearSelection();
   });
 
   /* ---------- 读盘 ---------- */
@@ -704,6 +785,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
     var src = m.sources || [];
 
     applyHash();
+    computeNeighbors();
 
     document.getElementById("verchip").textContent = "v " + (m.version || "—");
     renderOverview();
@@ -724,6 +806,7 @@ details.group:not([open]) .caret{transform:rotate(-90deg)}
   window.addEventListener("hashchange", function(){
     if (!state.model) return;
     applyHash();
+    computeNeighbors();
     renderColumns();
     setView(state.view);
   });
