@@ -768,14 +768,16 @@ button.anchip{cursor:pointer;text-align:left}
 
     var old = document.getElementById("modelScript");
     if (old) old.parentNode.removeChild(old);
-    try { window.FIELD_MODEL = null; } catch (e) {}
+    window.FIELD_MODEL = null;
 
     var s = document.createElement("script");
     s.id = "modelScript";
     s.src = "data/field-model.js?v=" + Date.now();
     s.onload = function(){
-      if (!window.FIELD_MODEL){ onFail("数据件已读到，但里面没有 FIELD_MODEL。", silent); return; }
+      if (!window.FIELD_MODEL){ enterEmpty("nofield", null, silent); return; }
       var m = window.FIELD_MODEL;
+      if (!m.nodes || !m.nodes.length){ enterEmpty("nonodes", m, silent); return; }
+      var wasError = !!state.error;
       var changed = !!state.lastVersion && m.version !== state.lastVersion;
       if (changed){
         state.prevVersion = state.lastVersion;
@@ -792,12 +794,12 @@ button.anchip{cursor:pointer;text-align:left}
       state.lastHow = silent ? "自动" : "手动";
       document.getElementById("boot").hidden = true;
       document.getElementById("app").hidden = false;
-      if (changed || !state.rendered){ state.rendered = true; renderAll(); }
+      if (changed || !state.rendered || wasError){ state.rendered = true; renderAll(); }
       renderVersionBar(changed);
       renderDiffList();
       renderRefreshNote();
     };
-    s.onerror = function(){ onFail("数据件没读到：data/field-model.js", silent); };
+    s.onerror = function(){ enterEmpty("missing", null, silent); };
     document.body.appendChild(s);
   }
 
@@ -904,22 +906,57 @@ button.anchip{cursor:pointer;text-align:left}
       + (state.lastFail ? "｜读取失败" : "");
   }
 
-  function onFail(msg, silent){
-    state.lastCheck = nowStr();
-    state.lastFail = msg;
-    if (silent && state.model){ renderRefreshNote(); return; }
+  function enterEmpty(kind, m, silent){
     state.model = null;
-    state.error = msg;
-    document.getElementById("app").hidden = true;
-    bootMsg("数据件未取到", esc(msg) + '<br>'
-      + '这是本地文件读取失败，不是网络问题。<br>'
-      + '请先在看板目录运行生成器让它产出数据件，再点右上「重新读盘」。');
+    state.error = kind;
+    state.lastVersion = null;
+    state.lastGenerated = null;
+    state.lastCheck = nowStr();
+    state.lastFail = kind;
+    state.lastHow = silent ? "自动" : "手动";
+    state.diff = null;
+    document.getElementById("boot").hidden = true;
+    document.getElementById("app").hidden = false;
+    document.getElementById("overviewStrip").hidden = true;
+    document.getElementById("mainWrap").hidden = false;
+    document.getElementById("evidenceWrap").hidden = true;
+    document.getElementById("focusStrip").hidden = true;
+    document.getElementById("versionbar").hidden = true;
+    document.getElementById("diffBox").hidden = true;
+    renderEmptySkeleton(kind, m);
     document.getElementById("verchip").textContent = "版本 —";
-    document.getElementById("sbCounts").textContent = "节点 — · 边 — · 锚 —";
+    document.getElementById("sbCounts").textContent = "节点 — · 边 — · 锚 —（未取到 ≠ 真零）";
     document.getElementById("sbVersion").textContent = "版本 —";
     document.getElementById("sbTime").textContent = "建模 —";
-    document.getElementById("sbSources").textContent = "四源 —";
+    document.getElementById("sbSources").textContent = (m && m.sources && m.sources.length) ? "四源 逐源见右栏" : "四源 —";
     renderRefreshNote();
+  }
+
+  function renderEmptySkeleton(kind, m){
+    var titles = {
+      missing: "数据件没读到（文件不存在或读失败）",
+      nofield: "数据件读到了，但里面没有模型",
+      nonodes: "数据件读到了，但节点为空"
+    };
+    var cols = "";
+    COLS.forEach(function(c){
+      cols += '<div class="col"><div class="colhead"><span class="coldot" style="background:var(--gray)"></span>'
+        + '<span class="colname">' + c.name + '</span><span class="colcount">—</span>'
+        + '<span class="colsub">' + c.sub + '</span></div>'
+        + '<div class="node gray"><span class="nl" style="color:var(--gray-tx)">未取到</span></div></div>';
+    });
+    document.getElementById("canvas").innerHTML = cols;
+    var chips = "";
+    if (m && m.sources && m.sources.length){
+      chips = m.sources.map(function(s){ return '<span class="chip-gray">' + T(s.label || s.key) + ' 未取到</span>'; }).join("");
+    } else {
+      chips = '<span class="chip-gray">数据件本身未取到 · 源清单无从逐源报</span>';
+    }
+    document.getElementById("aside").innerHTML =
+      '<div class="notice"><div class="nt">' + titles[kind] + '</div>'
+      + '<div class="nd">读的是本地文件 data/field-model.js，不出网。读不到≠真零，也不拿旧数据充数。<br>' + chips + '</div></div>'
+      + '<div class="panel"><div class="ptitle">怎么办<span class="tag">空态</span></div>'
+      + '<div class="hint">若还没生成过数据：在看板目录跑一次生成器；若生成过：点右上「重新读盘」。数据回来后本页自动或手动恢复，不用重载整页。</div></div>';
   }
 
   function applyHash(){
@@ -967,7 +1004,7 @@ button.anchip{cursor:pointer;text-align:left}
   });
 
   setInterval(function(){
-    if (state.auto && state.model && !state.error) loadModel({ silent: true });
+    if (state.auto) loadModel({ silent: true });
   }, 2000);
 
   window.addEventListener("hashchange", function(){
