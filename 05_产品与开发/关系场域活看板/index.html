@@ -265,7 +265,9 @@ button.anchip{cursor:pointer;text-align:left}
     lastHow: null,
     lastFail: null,
     diff: null,
-    diffMeta: null
+    diffMeta: null,
+    check: null,
+    checkFail: null
   };
 
   var WK_ORDER = ["W3", "W1", "W2", "W4"];
@@ -533,11 +535,76 @@ button.anchip{cursor:pointer;text-align:left}
         + anchorChip(human ? firstAnchor(human) : null, " · 人类身份", human) + '</div>';
   }
 
+  /* ---------- 渲染：锚体检面板（探针跑批结果的页面呈现） ---------- */
+
+  function statusZh(st){
+    var m = { missing_file: "缺文件", blank: "空行", out_of_range: "越界", fingerprint_mismatch: "指纹不符" };
+    return m[st] || st;
+  }
+
+  function loadCheck(){
+    var old = document.getElementById("checkScript");
+    if (old) old.parentNode.removeChild(old);
+    window.ANCHOR_CHECK = null;
+    var s = document.createElement("script");
+    s.id = "checkScript";
+    s.src = "data/anchor-check.js?v=" + Date.now();
+    s.onload = function(){
+      state.check = window.ANCHOR_CHECK || null;
+      state.checkFail = state.check ? null : "empty";
+      if (state.model) renderAside();
+    };
+    s.onerror = function(){
+      state.check = null;
+      state.checkFail = "missing";
+      if (state.model) renderAside();
+    };
+    document.body.appendChild(s);
+  }
+
+  function checkPanelHtml(){
+    var c = state.check;
+    if (!c){
+      var why = state.checkFail === "missing"
+        ? "体检件未取到：data/anchor-check.js 缺失（跑批未运行）"
+        : (state.checkFail === "empty" ? "体检件读到了，但里面没有 ANCHOR_CHECK" : "体检件尚未读取");
+      return '<div class="panel"><div class="ptitle">锚体检<span class="tag">未取到</span></div>'
+        + '<div class="hint" style="color:var(--gray-tx)">' + esc(why)
+        + '。在看板目录运行 anchor_check_emit.py 后点「重新读盘」。不显绿、不装作已查。</div></div>';
+    }
+    var s = c.summary || {};
+    var bad = c.bad || [];
+    var stale = !!(state.model && c.version && c.version !== state.model.version);
+    var head = bad.length
+      ? '<div class="kv"><b>判语</b>已查 ' + (s.anchors || 0) + ' 个，坏 ' + bad.length + ' 个：缺文件 '
+        + (s.missing_file || 0) + '／空行 ' + (s.blank || 0) + '／越界 ' + (s.out_of_range || 0)
+        + '／指纹不符 ' + (s.fingerprint_mismatch || 0) + '</div>'
+      : '<div class="kv"><b>判语</b>已查 ' + (s.anchors || 0) + ' 个，均好</div>';
+    var rows = bad.map(function(r, i){
+      var nodeOk = !!byId(r.owner);
+      return '<div class="relrow" style="cursor:default"><span class="rt">' + esc(statusZh(r.status)) + '</span>'
+        + '<span style="font-family:var(--mono)">' + T(r.file) + ':' + r.line + '</span>'
+        + '<br><span class="hint">' + esc(r.kind) + ' ' + esc(r.owner) + ' · ' + T(r.reason) + '</span>'
+        + '<br><span class="hint">指纹 ' + T(r.fp) + ' ｜ 实际 ' + T(r.actual) + '</span>'
+        + '<br>' + (nodeOk ? '<button type="button" class="btn" style="margin-top:4px" data-check="' + i + '">点回现场</button> ' : '')
+        + '<a class="btn" style="display:inline-block;margin-top:4px" href="' + esc(fileUrl(r))
+        + '" target="_blank" rel="noopener">打开文件</a></div>';
+    }).join("");
+    return '<div class="panel"><div class="ptitle">锚体检<span class="tag">跑批 ' + esc(c.checkedAtLocal || "—") + '</span></div>'
+      + head
+      + (stale ? '<div class="hint" style="color:var(--sig-warn)">体检对应旧版本（体检 ' + esc(c.version)
+        + ' ／当前 ' + esc(state.model.version) + '），重跑 anchor_check_emit.py 更新。</div>' : '')
+      + '<div class="hint" style="margin-bottom:6px">真值闸＝validate_anchors.py；本面板为其跑批结果的页面呈现，页面不回盘校验。</div>'
+      + rows
+      + '</div>';
+  }
+
   /* ---------- 渲染：右栏 ---------- */
 
   function renderAside(){
     var el = document.getElementById("aside");
     var n = state.selected ? byId(state.selected) : null;
+    var cp = checkPanelHtml();
 
     if (state.view === "duty"){
       var edges = state.model.edges.filter(function(e){ return e.type === "责任"; });
@@ -549,7 +616,7 @@ button.anchip{cursor:pointer;text-align:left}
           + '<span class="rt">责任</span>' + T(fl) + ' → ' + T(tl)
           + '<br><span class="hint">锚 ' + anchorsOf(e).length + ' 枚' + (e.desc ? ' · ' + T(e.desc) : '') + '</span></button>';
       }).join("");
-      el.innerHTML = '<div class="panel"><div class="ptitle">责任归属<span class="tag">'
+      el.innerHTML = cp + '<div class="panel"><div class="ptitle">责任归属<span class="tag">'
         + edges.length + ' 条责任边 · 现算</span></div>'
         + (rows || '<div class="hint">未取到责任边。</div>')
         + '</div>'
@@ -559,7 +626,7 @@ button.anchip{cursor:pointer;text-align:left}
     }
 
     if (!n){
-      el.innerHTML = '<div class="panel"><div class="ptitle">节点卡<span class="tag">未选</span></div>'
+      el.innerHTML = cp + '<div class="panel"><div class="ptitle">节点卡<span class="tag">未选</span></div>'
         + '<div class="hint">点左列任一节点，这里显示它的身份、属性与锚；点锚切证据视图看原文。</div></div>'
         + '<div class="panel"><div class="ptitle">骨架态说明<span class="tag">第一步</span></div>'
         + '<div class="hint">本页只做四件事：双击能开、读现有数据、固定四列、三视图可切。'
@@ -582,7 +649,7 @@ button.anchip{cursor:pointer;text-align:left}
         + '<br><span class="hint">' + T(a.note || "（无注）") + '</span></button>';
     }).join("") : '<div class="hint" style="color:var(--gray-tx)">锚 未取到</div>';
 
-    el.innerHTML = '<div class="panel"><div class="ptitle">节点卡<span class="tag">' + esc(n.layer) + ' · ' + esc(n.kind) + '</span></div>'
+    el.innerHTML = cp + '<div class="panel"><div class="ptitle">节点卡<span class="tag">' + esc(n.layer) + ' · ' + esc(n.kind) + '</span></div>'
       + '<div class="kv"><b>名称</b>' + esc(safeLabel(n.label)) + '</div>'
       + (n.desc ? '<div class="kv"><b>说明</b>' + esc(safeLabel(n.desc)) + '</div>' : '')
       + kvHtml
@@ -713,7 +780,7 @@ button.anchip{cursor:pointer;text-align:left}
 
   document.addEventListener("click", function(ev){
     var t = ev.target;
-    if (t && t.closest) t = t.closest("[data-node],[data-view-btn],[data-anchor]");
+    if (t && t.closest) t = t.closest("[data-node],[data-view-btn],[data-anchor],[data-check]");
     if (!t){
       var act = ev.target && ev.target.closest ? ev.target.closest("button,a,summary,input") : null;
       if (!act) clearSelection();
@@ -722,6 +789,25 @@ button.anchip{cursor:pointer;text-align:left}
 
     var viewBtn = t.getAttribute("data-view-btn");
     if (viewBtn){ setView(viewBtn); return; }
+
+    var ck = t.getAttribute("data-check");
+    if (ck != null && state.check){
+      var cr = (state.check.bad || [])[parseInt(ck, 10) || 0];
+      var cn = cr ? byId(cr.owner) : null;
+      if (cn){
+        var cas = anchorsOf(cn);
+        var cidx = 0;
+        for (var q = 0; q < cas.length; q++){
+          if (cas[q].file === cr.file && cas[q].line === cr.line){ cidx = q; break; }
+        }
+        state.selected = cn.id;
+        state.anchorIndex = cidx;
+        computeNeighbors();
+        renderColumns();
+        setView("evidence");
+      }
+      return;
+    }
 
     var nodeId = t.getAttribute("data-node");
     var ai = t.getAttribute("data-anchor");
@@ -794,7 +880,7 @@ button.anchip{cursor:pointer;text-align:left}
       state.lastHow = silent ? "自动" : "手动";
       document.getElementById("boot").hidden = true;
       document.getElementById("app").hidden = false;
-      if (changed || !state.rendered || wasError){ state.rendered = true; renderAll(); }
+      if (changed || !state.rendered || wasError){ state.rendered = true; renderAll(); loadCheck(); }
       renderVersionBar(changed);
       renderDiffList();
       renderRefreshNote();
@@ -995,7 +1081,7 @@ button.anchip{cursor:pointer;text-align:left}
     renderDiffList();
   }
 
-  document.getElementById("reloadBtn").addEventListener("click", function(){ loadModel(); });
+  document.getElementById("reloadBtn").addEventListener("click", function(){ loadModel(); loadCheck(); });
 
   document.getElementById("autoBtn").addEventListener("click", function(){
     state.auto = !state.auto;
@@ -1016,6 +1102,7 @@ button.anchip{cursor:pointer;text-align:left}
   });
 
   loadModel();
+  loadCheck();
 })();
 </script>
 </body>
