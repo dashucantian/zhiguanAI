@@ -195,7 +195,9 @@ def main() -> int:
     alive, why = proxy_alive()
     if alive:
         _log(f"代理在跑，不用管（{why}）")
-        return tend_bridge()
+        rc_bridge = tend_bridge()
+        rc_listen = tend_listener()
+        return 0 if (rc_bridge == 0 and rc_listen == 0) else 1
 
     _log(f"代理不在了（{why}），去拉起来")
     ok, text = start_by_task()
@@ -217,8 +219,77 @@ def main() -> int:
             _log(f"起来了（{why}）")
             return tend_bridge()
 
-    _log("代理还是没起来，得人看一眼（桥这一路仍照查）")
+    _log("代理还是没起来，得人看一眼（桥与监听两路仍照查）")
     tend_bridge()
+    tend_listener()
+    return 1
+
+
+# ---- 飞书事件监听（lark-cli event consume）----
+# 2026-11-11 加：W5｜群面 的常驻监听只跑 24 小时上限，到期或崩溃后没有任何东西会发现。
+# 这里只做"还在不在"，不在就拉起来一个；**不判断它属于哪个窗**，谁起的不重要，活着就行。
+LISTENER_MARK = "event consume"
+LISTENER_CMD = None
+
+
+def _listener_pids() -> list[str]:
+    """按命令行找 event consume 进程。查不到就返回空——宁可多起一个，不可漏报。"""
+    try:
+        ps = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'lark-cli.exe' -and $_.CommandLine -like '*"
+              + LISTENER_MARK + "*' } | Select-Object -ExpandProperty ProcessId")
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           capture_output=True, timeout=40)
+        out = r.stdout.decode("utf-8", "replace")
+        return [x.strip() for x in out.splitlines() if x.strip().isdigit()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _resolve_lark_cmd() -> str | None:
+    env = os.environ.get("LARK_CLI")
+    if env and os.path.exists(env):
+        return env
+    guess = os.path.join(os.path.expanduser("~"),
+                         ".qoder-cn/plugins/cache/qoder-marketplace/lark/0.1.1/bin/lark-cli.cmd")
+    return guess if os.path.exists(guess) else None
+
+
+def start_listener() -> tuple[bool, str]:
+    cmd = _resolve_lark_cmd()
+    if not cmd:
+        return False, "找不到 lark-cli.cmd（可设环境变量 LARK_CLI）"
+    if os.name == "nt":
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    else:
+        flags = 0
+    try:
+        logf = open(DATA_DIR / "事件监听.log", "ab")
+        logf.write(("\n===== 看门狗拉起 %s =====\n" % time.strftime("%Y-%m-%d %H:%M:%S")).encode("utf-8"))
+        logf.flush()
+        p = subprocess.Popen(
+            [os.environ.get("COMSPEC", "cmd"), "/c", cmd, "event", "consume",
+             "im.message.receive_v1", "--as", "bot", "--timeout", "86400s"],
+            cwd=str(BASE_DIR), stdout=logf, stderr=logf, creationflags=flags,
+        )
+        return True, f"起了监听进程 {p.pid}（24h 上限）"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"起监听失败：{exc}"
+
+
+def tend_listener() -> int:
+    pids = _listener_pids()
+    if pids:
+        _log(f"事件监听在跑（pid {','.join(pids[:3])}），不用管")
+        return 0
+    _log("⚠事件监听不在——群里这会儿没人接，去拉起一个")
+    ok, text = start_listener()
+    _log(f"起监听：{'成' if ok else '不成'}　{text}")
+    for _ in range(12):
+        time.sleep(1)
+        if _listener_pids():
+            _log("监听拉起来了")
+            return 0
+    _log("监听还是没起来，得人看一眼")
     return 1
 
 
