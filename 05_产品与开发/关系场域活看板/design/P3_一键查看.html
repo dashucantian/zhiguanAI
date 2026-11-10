@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关系场域看板 · P3 设计稿一键查看</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#f4f0e6;color:#2b2a27;font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.7;}
+.wrap{max-width:1060px;margin:0 auto;padding:0 20px 60px;}
+header{padding:28px 0 14px;}
+h1{font-family:"Songti SC","STSong","SimSun",serif;font-size:26px;letter-spacing:.04em;margin-bottom:10px;}
+.how{background:#fbf8f1;border:1px solid #ddd6c6;border-radius:8px;padding:12px 16px;margin:10px 0;}
+.how b{color:#2b2a27;}
+nav{position:sticky;top:0;background:#f4f0e6;border-bottom:1px solid #c9c2b2;padding:10px 0;z-index:9;}
+nav a{display:inline-block;margin-right:6px;padding:5px 14px;border:1px solid #c9c2b2;border-radius:6px;background:#fbf8f1;color:#2b2a27;text-decoration:none;font-size:14px;}
+nav a:hover{background:#efeadd;}
+section{padding-top:26px;scroll-margin-top:64px;}
+h2{font-family:"Songti SC","STSong","SimSun",serif;font-size:20px;margin-bottom:6px;}
+.what{color:#4b4842;margin-bottom:12px;}
+h3{font-size:13px;color:#6b675e;font-weight:600;margin:14px 0 6px;}
+.shot{display:block;border:1px solid #c9c2b2;border-radius:6px;overflow:hidden;background:#fbf8f1;}
+.shot img{display:block;width:100%;height:auto;}
+.shot.narrow{max-width:480px;}
+.live{display:inline-block;margin-top:12px;padding:7px 18px;border:1px solid #2b2a27;border-radius:6px;background:#2b2a27;color:#f4f0e6;text-decoration:none;font-size:14px;}
+.live:hover{background:#4b4842;}
+.tip{font-size:12px;color:#6b675e;margin-top:6px;}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid #c9c2b2;font-size:12px;color:#6b675e;}
+a{color:#5a6d7d;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>关系场域看板 · P3 设计稿</h1>
+  <p>这是<b>设计稿</b>，不是真看板。图中数据是 2026-11-09 的真实快照（108 节点 · 91 边 · 304 锚）。</p>
+  <div class="how">
+    <b>怎么看：</b>① 下面五个按钮，点哪个就跳到哪一节；② 点图片，看原大；③ 点每节的「打开活页」，能亲手点一点（分组可折叠）。全程不用联网、不用装东西。
+  </div>
+</header>
+
+<nav>
+  <a href="#s1">一 · 首屏</a>
+  <a href="#s2">二 · 聚焦</a>
+  <a href="#s3">三 · 证据</a>
+  <a href="#s4">四 · 变化</a>
+  <a href="#s5">五 · 空状态</a>
+</nav>
+
+<p class="tip" style="margin-top:10px;">另：P4 设计系统已出 → <a href="P4_组件陈列.html">组件陈列（双击即看）</a> · <a href="P4_设计系统.md">规格文档</a></p>
+
+<section id="s1">
+  <h2>一、首屏（总览）</h2>
+  <p class="what">打开先回答三件事：哪条线在动、哪里卡住、下一步看谁。安静纸本风格。</p>
+  <h3>宽屏 1440（点图看原大）</h3>
+  <a class="shot" href="shots/p3_home_1440.png" target="_blank"><img src="shots/p3_home_1440.png" alt="首屏 · 宽屏 1440"></a>
+  <h3>窄屏 900（您的窗口实际宽度）</h3>
+  <a class="shot narrow" href="shots/p3_home_900.png" target="_blank"><img src="shots/p3_home_900.png" alt="首屏 · 窄屏 900"></a>
+  <a class="live" href="p3_src/p3_home.html" target="_blank">打开活页（可点）→</a>
+  <p class="tip">活页在新标签页打开；点分组标题可折叠。</p>
+</section>
+
+<section id="s2">
+  <h2>二、聚焦态</h2>
+  <p class="what">点一个节点，只留它和它的邻居：点亮的描黑边，其余变淡。右栏给它是谁、连着谁、原文在哪。</p>
+  <h3>宽屏 1440</h3>
+  <a class="shot" href="shots/p3_focus_1440.png" target="_blank"><img src="shots/p3_focus_1440.png" alt="聚焦态 · 宽屏 1440"></a>
+  <h3>窄屏 900</h3>
+  <a class="shot narrow" href="shots/p3_focus_900.png" target="_blank"><img src="shots/p3_focus_900.png" alt="聚焦态 · 窄屏 900"></a>
+  <a class="live" href="p3_src/p3_focus.html" target="_blank">打开活页（可点）→</a>
+</section>
+
+<section id="s3">
+  <h2>三、证据态（专业深色）</h2>
+  <p class="what">每个判断都能点回原文：左边锚清单，右边文件原文，当前行高亮。取不到的显灰，不装绿。</p>
+  <h3>宽屏 1440</h3>
+  <a class="shot" href="shots/p3_evidence_1440.png" target="_blank"><img src="shots/p3_evidence_1440.png" alt="证据态 · 宽屏 1440"></a>
+  <h3>窄屏 900</h3>
+  <a class="shot narrow" href="shots/p3_evidence_900.png" target="_blank"><img src="shots/p3_evidence_900.png" alt="证据态 · 窄屏 900"></a>
+  <a class="live" href="p3_src/p3_evidence.html" target="_blank">打开活页（可点）→</a>
+</section>
+
+<section id="s4">
+  <h2>四、变化态</h2>
+  <p class="what">数据变了，顶部出一条「版本已变」。按您的裁定：只报版本变化，不假装列明细；明细插槽留好，候您裁。</p>
+  <h3>宽屏 1440</h3>
+  <a class="shot" href="shots/p3_change_1440.png" target="_blank"><img src="shots/p3_change_1440.png" alt="变化态 · 宽屏 1440"></a>
+  <h3>窄屏 900</h3>
+  <a class="shot narrow" href="shots/p3_change_900.png" target="_blank"><img src="shots/p3_change_900.png" alt="变化态 · 窄屏 900"></a>
+  <a class="live" href="p3_src/p3_change.html" target="_blank">打开活页（可点）→</a>
+</section>
+
+<section id="s5">
+  <h2>五、空状态（四源未取到）</h2>
+  <p class="what">源文件读不到时：逐源报「未取到」，计数显「—」不是 0，不催促、不假装有数据。</p>
+  <h3>宽屏 1440</h3>
+  <a class="shot" href="shots/p3_empty_1440.png" target="_blank"><img src="shots/p3_empty_1440.png" alt="空状态 · 宽屏 1440"></a>
+  <h3>窄屏 900</h3>
+  <a class="shot narrow" href="shots/p3_empty_900.png" target="_blank"><img src="shots/p3_empty_900.png" alt="空状态 · 窄屏 900"></a>
+  <a class="live" href="p3_src/p3_empty.html" target="_blank">打开活页（可点）→</a>
+</section>
+
+<footer>
+  设计稿非实现 · 全部本地文件，零网络 · 详细规格见同目录 P3_高保真.md · AI-036 · 2026-11-10
+</footer>
+
+</div>
+</body>
+</html>

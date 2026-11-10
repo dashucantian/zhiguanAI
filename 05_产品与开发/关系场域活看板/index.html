@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>止观AI 关系场域 · 二维活看板（最小验证）</title>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#11161d; --panel2:#0e131a; --line:#1f2937;
+    --text:#e5e7eb; --muted:#94a3b8; --dim:#64748b;
+    --subject:#3b82f6; --task:#a855f7; --boundary:#14b8a6; --model:#f59e0b;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --done:#64748b;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);
+    font-family:"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;}
+  #app{display:flex;flex-direction:column;height:100%}
+  header{display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+  header h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.5px}
+  header .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 8px}
+  header .spacer{flex:1}
+  header button,header label{font-size:12px;color:var(--text);background:var(--panel2);
+    border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+  header button:hover{border-color:var(--dim)}
+  header input[type=search]{font-size:12px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);border-radius:6px;padding:5px 8px;width:180px;outline:none}
+  #filters{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--muted)}
+  #filters label{display:flex;gap:4px;align-items:center;background:none;border:none;padding:0;cursor:pointer}
+  #filters input{accent-color:var(--subject)}
+  #main{display:flex;flex:1;min-height:0}
+  #canvasWrap{flex:1;position:relative;min-width:0;overflow:hidden;background:
+    radial-gradient(circle at 30% 20%,#101926 0%,var(--bg) 55%)}
+  svg#graph{width:100%;height:100%;display:block;cursor:grab;user-select:none}
+  svg#graph.dragging{cursor:grabbing}
+  .col-bg{fill:#0f151d;stroke:#1b2532;stroke-width:1;rx:10}
+  .col-title{fill:var(--muted);font-size:13px;font-weight:600;letter-spacing:1px}
+  .node{cursor:pointer}
+  .node rect{stroke-width:1;rx:6}
+  .node text{pointer-events:none;fill:var(--text);font-size:12px}
+  .node .sub{fill:var(--muted);font-size:10px}
+  .node:hover rect{stroke:#fff;stroke-opacity:.65}
+  .node.selected rect{stroke:#fff;stroke-width:2}
+  .layer-subject rect{fill:#12213a;stroke:#2b5a9e}
+  .layer-subject.kind-window rect{fill:#17356b;stroke:#4f8ff7}
+  .layer-subject.kind-human rect{fill:#2a2140;stroke:#a78bfa}
+  .layer-task rect{fill:#241433;stroke:#7e3aa8}
+  .layer-boundary rect{fill:#0f2f2b;stroke:#2a8c7f}
+  .layer-model rect{fill:#33240f;stroke:#a8731a}
+  .layer-model.kind-arch-hub rect{fill:#4a2c08;stroke:#f59e0b}
+  .edge{fill:none;stroke-width:1;opacity:.22;transition:opacity .12s}
+  .edge.e-subject{stroke:var(--subject)}
+  .edge.e-task{stroke:var(--task)}
+  .edge.e-boundary{stroke:var(--boundary)}
+  .edge.e-model{stroke:var(--model)}
+  .edge.hi{opacity:.95;stroke-width:2}
+  .edge.dim{opacity:.04}
+  .node.dim{opacity:.16}
+  .node.hi{opacity:1}
+  .status-dot{stroke:none}
+  #detail{width:410px;min-width:320px;border-left:1px solid var(--line);background:var(--panel);
+    display:flex;flex-direction:column;min-height:0}
+  #detail .hd{padding:12px 14px;border-bottom:1px solid var(--line)}
+  #detail .hd h2{font-size:14px;margin:0 0 4px 0;line-height:1.4}
+  #detail .hd .meta{font-size:11px;color:var(--muted)}
+  #detail .bd{overflow:auto;padding:12px 14px;flex:1}
+  #detail .empty{color:var(--dim);font-size:12px;line-height:1.8}
+  .kv{display:grid;grid-template-columns:92px 1fr;gap:6px 10px;font-size:12px;margin:8px 0 14px}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--text);word-break:break-word}
+  .sec-title{font-size:11px;color:var(--muted);letter-spacing:1px;margin:14px 0 6px 0;
+    border-top:1px solid var(--line);padding-top:10px}
+  .anchor{border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0;background:var(--panel2)}
+  .anchor .a-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .anchor .a-file{font-family:Consolas,monospace;font-size:11px;color:#7dd3fc;word-break:break-all}
+  .anchor .a-note{font-size:11px;color:var(--muted)}
+  .anchor .a-raw{font-size:11px;line-height:1.6;color:#cbd5e1;background:#0a0e13;border-radius:6px;
+    padding:6px;margin-top:6px;white-space:pre-wrap;word-break:break-word;max-height:150px;overflow:auto}
+  .anchor .a-actions{display:flex;gap:6px;margin-top:6px}
+  .anchor button,.anchor a{font-size:11px;color:var(--text);background:#1a2330;border:1px solid var(--line);
+    border-radius:5px;padding:3px 7px;cursor:pointer;text-decoration:none}
+  .anchor a:hover,button:hover{border-color:var(--dim)}
+  footer{font-size:11px;color:var(--dim);padding:6px 16px;border-top:1px solid var(--line);
+    display:flex;gap:16px;flex-wrap:wrap;background:var(--panel)}
+  footer .ok{color:var(--ok)}
+  #toast{position:fixed;right:430px;bottom:44px;background:#173d2b;border:1px solid #2f6f4a;
+    color:#bbf7d0;font-size:12px;padding:8px 12px;border-radius:8px;opacity:0;transition:opacity .2s;
+    pointer-events:none;max-width:420px}
+  #toast.show{opacity:1}
+  .legend{display:flex;gap:12px;font-size:11px;color:var(--muted);align-items:center}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px}
+  @media (max-width:1200px){#detail{width:340px}header input[type=search]{width:120px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>止观AI 关系场域 · 二维活看板</h1>
+    <span class="tag" id="tagVersion">版本 —</span>
+    <span class="tag" id="tagTime">建模 —</span>
+    <span class="tag" id="tagStats">节点 — / 边 — / 锚 —</span>
+    <div class="legend">
+      <span><i style="background:var(--subject)"></i>主体</span>
+      <span><i style="background:var(--task)"></i>任务</span>
+      <span><i style="background:var(--boundary)"></i>边界</span>
+      <span><i style="background:var(--model)"></i>模型</span>
+    </div>
+    <div class="spacer"></div>
+    <div id="filters">
+      <label><input type="checkbox" id="f-subject" checked>主体</label>
+      <label><input type="checkbox" id="f-task" checked>任务</label>
+      <label><input type="checkbox" id="f-boundary" checked>边界</label>
+      <label><input type="checkbox" id="f-model" checked>模型</label>
+    </div>
+    <input type="search" id="search" placeholder="搜索节点…">
+    <label><input type="checkbox" id="auto" checked>自动刷新 2 秒</label>
+    <button id="btnRefresh">刷新</button>
+    <button id="btnFit">适配</button>
+  </header>
+
+  <div id="main">
+    <div id="canvasWrap">
+      <svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg>
+    </div>
+    <aside id="detail">
+      <div class="hd">
+        <h2 id="dTitle">点击一个节点</h2>
+        <div class="meta" id="dMeta">右侧显示该节点登记件原文（文件:行号）与建模时锚点。</div>
+      </div>
+      <div class="bd" id="dBd">
+        <div class="empty">
+          左图四层：主体（窗口／AI／法师）、任务、边界、模型。<br>
+          点任一节点 → 这里列出它回指的登记件原文。<br>
+          页面只经 file:// 读本地脚本，零网络请求。
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <footer>
+    <span class="ok" id="fStatus">本地 file:// · 零网络请求</span>
+    <span id="fSources">四源 —</span>
+    <span id="fAnchor">锚点 —</span>
+    <span>只读四源，不改任何登记件；探针读数见 selftest_readings.txt</span>
+  </footer>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = id => document.getElementById(id);
+  const svg = $('graph');
+  const state = {
+    model: null,
+    pos: new Map(),
+    selected: null,
+    view: {x: 0, y: 0, k: 1},
+    loading: false,
+    lastVersion: null,
+    auto: true,
+    filters: {subject:true, task:true, boundary:true, model:true},
+    search: ''
+  };
+
+  const COLW = 210, TASKW = 390, BNDW = 270, MODW = 300;
+  const X = {subject: 90, task: 590, boundary: 1090, model: 1590};
+  const LAYER_LABEL = {subject:'主体', task:'任务', boundary:'边界', model:'模型'};
+  const STATUS_COLOR = {progress:'#22c55e', done:'#64748b', waiting:'#f59e0b', other:'#94a3b8'};
+
+  function el(tag, attrs){
+    const e = document.createElementNS(NS, tag);
+    if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function svgText(t, x, y, cls){
+    const e = el('text', {x, y});
+    if (cls) e.setAttribute('class', cls);
+    e.textContent = t;
+    return e;
+  }
+  function fitText(s, maxW, fs){
+    s = String(s == null ? '' : s);
+    let w = 0, out = '';
+    for (const ch of s){
+      const cw = /[\u2E80-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(ch) ? fs : fs * 0.56;
+      if (w + cw > maxW){ out += '…'; break; }
+      w += cw; out += ch;
+    }
+    return out || '—';
+  }
+  function statusKey(s){
+    s = String(s || '');
+    if (/已销|已归档/.test(s)) return 'done';
+    if (/已验收|已完成|已交|已办|已生效|已升为/.test(s)) return 'done';
+    if (/进行中|中环已跑|待验收/.test(s)) return 'progress';
+    if (/待派|待办|待审|候法师|候裁/.test(s)) return 'waiting';
+    return 'other';
+  }
+  function nodeSize(n){
+    if (n.layer === 'subject'){
+      if (n.kind === 'window') return {w: COLW, h: 36};
+      if (n.kind === 'human') return {w: COLW, h: 40};
+      return {w: COLW, h: 24};
+    }
+    if (n.layer === 'task') return {w: TASKW, h: 30};
+    if (n.layer === 'boundary') return {w: BNDW, h: 34};
+    if (n.kind === 'arch-hub') return {w: MODW, h: 40};
+    return {w: MODW, h: 24};
+  }
+
+  function layout(model){
+    const pos = new Map();
+    const nodes = model.nodes;
+    // 主体：法师 + 四窗 + 各窗 AI
+    let y = 78;
+    const human = nodes.find(n => n.kind === 'human');
+    if (human){ pos.set(human.id, {x: X.subject, y, ...nodeSize(human)}); y += 58; }
+    const windows = nodes.filter(n => n.kind === 'window').sort((a,b)=>a.label.localeCompare(b.label));
+    const ais = nodes.filter(n => n.kind === 'ai');
+    for (const w of windows){
+      pos.set(w.id, {x: X.subject, y, ...nodeSize(w)});
+      const wy = y;
+      y += 46;
+      const wk = w.attrs['窗口'];
+      const list = ais.filter(a => a.window === wk).sort((a,b)=>a.attrs['AI 号'].localeCompare(b.attrs['AI 号']));
+      for (const a of list){
+        pos.set(a.id, {x: X.subject, y, ...nodeSize(a)});
+        y += 30;
+      }
+      y += 16;
+      w._y = wy;
+    }
+    // 任务：按任务号倒序（今日在前）
+    y = 78;
+    const tasks = nodes.filter(n => n.layer === 'task')
+      .sort((a,b)=> b.attrs['任务号'].localeCompare(a.attrs['任务号']));
+    for (const t of tasks){
+      pos.set(t.id, {x: X.task, y, ...nodeSize(t)});
+      y += 38;
+    }
+    // 边界：四窗与主体窗同高，其余顺排
+    let maxWinY = 0;
+    for (const w of windows){
+      const b = nodes.find(n => n.id === 'boundary.window.' + w.attrs['窗口']);
+      if (b){
+        pos.set(b.id, {x: X.boundary, y: w._y, ...nodeSize(b)});
+        maxWinY = Math.max(maxWinY, w._y);
+      }
+    }
+    y = maxWinY + 90;
+    for (const b of nodes.filter(n => n.layer === 'boundary' && n.kind !== 'window-boundary')){
+      pos.set(b.id, {x: X.boundary, y, ...nodeSize(b)});
+      y += 64;
+    }
+    // 模型：hub + 按类型分组
+    y = 78;
+    const hub = nodes.find(n => n.kind === 'arch-hub');
+    if (hub){ pos.set(hub.id, {x: X.model, y, ...nodeSize(hub)}); y += 62; }
+    const order = ['actor','service','module','source-of-truth','projection','database','external-system','risk'];
+    const groups = new Map();
+    for (const n of nodes.filter(n => n.layer === 'model' && n.kind === 'arch-node')){
+      const t = n.archType || 'other';
+      if (!groups.has(t)) groups.set(t, []);
+      groups.get(t).push(n);
+    }
+    for (const t of order.concat([...groups.keys()].filter(k => !order.includes(k)))){
+      const list = groups.get(t);
+      if (!list) continue;
+      for (const n of list.sort((a,b)=>a.label.localeCompare(b.label))){
+        pos.set(n.id, {x: X.model, y, ...nodeSize(n)});
+        y += 28;
+      }
+      y += 20;
+    }
+    // 画布范围
+    let maxY = 600;
+    for (const p of pos.values()) maxY = Math.max(maxY, p.y + p.h + 60);
+    return {pos, width: 1990, height: maxY};
+  }
+
+  function edgePath(a, b, type){
+    const ax = a.x + a.w, ay = a.y + a.h/2;
+    const bx = b.x, by = b.y + b.h/2;
+    if (a.x === b.x){
+      const mx = a.x - 28;
+      return `M ${a.x} ${ay} C ${mx} ${ay} ${mx} ${by} ${b.x} ${by}`;
+    }
+    if (type === '架构'){
+      const mx = Math.min(a.x, b.x) - 70;
+      return `M ${a.x} ${ay} C ${mx} ${ay} ${mx} ${by} ${b.x} ${by}`;
+    }
+    const dx = Math.max(60, Math.abs(bx - ax) * 0.42);
+    return `M ${ax} ${ay} C ${ax + dx} ${ay} ${bx - dx} ${by} ${bx} ${by}`;
+  }
+
+  function render(){
+    const model = state.model;
+    if (!model) return;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const {pos, width, height} = layout(model);
+    state.pos = pos;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    const vp = el('g', {id:'viewport'});
+    svg.appendChild(vp);
+
+    // 列背景
+    const cols = [
+      {x: X.subject - 30, w: COLW + 60, label:'主体'},
+      {x: X.task - 30, w: TASKW + 60, label:'任务'},
+      {x: X.boundary - 30, w: BNDW + 60, label:'边界'},
+      {x: X.model - 30, w: MODW + 60, label:'模型'},
+    ];
+    for (const c of cols){
+      vp.appendChild(el('rect', {x:c.x, y:36, width:c.w, height:height-70, rx:10, class:'col-bg'}));
+      vp.appendChild(svgText(c.label, c.x + 14, 58, 'col-title'));
+    }
+
+    // 边
+    const edgeLayer = el('g', {id:'edges'});
+    vp.appendChild(edgeLayer);
+    for (const e of model.edges){
+      const a = pos.get(e.from), b = pos.get(e.to);
+      if (!a || !b) continue;
+      const p = el('path', {
+        d: edgePath(a, b, e.type),
+        class: 'edge e-' + (e.type === '架构' ? 'model' : (e.type === '隶属' || e.type === '裁定' ? 'subject' : (e.type === '边界' ? 'boundary' : 'task'))),
+        'data-id': e.id, 'data-from': e.from, 'data-to': e.to
+      });
+      p.addEventListener('click', ev => { ev.stopPropagation(); showEdge(e); });
+      edgeLayer.appendChild(p);
+    }
+
+    // 节点
+    const nodeLayer = el('g', {id:'nodes'});
+    vp.appendChild(nodeLayer);
+    for (const n of model.nodes){
+      const p = pos.get(n.id);
+      if (!p) continue;
+      const g = el('g', {class:'node layer-' + n.layer + ' kind-' + n.kind, 'data-id': n.id});
+      g.setAttribute('transform', `translate(${p.x},${p.y})`);
+      const rect = el('rect', {x:0, y:0, width:p.w, height:p.h});
+      g.appendChild(rect);
+      const fs = n.layer === 'task' ? 12 : (n.kind === 'window' ? 13 : 12);
+      const label = fitText(n.label, p.w - 26, fs);
+      const tx = svgText(label, 10, p.h/2 + 4);
+      tx.style.fontSize = fs + 'px';
+      if (n.kind === 'window' || n.kind === 'human' || n.kind === 'arch-hub') tx.style.fontWeight = '600';
+      g.appendChild(tx);
+      if (n.layer === 'task'){
+        const sk = statusKey(n.status);
+        const dot = el('circle', {cx: p.w - 12, cy: p.h/2, r: 4, class:'status-dot'});
+        dot.setAttribute('fill', STATUS_COLOR[sk] || STATUS_COLOR.other);
+        g.appendChild(dot);
+      }
+      g.addEventListener('click', ev => { ev.stopPropagation(); showNode(n.id); });
+      g.addEventListener('mouseenter', () => highlight(n.id));
+      g.addEventListener('mouseleave', () => clearHighlight());
+      nodeLayer.appendChild(g);
+    }
+    applyFilters();
+    applyTransform();
+  }
+
+  function applyTransform(){
+    const vp = svg.querySelector('#viewport');
+    if (!vp) return;
+    const {x, y, k} = state.view;
+    vp.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+  }
+
+  function highlight(id){
+    const connected = new Set([id]);
+    svg.querySelectorAll('.edge').forEach(e => {
+      const on = e.getAttribute('data-from') === id || e.getAttribute('data-to') === id;
+      e.classList.toggle('hi', on);
+      e.classList.toggle('dim', !on);
+      if (on){ connected.add(e.getAttribute('data-from')); connected.add(e.getAttribute('data-to')); }
+    });
+    svg.querySelectorAll('.node').forEach(n => {
+      const on = connected.has(n.getAttribute('data-id'));
+      n.classList.toggle('hi', on);
+      n.classList.toggle('dim', !on);
+    });
+  }
+  function clearHighlight(){
+    svg.querySelectorAll('.hi').forEach(e => e.classList.remove('hi'));
+    svg.querySelectorAll('.dim').forEach(e => e.classList.remove('dim'));
+  }
+
+  function applyFilters(){
+    for (const layer of ['subject','task','boundary','model']){
+      svg.classList.toggle('hide-' + layer, !state.filters[layer]);
+    }
+    if (!state.model) return;
+    const q = state.search.trim().toLowerCase();
+    svg.querySelectorAll('.node').forEach(g => {
+      const n = state.model.nodes.find(x => x.id === g.getAttribute('data-id'));
+      let visible = n && state.filters[n.layer];
+      if (visible && q){
+        const hay = (n.label + ' ' + n.desc + ' ' + Object.values(n.attrs || {}).join(' ')).toLowerCase();
+        visible = hay.includes(q);
+      }
+      g.style.display = visible ? '' : 'none';
+    });
+    svg.querySelectorAll('.edge').forEach(e => {
+      const a = state.model.nodes.find(x => x.id === e.getAttribute('data-from'));
+      const b = state.model.nodes.find(x => x.id === e.getAttribute('data-to'));
+      let visible = a && b && state.filters[a.layer] && state.filters[b.layer];
+      if (visible && q){
+        const ha = (a.label + ' ' + Object.values(a.attrs || {}).join(' ')).toLowerCase();
+        const hb = (b.label + ' ' + Object.values(b.attrs || {}).join(' ')).toLowerCase();
+        visible = ha.includes(q) || hb.includes(q);
+      }
+      e.style.display = visible ? '' : 'none';
+    });
+  }
+
+  // 隐藏层用 CSS 简法：给 svg 加类后由这些规则隐藏
+  const styleHide = document.createElement('style');
+  styleHide.textContent = `
+    svg.hide-subject .layer-subject{display:none}
+    svg.hide-task .layer-task{display:none}
+    svg.hide-boundary .layer-boundary{display:none}
+    svg.hide-model .layer-model{display:none}
+  `;
+  document.head.appendChild(styleHide);
+
+  function showNode(id){
+    const n = state.model.nodes.find(x => x.id === id);
+    if (!n) return;
+    svg.querySelectorAll('.node.selected').forEach(e => e.classList.remove('selected'));
+    const g = svg.querySelector(`.node[data-id="${cssEscape(id)}"]`);
+    if (g) g.classList.add('selected');
+    $('dTitle').textContent = n.label;
+    $('dMeta').textContent = `${LAYER_LABEL[n.layer]} · ${n.kind}` + (n.desc ? ` · ${n.desc}` : '');
+    const bd = $('dBd');
+    bd.textContent = '';
+    const kv = document.createElement('div'); kv.className = 'kv';
+    const attrs = Object.assign({}, n.attrs || {});
+    if (n.window) attrs['窗口归属'] = n.window;
+    for (const k in attrs){
+      const kd = document.createElement('div'); kd.className = 'k'; kd.textContent = k;
+      const vd = document.createElement('div'); vd.className = 'v'; vd.textContent = attrs[k];
+      kv.appendChild(kd); kv.appendChild(vd);
+    }
+    bd.appendChild(kv);
+    const st = document.createElement('div');
+    st.className = 'sec-title';
+    st.textContent = `回源锚点（${(n.anchors || []).length} 条，建模时按工作树现算）`;
+    bd.appendChild(st);
+    if (!n.anchors || !n.anchors.length){
+      const d = document.createElement('div'); d.className='empty'; d.textContent='该节点无锚点。';
+      bd.appendChild(d);
+    } else {
+      for (const a of n.anchors) bd.appendChild(anchorBox(a));
+    }
+  }
+
+  function showEdge(e){
+    $('dTitle').textContent = `关系：${e.type}`;
+    $('dMeta').textContent = `${e.from} → ${e.to}`;
+    const bd = $('dBd'); bd.textContent = '';
+    const kv = document.createElement('div'); kv.className='kv';
+    const rows = {'关系类型':e.type,'起点':e.from,'终点':e.to,'说明':e.desc || '—'};
+    for (const k in rows){
+      const kd = document.createElement('div'); kd.className='k'; kd.textContent=k;
+      const vd = document.createElement('div'); vd.className='v'; vd.textContent=rows[k];
+      kv.appendChild(kd); kv.appendChild(vd);
+    }
+    bd.appendChild(kv);
+    const st = document.createElement('div'); st.className='sec-title'; st.textContent='关系锚点';
+    bd.appendChild(st);
+    for (const a of (e.anchors || [])) bd.appendChild(anchorBox(a));
+  }
+
+  function anchorBox(a){
+    const box = document.createElement('div'); box.className = 'anchor';
+    const top = document.createElement('div'); top.className = 'a-top';
+    const f = document.createElement('span'); f.className = 'a-file';
+    f.textContent = `${a.file}:${a.line}`;
+    const note = document.createElement('span'); note.className = 'a-note'; note.textContent = a.note || '';
+    top.appendChild(f); top.appendChild(note);
+    box.appendChild(top);
+    const raw = document.createElement('div'); raw.className = 'a-raw';
+    raw.textContent = a.raw || '（建模时原文为空）';
+    box.appendChild(raw);
+    const acts = document.createElement('div'); acts.className = 'a-actions';
+    const copy = document.createElement('button'); copy.textContent = '复制文件:行号';
+    copy.addEventListener('click', () => copyText(`${a.file}:${a.line}`));
+    const open = document.createElement('a');
+    open.textContent = '打开文件';
+    open.href = 'file:///' + encodeURI((state.model.root || '').replace(/\\/g,'/') + '/' + a.file);
+    open.target = '_blank'; open.rel = 'noopener';
+    acts.appendChild(copy); acts.appendChild(open);
+    box.appendChild(acts);
+    return box;
+  }
+  function copyText(t){
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(()=>toast('已复制：' + t)).catch(()=>fallbackCopy(t));
+    } else fallbackCopy(t);
+  }
+  function fallbackCopy(t){
+    const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta);
+    ta.select(); try{ document.execCommand('copy'); toast('已复制：' + t); }catch(e){ toast('复制失败：' + t); }
+    document.body.removeChild(ta);
+  }
+  function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+  let toastTimer = null;
+  function toast(msg){
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 2400);
+  }
+
+  // 载入模型：script 标签读本地文件，零网络
+  function loadModel(manual){
+    if (state.loading) return;
+    state.loading = true;
+    const s = document.createElement('script');
+    s.src = 'data/field-model.js?v=' + Date.now();
+    s.onload = () => {
+      state.loading = false;
+      s.remove();
+      const m = window.FIELD_MODEL;
+      if (!m){ toast('模型加载失败：window.FIELD_MODEL 为空'); return; }
+      const prev = state.lastVersion;
+      state.lastVersion = m.version;
+      state.model = m;
+      updateHeader(m);
+      if (manual || !prev || prev !== m.version){
+        render();
+        if (prev && prev !== m.version) toast(`已刷新：版本 ${prev} → ${m.version}（${m.generatedAtLocal}）`);
+        else toast(`已载入：版本 ${m.version}`);
+      }
+    };
+    s.onerror = () => {
+      state.loading = false; s.remove();
+      toast('模型脚本加载失败：请先运行 build_field_model.py');
+    };
+    document.body.appendChild(s);
+  }
+
+  function updateHeader(m){
+    $('tagVersion').textContent = '版本 ' + m.version;
+    $('tagTime').textContent = '建模 ' + m.generatedAtLocal;
+    $('tagStats').textContent = `节点 ${m.stats.nodes} / 边 ${m.stats.edges} / 锚 ${m.stats.anchors}`;
+    $('fSources').textContent = '四源：' + m.sources.map(s => `${s.label}（${s.lines} 行）`).join(' · ');
+    $('fAnchor').textContent = `锚点 ${m.stats.anchors} 条 · 生成于 ${m.generatedAtLocal}`;
+  }
+
+  // 视口：滚轮缩放 + 拖拽平移
+  function applyTransformSafe(){
+    const {x,y,k} = state.view;
+    const vp = svg.querySelector('#viewport');
+    if (vp) vp.setAttribute('transform', `translate(${x},${y}) scale(${k})`);
+  }
+  svg.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+    const old = state.view.k;
+    const next = Math.min(2.5, Math.max(0.25, old * (ev.deltaY < 0 ? 1.1 : 0.9)));
+    const ratio = next / old;
+    state.view.x = mx - (mx - state.view.x) * ratio;
+    state.view.y = my - (my - state.view.y) * ratio;
+    state.view.k = next;
+    applyTransformSafe();
+  }, {passive:false});
+  let drag = null;
+  svg.addEventListener('mousedown', ev => {
+    if (ev.button !== 0) return;
+    drag = {x: ev.clientX, y: ev.clientY, vx: state.view.x, vy: state.view.y};
+    svg.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', ev => {
+    if (!drag) return;
+    state.view.x = drag.vx + (ev.clientX - drag.x);
+    state.view.y = drag.vy + (ev.clientY - drag.y);
+    applyTransformSafe();
+  });
+  window.addEventListener('mouseup', () => { drag = null; svg.classList.remove('dragging'); });
+  svg.addEventListener('click', ev => {
+    if (ev.target === svg){ svg.querySelectorAll('.node.selected').forEach(e => e.classList.remove('selected')); }
+  });
+  function fit(){
+    if (!state.model) return;
+    const vb = svg.viewBox.baseVal;
+    const rect = svg.getBoundingClientRect();
+    const k = Math.min(rect.width / (vb.width || 1990), rect.height / (vb.height || 1200)) * 0.96;
+    state.view = {k, x: 0, y: 0};
+    applyTransformSafe();
+  }
+
+  $('btnRefresh').addEventListener('click', () => loadModel(true));
+  $('btnFit').addEventListener('click', fit);
+  $('auto').addEventListener('change', ev => {
+    state.auto = ev.target.checked;
+    toast(state.auto ? '自动刷新已开（2 秒）' : '自动刷新已关');
+  });
+  for (const layer of ['subject','task','boundary','model']){
+    $('f-' + layer).addEventListener('change', ev => {
+      state.filters[layer] = ev.target.checked;
+      applyFilters();
+    });
+  }
+  $('search').addEventListener('input', ev => { state.search = ev.target.value; applyFilters(); });
+  window.addEventListener('resize', () => { /* 保持变换，不打断用户 */ });
+
+  loadModel(true);
+  setInterval(() => { if (state.auto) loadModel(false); }, 2000);
+})();
+</script>
+</body>
+</html>

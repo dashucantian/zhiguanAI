@@ -1,0 +1,46 @@
+关系场域活看板 · 浏览器实测读数
+实测时刻：2026-11-08 15:11—15:12（本机现取）
+浏览器：Qoder 内置浏览器（CDP 连接）；静态截图另用本机 Chrome headless
+真页面：file:///D:/Project/zhiguanAI/05_产品与开发/关系场域活看板/index.html
+
+一、首屏（真页面）
+- 标题：止观AI 关系场域 · 二维活看板（最小验证）
+- 协议：file:
+- 模型载入：true；版本 82453abca368；生成 2026-11-08 15:10:00
+- SVG 节点 107 / 边 90；页头「节点 107 / 边 90 / 锚 302」
+- 四源脚注：身份登记 335 行 · 任务看板 440 行 · 待裁单 344 行 · 架构证据模型 725 行
+- console error/warn：0 条
+
+二、点击回源（判据①）
+- TASK-20261108-01 → 5 条锚：任务登记.md:420 / :427 / :426 / :428 / :423
+  详情面板首条原文：`### TASK-20261108-01`
+- AI-035 → AI代理身份登记.md:332
+- W1 窗口 → AI代理身份登记.md:165
+- 关系场域裁定 → 待裁单.md:84
+- 架构 actor.fashi → architecture-model.json:15
+- 「打开文件」链接：file:///D:/Project/zhiguanAI/01_项目管理/任务登记.md
+- 结论：四层（主体／任务／边界／模型）均可点回文件:行号并显示建模时原文。
+
+三、活刷新（判据②，页面端）
+- 做法：用字节一致副本建测试站点 `_analysis_tmp/field_fixture/site`；监视器 `--watch --interval 1`；只改副本 `任务登记.md` 的 TASK-20261108-01 状态行，行数不变。
+- 监视器输出：
+  15:10:52 built field-model.json version=82453abca368 nodes=107 edges=90
+  15:11:03 built field-model.json version=5bb826befe68 nodes=107 edges=90
+- 页面自动刷新（未手动点）：页头版本 82453abca368 → 5bb826befe68；
+  任务状态「进行中（第一步＝…）」→「活刷新自测（判据②：改副本任务件后页面自动刷新；行数不变）」；
+  锚原文同步变化；提示「已刷新：版本 82453abca368 → 5bb826befe68（2026-11-08 15:11:03）」。
+- 手动「刷新」按钮：点击后提示「已载入：版本 82453abca368」，无报错。
+- 真源核对：测试后真页面任务状态仍为「进行中（第一步＝只读四源映射脚本＋二维页面骨架；三步以实测耗时回填）」⇒ 共享源件未被测试改动。
+
+四、零网络（边界）
+- Network 面板共 34 条请求，全部为 file:// 本地 index.html／field-model.js?v=…；http/https：0 条。
+- console error/warn：0 条。
+
+五、静态截图
+- `_analysis_tmp/field_page2.png`：425,057 字节，1600×1000，Chrome headless，--virtual-time-budget=6000。
+- 说明：Qoder 内置浏览器的可见截图面返回 NATIVE_BROWSER_VIEWPORT_UNAVAILABLE（viewport=0x0、visible=false、cdpAttached=true），故静态图用本机 Chrome headless 补；功能判据以内置浏览器 DOM 实测为准。
+
+六、据实说明
+- 活刷新测试只动 `_analysis_tmp` 下字节一致副本，未碰任何共享在途登记件。
+- 内置浏览器页面测试后已关闭，避免后台每 2 秒继续读盘。
+- 本轮未做三维、未碰 pdf2game、未读整机进程/系统日志。

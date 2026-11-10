@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>关系场域看板 · P4 组件陈列</title>
+<link rel="stylesheet" href="p3_src/p3.css">
+<style>
+/* P4 修订三枚（规格 §一.3）：A 提示环/灰条、B 弱级字 */
+:root{ --sig-warn:#a87f3d; --gray:#8a8a83; }
+.skin-b{
+  --paper:#14181d; --card:#1e242b; --card-2:#242b33;
+  --ink:#e8eaed; --ink-2:#c6cbd1; --ink-3:#8e959d;
+  --line:#3a4148; --line-soft:#2a3138;
+  --g-subject:#7d94a8; --g-task:#8fa876; --g-boundary:#a87d8f; --g-model:#947da8;
+  --sig-ok:#4f8a63; --sig-warn:#c9973f; --sig-risk:#c96a5a;
+  --gray:#6b7178; --gray-tx:#8e959d;
+  background:var(--paper); color:var(--ink); border-radius:8px; padding:14px;
+}
+.wrap2{ max-width:1060px; margin:0 auto; padding:24px 20px 60px; }
+h2{ font-family:var(--serif); font-size:18px; margin:26px 0 4px; }
+.note{ font-size:12px; color:var(--ink-3); margin-bottom:10px; }
+.demo{ border:1px solid var(--line-soft); border-radius:8px; padding:14px; background:var(--card); }
+.row{ display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
+.row>*{ flex:0 1 auto; }
+.col2{ flex:1 1 300px; min-width:260px; }
+.back{ font-size:12px; }
+.legend{ display:flex; gap:18px; flex-wrap:wrap; font-size:12px; color:var(--ink-2); align-items:center; }
+</style>
+</head>
+<body>
+<div class="wrap2">
+
+<div class="designbanner">P4 设计系统 · 组件陈列（非实现）· 令牌＝p3.css＋P4 修订三枚 · 双击即看，零网络</div>
+<h1 style="font-family:var(--serif);font-size:24px;margin:14px 0 6px;">组件陈列</h1>
+<p class="note">每个组件给：实例＋语义一句＋样式出处。下半页有 B 深色对照。规格全文见同目录 P4_设计系统.md。<span class="back"><a href="P3_一键查看.html">← 回 P3 一键查看</a></span></p>
+
+<h2>一、信号卡（环＋图例）</h2>
+<p class="note">整圆不用弧（弧会被读成百分比）；旁标「提案」＝未回测不冒充已验。p3.css:107–109</p>
+<div class="demo">
+  <div class="legend">
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-ok)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>顺＝已决/正常</span>
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-warn)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>提示＝候裁/注意</span>
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-risk)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>险＝冲突/越界</span>
+  </div>
+</div>
+
+<h2>二、节点（四层＋三态）</h2>
+<p class="note">左条 3px＝层归属（只表归属不表状态）；聚焦＝墨色描边，非邻域降透明度。p3.css:94–104、:135–137</p>
+<div class="demo">
+  <div class="row">
+    <div class="col2"><div class="node l-subject lit"><div class="nl">AI-035 场域最小验证</div><div class="nm">W1 · 窗 1 <span class="na">锚 1</span></div></div></div>
+    <div class="col2"><div class="node l-task"><div class="nl">TASK-20261108-01 二维活看板</div><div class="nm">进行中 <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-ok)" stroke-width="2.4"/></svg><span class="prop">提案</span></span> <span class="na">锚 5</span></div></div></div>
+    <div class="col2"><div class="node l-boundary dim"><div class="nl">W1 职责边界</div><div class="nm">只读四源 · 不出网 <span class="na">锚 1</span></div></div></div>
+    <div class="col2"><div class="node l-model dim"><div class="nl">正源◇ 身份登记</div><div class="nm">窗口注册权 <span class="na">锚 1</span></div></div></div>
+  </div>
+</div>
+
+<h2>三、分组（原生折叠，可点）</h2>
+<p class="note">details/summary：Tab 聚焦、Enter 开合，零 JS；合起不丢计数。p3.css:82–92</p>
+<div class="demo">
+  <div class="row">
+    <div class="col2">
+      <details class="group" open><summary class="ghead">W1 工程 <span class="gc">11</span><span class="caret">▾</span></summary>
+        <div class="gbody"><div class="node l-subject"><div class="nl">AI-035 场域最小验证</div><div class="nm">W1 · 窗 1</div></div><div class="node l-subject"><div class="nl">AI-036 场域重设计</div><div class="nm">W1 · 窗 1</div></div></div>
+      </details>
+    </div>
+    <div class="col2">
+      <details class="group"><summary class="ghead">W2 文档 <span class="gc">6</span><span class="caret">▾</span></summary>
+        <div class="gbody"><div class="node l-subject"><div class="nl">（合起状态示例）</div></div></div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<h2>四、边（关系条）</h2>
+<p class="note">边必有锚；类型小标＋两端＋锚 chip。装饰曲线归 P5，本稿不画。p3.css:123–126</p>
+<div class="demo">
+  <div class="relrow"><span class="rt">隶属</span>AI-035 → W1 窗口<br><span class="anchip">身份登记.md:332</span></div>
+  <div class="relrow"><span class="rt">责任</span>W1 → TASK-20261108-01<br><span class="anchip">任务登记.md:426</span></div>
+</div>
+
+<h2>五、筛选（搜索＋视图预设＋版本 chip）</h2>
+<p class="note">视图预设切皮肤不改数据；「/」聚焦搜索（P5 接线）。p3.css:36–46</p>
+<div class="demo">
+  <div class="row" style="align-items:center;">
+    <div class="tabs"><span class="tab on">总览</span><span class="tab">责任</span><span class="tab">证据<span class="sk">B</span></span></div>
+    <div class="search">搜索节点 / 任务 / 锚 <kbd>/</kbd></div>
+    <span class="verchip">v 7b425d47a337</span>
+  </div>
+</div>
+
+<h2>六、时间轴（版本条·回落）</h2>
+<p class="note">只报版本变化，不假装列明细；明细插槽候裁。p3.css:64–69</p>
+<div class="demo" style="background:transparent;border:none;padding:0;">
+  <div class="versionbar"><span class="vt">版本已变</span><span class="vh">c1cdb6674e20 → 7b425d47a337</span><span class="vh">01:05:50 → 01:33:40</span><span class="why">明细未列：快照留存暂缓裁</span></div>
+</div>
+
+<h2>七、证据卡（右栏卡＋锚清单＋原文行）</h2>
+<p class="note">原文必真；当前锚 warn 左条；取不到显灰不装绿。p3.css:113–120、:147–161</p>
+<div class="demo">
+  <div class="row">
+    <div class="col2">
+      <div class="panel"><div class="ptitle">证据卡 <span class="tag">原文摘句</span></div>
+        <div class="narr"><p><span class="who">AI-035</span> ｜ Qoder 客户端窗（W1｜关系场域活看板·最小验证）…</p><span class="anchip">身份登记.md:332</span></div>
+      </div>
+    </div>
+    <div class="col2">
+      <ul class="anchorlist">
+        <li class="on"><div class="af">任务登记.md:427</div><div class="an">状态 · 进行中</div></li>
+        <li><div class="af">任务登记.md:426</div><div class="an">责任位 · W1 执行</div></li>
+      </ul>
+      <div class="rawpane">
+        <div class="rawhead"><span class="rf">01_项目管理/任务登记.md</span><span class="got">原文已取到</span></div>
+        <div class="rawbody"><div class="rawline sel"><span class="ln">427</span><span class="lt">- 状态：**进行中**（第一步＝只读四源映射脚本＋二维页面骨架…）</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>八、概览卡</h2>
+<p class="note">一卡答一问，不堆指标；答句 serif。p3.css:52–57</p>
+<div class="demo">
+  <div class="row">
+    <div class="col2"><div class="ovcard"><span class="ovlabel">今天哪条线在动</span><div class="ovsentence">关系场域活看板（TASK-20261108-01）进行中。</div><span class="anchip">任务登记.md:427</span></div></div>
+    <div class="col2"><div class="ovcard"><span class="ovlabel">哪里卡住</span><div class="ovsentence">待裁单 <b>83</b> 行，已决 <b>55</b>、未决 <b>28</b>。</div><span class="anchip">待裁单.md · §一</span></div></div>
+  </div>
+</div>
+
+<h2>九、空态（未取到）</h2>
+<p class="note">灰＝未取到≠零；逐源报；计数「—」。p3.css:164–177</p>
+<div class="demo">
+  <div class="notice"><div class="nt">四源未取到，暂不显示任何节点</div><div class="nd">不装作有数据，也不把「未取到」当成「零」。</div></div>
+  <div class="srcrow"><span class="sl">① 身份登记</span><span class="sp">01_项目管理/AI代理身份登记.md</span><span class="chip-gray">未取到</span></div>
+  <div class="skel"><div class="sl1"></div><div class="sl2"></div><div class="stx">未取到 · 不显示节点</div></div>
+</div>
+
+<h2>十、裁后插槽</h2>
+<p class="note">不悬空承诺：候裁项只留插槽。p3.css:130–132</p>
+<div class="demo" style="background:transparent;border:none;padding:0;">
+  <div class="slot"><div class="st">裁后插槽 · 变化清单</div><div class="sd">上一版快照留存暂缓裁（法师 2026-11-10 字）；裁后此处列「变了哪几个节点/哪条关系」。</div></div>
+</div>
+
+<h2>十一、B 深色对照（证据视图专用）</h2>
+<p class="note">令牌整组换、语义不变；弱级字已按 P4 修订 #8e959d。同一组件，两皮肤。</p>
+<div class="skin-b">
+  <div class="legend" style="margin-bottom:12px;">
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-ok)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>顺</span>
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-warn)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>提示</span>
+    <span class="ring"><svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--sig-risk)" stroke-width="2.4"/></svg><span class="prop">提案</span></span><span>险</span>
+  </div>
+  <div class="row">
+    <div class="col2">
+      <div class="node l-task lit"><div class="nl">TASK-20261108-01 二维活看板</div><div class="nm">进行中 <span class="na">锚 5</span></div></div>
+      <ul class="anchorlist" style="margin-top:10px;">
+        <li class="on"><div class="af">任务登记.md:427</div><div class="an">状态 · 进行中</div></li>
+      </ul>
+    </div>
+    <div class="col2">
+      <div class="rawpane">
+        <div class="rawhead"><span class="rf">01_项目管理/任务登记.md</span><span class="got">原文已取到 · 工作树</span></div>
+        <div class="rawbody">
+          <div class="rawline"><span class="ln">426</span><span class="lt">- 责任位：执行＝W1 工程窗…</span></div>
+          <div class="rawline sel"><span class="ln">427</span><span class="lt">- 状态：**进行中**（第一步＝只读四源映射脚本…）</span></div>
+        </div>
+        <div class="rawnote">只读快照 · 行号由生成脚本现算</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="statusbar"><span>108 节点 · 91 边 · 304 锚</span><span>四源只读 · 2 秒读盘刷新</span><span class="right">组件陈列 · 设计件非实现 · 本地零网络</span></div>
+
+</div>
+</body>
+</html>
