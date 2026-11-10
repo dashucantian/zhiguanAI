@@ -40,7 +40,7 @@ def _model_used_ratio(model: str, month: str | None = None) -> float | None:
     cap = plans.cap_for(model)
     if not cap:
         return None
-    used = store.spend_by_model(month).get(model, 0.0)
+    used = store.spend_by_model(month, exclude_balance=True).get(model, 0.0)
     return used / cap
 
 
@@ -103,24 +103,32 @@ def pick_model(task: str, context_tokens: int, month: str | None = None) -> tupl
         candidates = [m for m in candidates if m not in plans.BIG_CONTEXT_BANNED]
         if blocked:
             reasons.append("上下文很大，已避开单价高、封顶只有 15 美元的模型：" + "、".join(blocked))
+    balance_mode = store.go_billing_mode() == plans.GO_BALANCE_POOL
+    if balance_mode:
+        reasons.append("按月总额度已用尽，现在走充值余额按量计费，不吃订阅的每模型封顶与窗口")
     for model in candidates:
         if model in plans.TRAIN_ON_REQUEST:
             continue
-        ratio = _model_used_ratio(model, month)
-        if ratio is not None and ratio >= SOFT_STOP:
-            reasons.append(f"{model} 本月已用掉封顶的 {ratio:.0%}，不再推荐")
-            continue
-        if ratio is not None and ratio >= WARN_AT:
-            reasons.append(f"{model} 本月已用掉封顶的 {ratio:.0%}，快满了")
-        reasons.extend(_window_warnings(model))
+        if not balance_mode:
+            ratio = _model_used_ratio(model, month)
+            if ratio is not None and ratio >= SOFT_STOP:
+                reasons.append(f"{model} 本月已用掉封顶的 {ratio:.0%}，不再推荐")
+                continue
+            if ratio is not None and ratio >= WARN_AT:
+                reasons.append(f"{model} 本月已用掉封顶的 {ratio:.0%}，快满了")
+            reasons.extend(_window_warnings(model))
         reasons.append(f"候选：{model}")
         return model, reasons
     for model in plans.FREE_FALLBACK:
+        if model in plans.GO_REGION_BLOCKED:
+            reasons.append(f"免费档 {model} 官方明文不在中国提供（本机真调回 403 RegionError），退不了")
+            continue
         if model in plans.TRAIN_ON_REQUEST and "iceman" in model:
             reasons.append("免费档 iceman 会拿你的内容训练模型，项目内容不要用")
             continue
         reasons.append(f"额度都紧了，退到免费模型：{model}")
         return model, reasons
+    reasons.append("Go 侧已无可用退路：免费档一个地区不可用、一个会拿内容训练；请回落本地 Qwen 或百炼")
     return None, reasons
 
 

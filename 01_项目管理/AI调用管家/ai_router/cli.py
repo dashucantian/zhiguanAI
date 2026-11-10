@@ -27,7 +27,7 @@ from pathlib import Path
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ai_router import dispatch, plans, probe, proxy, registry, router, store
+from ai_router import dispatch, plans, pools, probe, proxy, registry, router, store
 
 PLANS = ("go", "go-plus")
 
@@ -111,12 +111,12 @@ def cmd_status(args: argparse.Namespace) -> int:
     print()
 
     print("其他渠道的剩余额度（手工录入，见「录额度」）")
-    for channel in ("bailian", "qoder"):
-        pools = store.get_pools(channel)
-        if not pools:
+    for channel in ("opencode", "bailian", "local-qwen", "qoder"):
+        pool_list = store.get_pools(channel)
+        if not pool_list:
             print(f"　{store.CHANNEL_LABEL[channel]}：还没录入")
             continue
-        for pool in pools:
+        for pool in pool_list:
             total = pool.get("总额")
             remaining = pool.get("剩余")
             unit = pool.get("单位", "Credits")
@@ -127,11 +127,31 @@ def cmd_status(args: argparse.Namespace) -> int:
                 line += f"，{pool['到期']}"
             if pool.get("重置"):
                 line += f"，{pool['重置']} 重置"
+            if pool.get("入口"):
+                line += "，入口：" + "、".join(pool["入口"])
             if pool.get("备注"):
                 line += f"（{pool['备注']}）"
             print(line)
     print()
     print(f"账本文件：{store.LEDGER_FILE}")
+    return 0
+
+
+def cmd_pools(args: argparse.Namespace) -> int:
+    """三个池现在各是什么状态、为什么。"""
+    print("跨池兜底顺序：" + " → ".join(pools.pool_name(p) for p in plans.POOL_ORDER))
+    print(_hr())
+    rows = []
+    for item in pools.state():
+        rows.append([
+            item["池"],
+            "能用" if item["可用"] else "用不了",
+            item["说明"],
+            item["密钥变量"] or "（不要密钥）",
+        ])
+    print(_table(rows, ["池", "状态", "为什么", "密钥从哪来"]))
+    print()
+    print("兜底只在上一池接不了时才往下走；Go 还有每模型美元封顶与 5 小时／周窗口。")
     return 0
 
 
@@ -255,10 +275,12 @@ def cmd_quota(args: argparse.Namespace) -> int:
     channel = args.渠道
     if not channel:
         print("录哪个渠道？")
-        print("　1. bailian（百炼 Token Plan）")
-        print("　2. qoder（Qoder 积分）")
+        print("　1. opencode（OpenCode Go）")
+        print("　2. bailian（百炼／Token Plan，两个入口同一池）")
+        print("　3. local-qwen（本地 Qwen3.8-27B）")
+        print("　4. qoder（Qoder 积分）")
         raw = input("序号：").strip()
-        channel = {"1": "bailian", "2": "qoder"}.get(raw, raw)
+        channel = {"1": "opencode", "2": "bailian", "3": "local-qwen", "4": "qoder"}.get(raw, raw)
     if not channel:
         print("没有渠道，录不了。")
         return 2
@@ -423,8 +445,8 @@ def cmd_probe(args: argparse.Namespace) -> int:
 def cmd_proxy(args: argparse.Namespace) -> int:
     port = args.端口 or int(os.environ.get("AI_ROUTER_PORT", proxy.DEFAULT_PORT))
     print("本机代理只绑 127.0.0.1，上游密钥只从环境变量 OPENCODE_API_KEY 读。")
-    if not os.environ.get("OPENCODE_API_KEY"):
-        print("提示：当前没有 OPENCODE_API_KEY 环境变量，代理能起但转发会退 503。")
+    if not proxy.api_key():
+        print("提示：没有 OPENCODE_API_KEY 环境变量（进程里的或用户级的都没有），代理能起但转发会退 503。")
     proxy.serve(port)
     return 0
 
@@ -496,6 +518,7 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 
 MENU = [
     ("状态", "看本月花了多少、各模型还剩多少", cmd_status, {}),
+    ("池状态", "三个池现在各能不能接、为什么", cmd_pools, {}),
     ("设当前任务", "把调用挂到某个任务号上", cmd_current_task, {"设置": None, "工作区": None}),
     ("按任务看账", "本月每条任务各花了多少", cmd_by_task, {"月": None}),
     ("对账", "账本里的任务号跟任务登记对一遍", cmd_reconcile, {"月": None}),

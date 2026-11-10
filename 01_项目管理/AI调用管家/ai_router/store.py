@@ -9,9 +9,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
+
+from . import plans
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("AI_ROUTER_DATA_DIR") or (BASE_DIR / "数据"))
@@ -19,12 +22,21 @@ QUOTA_FILE = DATA_DIR / "额度.json"
 LEDGER_FILE = DATA_DIR / "账本.jsonl"
 TASK_FILE = DATA_DIR / "当前任务.json"
 
-CHANNEL_LABEL = {"opencode": "OpenCode Go", "bailian": "百炼 Token Plan", "qoder": "Qoder 积分"}
+CHANNEL_LABEL = {"opencode": "OpenCode Go", "bailian": "百炼／Token Plan",
+                 "tokenplan": "Token Plan（与百炼同一池）", "local-qwen": "本地 Qwen3.8-27B",
+                 "qoder": "Qoder 积分"}
+
+# 百炼与 Token Plan 是同一家产品、同一份 Credits，只是入口域名不同 ⇒ 记成一池两个入口。
+# 记到 tokenplan 的额度与记到 bailian 是同一件事，别当成两笔。
+CHANNEL_ALIAS = {"tokenplan": "bailian"}
 
 UNTAGGED = "未标记"
 
 _SAFE_TASK = re.compile(r"[^A-Za-z0-9_.:\-\u4e00-\u9fff]")
 _UNSAFE_TEXT = re.compile(r"[\x00-\x1f\x7f|]")
+
+# 额度池的读写要串起来：代理是多线程的，两个请求同时扣余额会算错。
+_LOCK = threading.RLock()
 
 
 def clean_task_id(value) -> str:
@@ -64,6 +76,27 @@ def get_current_task() -> dict:
 
 def _ensure_dir() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def user_env(name: str) -> str:
+    """读用户级环境变量（Windows 走注册表）。键存在系统里，不落在本项目任何文件。"""
+    if os.name != "nt":
+        return ""
+    try:
+        import winreg
+    except ImportError:
+        return ""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_READ) as key:
+            value, _ = winreg.QueryValueEx(key, name)
+            return str(value or "")
+    except OSError:
+        return ""
+
+
+def env_value(name: str) -> str:
+    """进程级环境变量优先，用户级兜底。值只在内存里流转，不打印、不写文件。"""
+    return os.environ.get(name) or user_env(name)
 
 
 def month_key(ts: float | None = None) -> str:
@@ -117,27 +150,79 @@ def set_quota(channel: str, remaining: float, total: float | None = None, unit: 
 
 
 def set_pool(channel: str, pool: str, remaining: float, total: float | None = None,
-             unit: str = "Credits", note: str = "", expires: str = "", resets: str = "") -> dict:
+             unit: str = "Credits", note: str = "", expires: str = "", resets: str = "",
+             entrances: list[str] | None = None) -> dict:
     """一个渠道可以分多个池（如 Qoder 的套餐内/资源包/专属积分），各池到期日不同，必须分开记。"""
-    data = load_quota()
-    pools = _pools(data, channel)
-    entry = {
-        "名称": pool,
-        "剩余": remaining,
-        "总额": total,
-        "单位": unit,
-        "到期": expires,
-        "重置": resets,
-        "备注": note,
-    }
-    pools = [p for p in pools if p.get("名称") != pool] + [entry]
-    data[channel] = {"池": pools}
-    save_quota(data)
+    channel = CHANNEL_ALIAS.get(channel, channel)
+    with _LOCK:
+        data = load_quota()
+        pools = _pools(data, channel)
+        entry = {
+            "名称": pool,
+            "剩余": remaining,
+            "总额": total,
+            "单位": unit,
+            "到期": expires,
+            "重置": resets,
+            "备注": note,
+        }
+        if entrances:
+            entry["入口"] = entrances
+        pools = [p for p in pools if p.get("名称") != pool] + [entry]
+        data[channel] = {"池": pools}
+        save_quota(data)
     return data
 
 
+def consume_pool(channel: str, pool: str, amount: float, note: str = "") -> float | None:
+    """从某个池里扣掉一笔花费，返回扣完后的剩余。余额池靠这个守住上限。
+
+    池子不存在就返回 None（不凭空造一个池）；扣到零为止，不记负数。
+    """
+    channel = CHANNEL_ALIAS.get(channel, channel)
+    with _LOCK:
+        data = load_quota()
+        pools = _pools(data, channel)
+        target = next((p for p in pools if p.get("名称") == pool), None)
+        if target is None:
+            return None
+        remaining = float(target.get("剩余") or 0.0)
+        left = round(max(0.0, remaining - float(amount or 0.0)), 6)
+        target["剩余"] = left
+        if note:
+            target["备注"] = note
+        data[channel] = {"池": pools}
+        save_quota(data)
+        return left
+
+
 def get_pools(channel: str) -> list[dict]:
-    return _pools(load_quota(), channel)
+    return _pools(load_quota(), CHANNEL_ALIAS.get(channel, channel))
+
+
+def pool_remaining_by_name(channel: str, name: str) -> float | None:
+    """按池名取剩余。池子没录过就返回 None（不是 0，两者含义不同）。"""
+    for pool in get_pools(channel):
+        if pool.get("名称") == name:
+            remaining = pool.get("剩余")
+            return float(remaining) if remaining is not None else None
+    return None
+
+
+def go_billing_mode() -> str:
+    """Go 现在按哪一池计费。返回池名；返回空串＝两池都空了，Go 接不了。
+
+    按月总额度用尽后上游自动改走充值余额（2026-11-05 实测 billing_source=balance），
+    所以月额度空了不等于 Go 不能用——还有余额就该放行，只是计费方式变了。
+    放在 store 是为了不让 pools 与 router 互相 import。
+    """
+    monthly = pool_remaining_by_name("opencode", plans.GO_PLAN_POOL)
+    if monthly is None or monthly > 0:
+        return plans.GO_PLAN_POOL
+    balance = pool_remaining_by_name("opencode", plans.GO_BALANCE_POOL)
+    if balance is not None and balance > 0:
+        return plans.GO_BALANCE_POOL
+    return ""
 
 
 def pool_remaining(channel: str, unit: str | None = None) -> float:
@@ -174,13 +259,20 @@ def read_ledger() -> list[dict]:
     return rows
 
 
-def spend_by_model(month: str | None = None) -> dict[str, float]:
+def spend_by_model(month: str | None = None, exclude_balance: bool = False) -> dict[str, float]:
+    """本月各模型花了多少美元。
+
+    exclude_balance=True 时只算订阅内的花费，不算充值余额那部分——
+    订阅的每模型封顶只该被订阅内的花费消耗，余额花的钱不该占掉 11-19 重置后的额度。
+    """
     month = month or month_key()
     out: dict[str, float] = defaultdict(float)
     for row in read_ledger():
         if row.get("月") != month:
             continue
         if row.get("渠道") != "opencode":
+            continue
+        if exclude_balance and row.get("计费来源") == plans.GO_BALANCE_POOL:
             continue
         out[row.get("模型", "未知")] += float(row.get("美元") or 0.0)
     return dict(out)
