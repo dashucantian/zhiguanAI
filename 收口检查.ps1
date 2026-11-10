@@ -875,6 +875,47 @@ try {
     }
 } catch { Bad ('门25 取数失败 ⇒ 未检：' + $_.Exception.Message) }
 
+# ---------- 26. 同一文件 24 小时内被两个以上「涉及窗」改过（第 7 道·近似·只报不判红） ----------
+# 立据：2026-11-10 法师字「准」——两窗撞车（一页摘要被覆写、index.html 两窗抢写）须机检兜底。
+# 判据：涉及窗 ＝ {该笔 Window trailer} ∪ {该笔 Proposal-by 里的 AI 号或窗别码}；
+#       按文件聚合近 24 小时，同一文件出现 ≥2 个不同涉及窗 ⇒ 报警。
+# 只报形态、不判红：合法代提（协调位代提他窗产出）会自然命中，属预期，故不进 warn 计数。
+Section "26. 同一文件 24 小时内被两个以上涉及窗改过（第 7 道·近似·只报不判红）"
+try {
+    $since26 = (Get-Date).AddHours(-24).ToString('yyyy-MM-dd HH:mm:ss')
+    $cmits26 = @(git log --since="$since26" --pretty=format:'%h' 2>$null)
+    if ($cmits26.Count -eq 0) {
+        Write-Host "[NOTE] 门26：近 24 小时无提交 ⇒ 本门无可判对象（未检≠通过）" -ForegroundColor Gray
+    } else {
+        $map26 = @{}
+        foreach ($h26 in $cmits26) {
+            $body26 = (git show -s --format='%B' $h26 2>$null) -join "`n"
+            $rel26 = @()
+            $m26 = [regex]::Match($body26, '(?m)^Window:\s*(\S+)')
+            if ($m26.Success) { $rel26 += $m26.Groups[1].Value }
+            $m26b = [regex]::Match($body26, '(?m)^Proposal-by:\s*(.+)$')
+            if ($m26b.Success) {
+                foreach ($tok in [regex]::Matches($m26b.Groups[1].Value, 'AI-0\d\d|[A-Za-z]\d-[0-9a-f]{8}')) { $rel26 += $tok.Value }
+            }
+            if ($rel26.Count -eq 0) { $rel26 += '(无署名)' }
+            $files26 = @(git show --name-only --pretty=format: $h26 2>$null | Where-Object { $_ -ne '' })
+            foreach ($f26 in $files26) {
+                if (-not $map26.ContainsKey($f26)) { $map26[$f26] = @() }
+                foreach ($w26 in $rel26) { if ($map26[$f26] -notcontains $w26) { $map26[$f26] += $w26 } }
+            }
+        }
+        $dup26 = @()
+        foreach ($k26 in $map26.Keys) {
+            if ($map26[$k26].Count -ge 2) { $dup26 += ($k26 + '（' + ($map26[$k26] -join '／') + '）') }
+        }
+        if ($dup26.Count -gt 0) {
+            Write-Host ("[NOTE] 门26：近 24 小时有 " + $dup26.Count + " 个文件被两个以上「涉及窗」改过（**只报形态，不判红**）—— " + (($dup26 | Select-Object -First 8) -join '；') + "。合法代提也会命中，人工处置：动手前认归属。") -ForegroundColor Yellow
+        } else {
+            Write-Host ("[NOTE] 门26：近 24 小时 " + $cmits26.Count + " 笔提交，无文件被两个以上涉及窗改过。") -ForegroundColor Gray
+        }
+    }
+} catch { Write-Host ('[NOTE] 门26 取数失败 ⇒ 未检：' + $_.Exception.Message) -ForegroundColor Gray }
+
 # ---------- 结论 ----------
 Write-Host ""
 if ($warn -gt 0) {
