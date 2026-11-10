@@ -75,9 +75,25 @@ def main():
         return 2
     passed, hits = parse_inner(INNER_SOURCES)
 
+    prev = None
+    if OUT.exists():
+        try:
+            old = OUT.read_text(encoding="utf-8", errors="replace")
+            od = json.loads(old[old.index("=") + 1:].rstrip().rstrip(";"))
+            prev = {"checkedAtLocal": od.get("checkedAtLocal"),
+                    "outer": od["outer"]["value"], "inner": od["inner"]["value"]}
+        except Exception:
+            prev = None
+
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     payload = {
         "checkedAtLocal": now,
+        "prev": prev,
+        "delta": {
+            "outer": len(entries) - prev["outer"] if prev else None,
+            "inner": len(passed) - prev["inner"] if prev else None,
+        },
+        "deltaCaliber": "比上一拍＝本拍值 − 上一拍产物值（覆写前读旧 data/dual-axis.js 取得）；首拍或旧件不可解析则为 null，页面标「首拍」",
         "outer": {
             "value": len(entries),
             "entries": entries,
