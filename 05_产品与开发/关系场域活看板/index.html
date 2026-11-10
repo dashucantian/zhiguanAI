@@ -114,6 +114,11 @@ button.anchip{cursor:pointer;text-align:left}
 .focusstrip .frow{border:1px solid var(--line-soft);border-radius:5px;padding:2px 8px;background:var(--paper);font-size:12px}
 .focusstrip .frow:hover{border-color:var(--ink-3)}
 .focusstrip .fh{color:var(--ink-3);font-size:11px}
+.versionbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--card);
+  border:1px solid var(--line);border-left:4px solid var(--sig-warn);border-radius:8px;
+  padding:7px 12px;margin-bottom:12px;font-size:12px;color:var(--ink-2)}
+.versionbar .vb{font-family:var(--mono);font-size:11px}
+.versionbar .vt{color:var(--ink-3);font-size:11px}
 
 .aside{display:flex;flex-direction:column;gap:12px;min-width:0}
 .panel{background:var(--card);border:1px solid var(--line-soft);border-radius:8px;padding:12px 14px}
@@ -195,6 +200,7 @@ button.anchip{cursor:pointer;text-align:left}
   </div>
   <div class="topright">
     <div class="verchip" id="verchip">版本 —</div>
+    <button class="btn" id="autoBtn" type="button">自动 开</button>
     <button class="btn" id="reloadBtn" type="button">重新读盘</button>
   </div>
 </div>
@@ -208,6 +214,7 @@ button.anchip{cursor:pointer;text-align:left}
   <div id="app" hidden>
     <div class="overview" id="overviewStrip"></div>
     <div id="focusStrip" class="focusstrip" hidden></div>
+    <div id="versionbar" class="versionbar" hidden aria-live="polite"></div>
 
     <div class="main" id="mainWrap">
       <div class="canvas" id="canvas"></div>
@@ -229,6 +236,7 @@ button.anchip{cursor:pointer;text-align:left}
   <span id="sbVersion">版本 —</span>
   <span id="sbTime">建模 —</span>
   <span id="sbSources">四源 —</span>
+  <span id="sbRefresh">刷新 —</span>
   <span class="right">本地零网络 · 只读</span>
 </div>
 
@@ -241,7 +249,16 @@ button.anchip{cursor:pointer;text-align:left}
     view: "overview",
     selected: null,
     anchorIndex: 0,
-    error: null
+    error: null,
+    rendered: false,
+    auto: true,
+    lastVersion: null,
+    lastGenerated: null,
+    prevVersion: null,
+    prevTime: null,
+    lastCheck: null,
+    lastHow: null,
+    lastFail: null
   };
 
   var WK_ORDER = ["W3", "W1", "W2", "W4"];
@@ -731,8 +748,15 @@ button.anchip{cursor:pointer;text-align:left}
       + '<div class="nd">' + text + '</div>';
   }
 
-  function loadModel(){
-    bootMsg("正在读本地数据件…", "读 data/field-model.js（本地文件，不出网）。");
+  function nowStr(){
+    var d = new Date();
+    function p(x){ return (x < 10 ? "0" : "") + x; }
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+
+  function loadModel(opts){
+    var silent = !!(opts && opts.silent);
+    if (!silent) bootMsg("正在读本地数据件…", "读 data/field-model.js（本地文件，不出网）。");
 
     var old = document.getElementById("modelScript");
     if (old) old.parentNode.removeChild(old);
@@ -742,18 +766,51 @@ button.anchip{cursor:pointer;text-align:left}
     s.id = "modelScript";
     s.src = "data/field-model.js?v=" + Date.now();
     s.onload = function(){
-      if (!window.FIELD_MODEL){ onFail("数据件已读到，但里面没有 FIELD_MODEL。"); return; }
-      state.model = window.FIELD_MODEL;
+      if (!window.FIELD_MODEL){ onFail("数据件已读到，但里面没有 FIELD_MODEL。", silent); return; }
+      var m = window.FIELD_MODEL;
+      var changed = !!state.lastVersion && m.version !== state.lastVersion;
+      if (changed){
+        state.prevVersion = state.lastVersion;
+        state.prevTime = state.lastGenerated;
+      }
+      state.model = m;
       state.error = null;
+      state.lastFail = null;
+      state.lastVersion = m.version;
+      state.lastGenerated = m.generatedAtLocal || null;
+      state.lastCheck = nowStr();
+      state.lastHow = silent ? "自动" : "手动";
       document.getElementById("boot").hidden = true;
       document.getElementById("app").hidden = false;
-      renderAll();
+      if (changed || !state.rendered){ state.rendered = true; renderAll(); }
+      renderVersionBar(changed);
+      renderRefreshNote();
     };
-    s.onerror = function(){ onFail("数据件没读到：data/field-model.js"); };
+    s.onerror = function(){ onFail("数据件没读到：data/field-model.js", silent); };
     document.body.appendChild(s);
   }
 
-  function onFail(msg){
+  function renderVersionBar(changed){
+    var el = document.getElementById("versionbar");
+    if (!changed) return;
+    el.hidden = false;
+    el.innerHTML = '<span>版本已变</span><span class="vb">' + esc(state.prevVersion || "—") + '</span>'
+      + '<span>→</span><span class="vb">' + esc(state.lastVersion || "—") + '</span>'
+      + '<span class="vt">' + esc(state.prevTime || "旧时刻未记") + ' → ' + esc(state.lastGenerated || "—") + '</span>'
+      + '<span class="vt">· ' + esc(state.lastHow || "") + '刷新 · 变化明细下一步上</span>';
+  }
+
+  function renderRefreshNote(){
+    var el = document.getElementById("sbRefresh");
+    if (!el) return;
+    el.textContent = "刷新 " + (state.auto ? "自动·2s" : "手动") + "｜最近 " + (state.lastCheck || "—")
+      + (state.lastFail ? "｜读取失败" : "");
+  }
+
+  function onFail(msg, silent){
+    state.lastCheck = nowStr();
+    state.lastFail = msg;
+    if (silent && state.model){ renderRefreshNote(); return; }
     state.model = null;
     state.error = msg;
     document.getElementById("app").hidden = true;
@@ -765,6 +822,7 @@ button.anchip{cursor:pointer;text-align:left}
     document.getElementById("sbVersion").textContent = "版本 —";
     document.getElementById("sbTime").textContent = "建模 —";
     document.getElementById("sbSources").textContent = "四源 —";
+    renderRefreshNote();
   }
 
   function applyHash(){
@@ -799,9 +857,20 @@ button.anchip{cursor:pointer;text-align:left}
     document.getElementById("sbSources").textContent = src.length
       ? ("四源 " + src.map(function(x){ return (x.label || x.key) + " " + (x.lines || "—") + " 行"; }).join(" · "))
       : "四源 —";
+    renderRefreshNote();
   }
 
   document.getElementById("reloadBtn").addEventListener("click", function(){ loadModel(); });
+
+  document.getElementById("autoBtn").addEventListener("click", function(){
+    state.auto = !state.auto;
+    this.textContent = "自动 " + (state.auto ? "开" : "关");
+    renderRefreshNote();
+  });
+
+  setInterval(function(){
+    if (state.auto && state.model && !state.error) loadModel({ silent: true });
+  }, 2000);
 
   window.addEventListener("hashchange", function(){
     if (!state.model) return;
