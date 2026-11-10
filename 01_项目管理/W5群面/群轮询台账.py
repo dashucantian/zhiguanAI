@@ -27,8 +27,13 @@ STATE = os.path.join(BASE, "轮询游标.json")
 
 # 法师 2026-11-10 22:5x 确认：机器人值守的就是这两个群
 CHATS = [
-    ("止观ai先锋小群", "oc_3f032d05ec5b7615c0353379c66f6cfa"),
-    ("第四届21天基础止观筹备组（大群）", "oc_8141574ee978e0ea50ce251fdbf2529c"),
+    ("止观ai先锋小群", "oc_3f032d05ec5b7615c0353379c66f6cfa", "user"),
+    ("第四届21天基础止观筹备组（大群）", "oc_8141574ee978e0ea50ce251fdbf2529c", "user"),
+]
+# 协调位 2026-11-11 00:4x 裁：私聊纳入取数面（只读）。只列已知会话，新出现的再生补。
+# 私聊必须以 bot 身份读：user 不在该会话里，会报 230002「Bot/User can NOT be out of the chat」。
+P2P_CHATS = [
+    ("私聊·ou_45a8a9e3e", "oc_da63dd68a2181dfc061fa06b79b94b03", "bot"),
 ]
 
 def _resolve_lark() -> list[str]:
@@ -91,7 +96,7 @@ def load_seen_ids() -> set:
             except Exception:  # noqa: BLE001
                 continue
             mid = row.get("message_id")
-            if mid:
+            if mid and row.get("type") != "mark":
                 seen.add(mid)
     return seen
 
@@ -105,10 +110,10 @@ def overlap(since: str, minutes: int = 2) -> str:
         return since
 
 
-def fetch(chat_id: str, since: str | None) -> tuple[list[dict], str]:
-    """拉一次消息。since 为空则只取最近 20 条建游标。"""
+def fetch(chat_id: str, since: str | None, ident: str = "user") -> tuple[list[dict], str]:
+    """拉一次消息。since 为空则只取最近 5 条建游标。"""
     args = LARK + ["im", "+chat-messages-list", "--chat-id", chat_id,
-                   "--order", "asc", "--as", "user", "--no-reactions",
+                   "--order", "asc", "--as", ident, "--no-reactions",
                    "--page-size", "50"]
     if since:
         args += ["--start", since]
@@ -161,10 +166,10 @@ def main() -> int:
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     total_new = 0
     seen = load_seen_ids()
-    for name, cid in CHATS:
+    for name, cid, ident in CHATS + P2P_CHATS:
         since = None if baseline else state.get(cid)
         try:
-            msgs, _ = fetch(cid, overlap(since) if since else None)
+            msgs, _ = fetch(cid, overlap(since) if since else None, ident)
         except Exception as exc:  # noqa: BLE001
             print("[X] %s 拉取失败：%s" % (name, exc))
             continue

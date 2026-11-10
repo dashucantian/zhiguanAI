@@ -23,6 +23,8 @@ python 群轮询台账.py              :: 增量拉一次
 
 首次在新机器上跑，先 `--baseline`，否则会把历史消息一次性灌进台账。
 
+**私聊（p2p）也在这个脚本里**（协调位 2026-11-11 00:4x 裁：纳入取数面、只读）。`P2P_CHATS` 里的会话必须用 `--as bot` 读——user 身份不在私聊会话里，会报 `230002 Bot/User can NOT be out of the chat`。群用 user、私聊用 bot，已按会话分别写死在清单的第三列。私聊内容只进本机台账，**不进 23:59 群内汇总**。
+
 ## 台账字段
 
 `ts` 抓取时刻／`chat` 群名／`chat_id`／`msg_time` 消息时刻／`message_id`／`sender`（open_id 或 app_id 前 12 位）／`sender_kind`／`msg_type`／`text`（正文前 500 字）／`deleted` 是否已撤回／`reply_to` 被回复的消息 id／`level` 层级标（未判填 `1?`）／`replied` 是否已回。
